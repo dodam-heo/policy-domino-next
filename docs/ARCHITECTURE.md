@@ -125,3 +125,7 @@ data/state.json: documents, versions, findings, coverage, attempts, cursor_days,
 공식 문서:
 https://open.law.go.kr/LSO/openApi/guideResult.do
 https://open.law.go.kr/LSO/openApi/guideResult.do?htmlName=lsNwInfoGuide
+
+## 제출·유지보수 기준
+
+이 설계의 구현 수준과 미해결 구조적 과제는 [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)에 구분해 기록한다. 한 사례의 예외 규칙으로 범용 기능의 완성을 주장하지 않는다.
