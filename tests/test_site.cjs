@@ -2,9 +2,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const html = fs.readFileSync("site/index.html","utf8");
-const inline = html.match(/<script>\s*([\s\S]*?)<\/script>/);
-assert.ok(inline,"The maintained page must have its renderer");
-new vm.Script(inline[1],{filename:"site/index.html"});
+const appSource = fs.readFileSync('site/app.js','utf8');
+const styleSource = fs.readFileSync('site/styles.css','utf8');
+assert.ok(html.includes('<script src="./app.js"></script>'),"UI controller must load externally");
+assert.ok(html.includes('<link rel="stylesheet" href="./styles.css">'),"UI style must load externally");
+new vm.Script(appSource,{filename:'site/app.js'});
+const source = html+'\n'+appSource;
 for(const word of [
   "① 정책에서 실제 바뀐 내용","② 기관별 변경 검토사항",
   "③ 변경 조문을 직접 인용하는 관련 규정",
@@ -12,10 +15,10 @@ for(const word of [
   "operational_program_verified","required_action_verified",
   'fetch("./data.json"'
 ]){
-  assert.ok(html.includes(word),"Missing source-evidence feature: "+word);
+  assert.ok(source.includes(word),"Missing source-evidence feature: "+word);
 }
 for(const deprecated of ['data-law="organization"','data-law="lifecycle"']){
-  assert.ok(!html.includes(deprecated),"Unrequested filter: "+deprecated);
+  assert.ok(!source.includes(deprecated),"Unrequested filter: "+deprecated);
 }
 const json=JSON.parse(fs.readFileSync("site/data.json","utf8"));
 assert.equal(json.schema,"policy-domino-next-v1");
@@ -89,7 +92,7 @@ function setupBrowser(mobile=true,initialHash="",override=null){
     cross_document_review_candidates:override?.cross_document_review_candidates||[],
     generated_at:"",
   })});
-  vm.runInNewContext(inline[1],{
+  vm.runInNewContext(appSource,{
     document,window:win,history,location,fetch,URL,console,
     encodeURIComponent,decodeURIComponent,
   },{filename:"site/index.html"});
