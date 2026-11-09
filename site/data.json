@@ -1,0 +1,19 @@
+{
+  "schema": "policy-domino-next-v1",
+  "generated_at": "",
+  "configuration": "not_run_or_credential_missing",
+  "coverage": [],
+  "quality": {
+    "law": {"indexed": 0, "status_counts": {}, "verified_changes": 0, "waiting": 0, "unavailable_bodies": 0, "unavailable_history": 0},
+    "admrul": {"indexed": 0, "status_counts": {}, "verified_changes": 0, "waiting": 0, "unavailable_bodies": 0, "unavailable_history": 0},
+    "ordin": {"indexed": 0, "status_counts": {}, "verified_changes": 0, "waiting": 0, "unavailable_bodies": 0, "unavailable_history": 0},
+    "coverage_incomplete": 0
+  },
+  "documents": [],
+  "relationships": [],
+  "principles": {
+    "manual_institutions": false,
+    "inferred_programs_count_as_confirmed": false,
+    "internal_compliance_status_known": false
+  }
+}
