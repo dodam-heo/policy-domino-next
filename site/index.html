@@ -25,6 +25,28 @@
     .panel-head h2{margin:0 0 4px;font-size:17px}
     .sub{color:var(--muted);font-size:12px}
     .search{margin-top:13px;border:1px solid #cad9e1;border-radius:9px;width:100%;padding:12px 13px;background:#fbfdfe;outline-color:var(--accent)}
+    .filters{display:flex;flex-wrap:wrap;gap:9px;margin:17px 0 8px}
+    .filter-group{display:flex;flex-wrap:wrap;gap:7px}
+    .filter-chip{background:#fff;border:1px solid #d7e2e7;border-radius:999px;padding:9px 12px;color:#5a7384;font-size:12px;font-weight:740;line-height:1.3}
+    .filter-chip:hover{border-color:#7da9b8}
+    .filter-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .filter-chip.active{background:#155e7b;color:white;border-color:#155e7b}
+    .filter-chip.secondary.active{background:#124660;color:white;border-color:#124660}
+    .filter-explain{font-size:11px;color:var(--muted);margin:10px 0 0;line-height:1.5}
+    .overview{background:#edf6fa;border:1px solid #d5e7ef;border-radius:11px;padding:17px;margin:0 0 23px}
+    .overview-label{font-weight:820;font-size:12px;color:#176282}
+    .overview-title{font-size:21px;line-height:1.4;font-weight:850;letter-spacing:-.03em;margin:9px 0}
+    .overview-tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+    .overview-tags span{background:#fff;border:1px solid #deeaef;border-radius:7px;padding:5px 8px;color:#4c6a7a;font-weight:700;font-size:11px}
+    .review-filters{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+    .review-chip{font-size:11px;font-weight:750;border-radius:9px;border:1px solid #dce6eb;padding:9px 10px;background:#fff;color:#42657c}
+    .review-chip.active{background:#12435d;color:#fff;border-color:#12435d}
+    .review-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .agency-card .review-type{font-size:10px;color:#426f88;font-weight:850;margin-bottom:5px}
+    .item-type{font-size:10px;font-weight:800;border-radius:5px;background:#e8f2f7;color:#21637d;padding:4px 7px}
+    .item-type.new{background:#e4f5ed;color:#157352}
+    .item-type.repealed{background:#f9eef0;color:#945366}
+    .list-topline{display:flex;justify-content:space-between;align-items:center;gap:7px}
     .item-list{max-height:70vh;overflow:auto}
     .item{border:0;border-bottom:1px solid #edf1f3;background:#fff;padding:17px 20px;width:100%;text-align:left;color:inherit;display:block}
     .item:hover,.item:focus-visible{background:#f2f8fa}
@@ -101,9 +123,24 @@
 <main class="container" id="layout">
   <aside class="panel" id="listPanel" aria-label="공식 변경 목록">
     <div class="panel-head">
-      <h2>공식 변경 목록</h2>
-      <div class="sub" id="feed-state">원천자료 확인 중</div>
-      <input class="search" id="search" type="search" autocomplete="off" placeholder="정책명 또는 소관기관 검색" aria-label="정책 검색">
+      <h2>업무에 영향을 주는 정책 변경</h2>
+      <div class="sub">실질적인 변경과 기관별 업무 영향 중심 · 공식 공포일 기준</div>
+      <div class="filters" aria-label="정책 필터와 정렬">
+        <div class="filter-group" role="group" aria-label="변경 유형 필터">
+          <button type="button" class="filter-chip active" id="mode-substantive" data-mode="substantive" aria-pressed="true">실질 정책 변경</button>
+          <button type="button" class="filter-chip" id="mode-new" data-mode="new" aria-pressed="false">신규</button>
+          <button type="button" class="filter-chip" id="mode-amended" data-mode="amended" aria-pressed="false">개정</button>
+          <button type="button" class="filter-chip" id="mode-repealed" data-mode="repealed" aria-pressed="false">폐지</button>
+          <button type="button" class="filter-chip" id="mode-all" data-mode="all" aria-pressed="false">전체 공식자료</button>
+        </div>
+        <div class="filter-group" role="group" aria-label="정렬 방법">
+          <button type="button" class="filter-chip secondary active" id="sort-impact" data-sort="impact" aria-pressed="true">영향 큰 순</button>
+          <button type="button" class="filter-chip secondary" id="sort-latest" data-sort="latest" aria-pressed="false">최신순</button>
+        </div>
+      </div>
+      <input class="search" id="search" type="search" autocomplete="off" placeholder="법령명·정책명·소관기관 검색" aria-label="정책 검색">
+      <div class="sub" id="feed-state" aria-live="polite">원천자료 확인 중</div>
+      <p class="filter-explain" id="filter-explain">영향 큰 순은 확인된 규정 인용·수행주체 근거 수 기준이며 사회적 중요도 등급이 아닙니다.</p>
     </div>
     <div class="item-list" id="items"><div class="empty">원천자료를 불러오는 중</div></div>
     <button class="more" id="more" hidden>다음 목록 더 보기</button>
@@ -124,7 +161,12 @@
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  const state = {data: null, selected: null, query: "", visible: 80};
+  const FILTER_MODES=["substantive","new","amended","repealed","all"];
+  const SORT_MODES=["impact","latest"];
+  const state = {data: null, selected: null, query: "", visible: 80,
+                 mode:"substantive", sort:"impact", detailFilter:"all",
+                 linkCounts:new Map(), verifiedActionCounts:new Map(),
+                 crossCounts:new Map()};
   // Mobile navigation follows the original policy-domino list→detail UX.
   // The detail is a distinct view, never an extra page section below the list.
   const mobile = () => window.matchMedia("(max-width:850px)").matches;
@@ -146,6 +188,7 @@
   function selectDoc(id,updateUrl=true){
     if(!state.data || !state.data.documents.some(d=>d.id===id))return;
     state.selected=id;
+    state.detailFilter="all";
     renderList();
     renderDetail();
     if(mobile()){
@@ -318,24 +361,95 @@
     const prior=analysis.baseline;
     if(prior)append(root,external(prior.url,"종전 버전의 공식 원문 확인"));
   }
+  function policyType(doc){
+    const revision=String(doc.revision||"");
+    if(doc.analysis?.status==="repeal" || /폐지|실효/.test(revision))return "repealed";
+    if(doc.analysis?.status==="enactment" || /제정|신설/.test(revision) && !/개정/.test(revision))return "new";
+    if(/개정|정정/.test(revision))return "amended";
+    return "unknown";
+  }
+  function substantive(doc){
+    // A title, index-only item, or organisation-only edit is not proof of a
+    // substantive new eligibility, amount, procedure or service criterion.
+    return (doc.analysis?.changes||[]).some(c=>
+      c.before!==c.after && c.category!=="조직·정원" &&
+      c.before!==undefined && c.after!==undefined);
+  }
+  function impactRank(doc){
+    // Grounded ranking. A title match or speculative project is worth zero.
+    return [
+      state.verifiedActionCounts.get(doc.id)||0,
+      state.linkCounts.get(doc.id)||0,
+      (state.crossCounts.get(doc.id)||0)+(doc.analysis?.direct_actor_reviews?.length||0)
+    ];
+  }
   function filtered(){
-    return (state.data?.documents||[]).filter(doc=>
-      normalize(doc.title+" "+doc.ministry).includes(state.query));
+    const data=state.data?.documents||[];
+    const rows=data.filter(doc=>{
+      const matches=normalize(doc.title+" "+doc.ministry).includes(state.query);
+      if(!matches)return false;
+      if(state.mode==="all")return true;
+      if(state.mode==="substantive")return substantive(doc);
+      return policyType(doc)===state.mode;
+    });
+    rows.sort((a,b)=>{
+      if(state.sort==="impact"){
+        const x=impactRank(a),y=impactRank(b);
+        for(let i=0;i<x.length;i++){
+          if(y[i]!==x[i])return y[i]-x[i];
+        }
+      }
+      return String(b.published_at||"").localeCompare(String(a.published_at||"")) ||
+        String(b.serial||"").localeCompare(String(a.serial||""));
+    });
+    return rows;
+  }
+  function updateFilterControls(){
+    for(const mode of FILTER_MODES){
+      const el=$("mode-"+mode);const active=mode===state.mode;
+      if(active)el.classList.add("active");
+      else el.classList.remove("active");
+      el.setAttribute("aria-pressed",String(active));
+    }
+    for(const sort of SORT_MODES){
+      const el=$("sort-"+sort);const active=sort===state.sort;
+      if(active)el.classList.add("active");
+      else el.classList.remove("active");
+      el.setAttribute("aria-pressed",String(active));
+    }
+    $("filter-explain").textContent=state.sort==="impact"?
+      "영향 큰 순은 실제 확인된 기관별 조치·변경 조문 직접 인용·명시적 수행주체 수 기준입니다. 사회적 중요도 등급이 아닙니다.":
+      "최신순은 공식 공포·발령일을 기준으로 정렬합니다.";
   }
   function renderList(){
     const list=$("items");list.replaceChildren();
     const all=filtered();
-    $("feed-state").textContent=(state.data?.configuration!=="running"?"원천 API 미실행 · ":"")+num(all.length)+"건 표시 · 공식 개정일 최신순";
-    if(!all.length)append(list,create("div","empty","수집된 항목이 없거나 검색 결과가 없습니다."));
+    updateFilterControls();
+    $("feed-state").textContent=num(state.data?.documents.length||0)+
+       "개 공식 변경 사건 중 "+num(all.length)+"개 표시";
+    if(!all.length)append(list,create("div","empty",
+      state.mode==="substantive"?
+      "아직 실제 전후 조문이 확인된 실질 변경이 없습니다. ‘전체 공식자료’에서 수집·분석 대기 항목을 확인할 수 있습니다.":
+      "이 조건에 해당하는 공식 변경 항목이 없습니다."));
     for(const doc of all.slice(0,state.visible)){
       const row=create("button","item"+(doc.id===state.selected?" selected":""));
       row.type="button";row.dataset.id=doc.id;
-      append(row,create("div","micro",(doc.published_at||"날짜 미확인")+" · "+doc.kind),
-        create("h3","",doc.title));
+      const topline=create("div","list-topline");
+      const type=policyType(doc);
+      const tag=type==="new"?"신규":type==="amended"?"개정":type==="repealed"?"폐지":"변경";
+      append(topline,create("span","item-type "+type,tag),
+        create("span","micro","공포·확정 "+(doc.published_at||"날짜 미확인")));
+      append(row,topline,create("h3","",doc.title),
+        create("div","micro",(doc.ministry||"소관기관 미확인")+" · "+(doc.kind||doc.source||"공식 규정")));
       const tags=create("div","pills");
       append(tags,badge(analysisLabel(doc.analysis)[0],analysisLabel(doc.analysis)[1]));
       const changes=doc.analysis?.changes?.length||0;
       if(changes)append(tags,badge("변경 조문 "+changes+"개"));
+      const cited=state.linkCounts.get(doc.id)||0;
+      if(cited)append(tags,badge("관련 규정 인용 "+cited+"건"));
+      const actors=(doc.analysis?.direct_actor_reviews||[]).length+
+        (state.crossCounts.get(doc.id)||0);
+      if(actors)append(tags,badge("업무 검토 후보 "+actors+"건"));
       append(row,tags);
       row.onclick=()=>selectDoc(doc.id);
       append(list,row);
@@ -347,6 +461,20 @@
     data.documents=data.documents||[];data.relationships=data.relationships||[];
     data.cross_document_review_candidates=data.cross_document_review_candidates||[];
     state.data=data;
+    state.linkCounts=new Map();
+    state.verifiedActionCounts=new Map();
+    state.crossCounts=new Map();
+    for(const rel of data.relationships){
+      const id=rel.source_event_id;
+      state.linkCounts.set(id,(state.linkCounts.get(id)||0)+1);
+      if(rel.operational_program_verified && rel.required_action_verified)
+        state.verifiedActionCounts.set(id,(state.verifiedActionCounts.get(id)||0)+1);
+    }
+    for(const item of data.cross_document_review_candidates){
+      const id=item.source_event_id;
+      state.crossCounts.set(id,(state.crossCounts.get(id)||0)+1);
+    }
+    if(!data.documents.some(substantive))state.mode="all";
     const linked=fragmentId();
     const hasLinked=linked && data.documents.some(doc=>doc.id===linked);
     state.selected=hasLinked?linked:(mobile()?null:(data.documents[0]?.id||null));
@@ -380,6 +508,12 @@
       showList(false);
     }
   });
+  for(const mode of FILTER_MODES){
+    $("mode-"+mode).onclick=()=>{state.mode=mode;state.visible=80;renderList();};
+  }
+  for(const sort of SORT_MODES){
+    $("sort-"+sort).onclick=()=>{state.sort=sort;state.visible=80;renderList();};
+  }
   $("search").oninput=ev=>{state.query=normalize(ev.target.value);state.visible=80;renderList();};
   $("more").onclick=()=>{state.visible+=80;renderList();};
   fetch("./data.json",{cache:"no-store"}).then(res=>{
