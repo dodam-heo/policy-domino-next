@@ -151,10 +151,9 @@ def connect_changes(findings: dict, versions: dict, documents: dict,
                 for changed_doc in matched:
                     if citing_id == changed_doc["id"]:
                         continue
-                    # A document predating a policy change may continue to
-                    # reference it, but that is NOT a verified new impact.
-                    if citing["published_at"] < changed_doc["published_at"]:
-                        continue
+                    # Existing subordinate regulations often predate the
+                    # amendment they reference. They must remain discoverable.
+                    # This is a verified citation, NOT a proven new duty.
                     key = (changed_doc["id"], citing_id, article,
                            reference["article"])
                     edges[key] = {
@@ -164,6 +163,8 @@ def connect_changes(findings: dict, versions: dict, documents: dict,
                         "referencing_article": article,
                         "changed_article": reference["article"],
                         "reference_quote": reference["quote"],
+                        "reference_predates_amendment":
+                            citing["published_at"] < changed_doc["published_at"],
                         "referencing_source_url": citing["url"],
                         "publishing_agency": citing.get("ministry", ""),
                         "explicit_actors": actors_in(body),

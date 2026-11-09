@@ -53,6 +53,21 @@ class CausalityTests(unittest.TestCase):
         self.assertFalse(edges[0]["required_action_verified"])
         self.assertFalse(edges[0]["operational_program_verified"])
 
+    def test_older_subordinate_regulation_may_reference_changed_parent(self):
+        changed=self.rec
+        old_id=document_key("ordin","101","104")
+        older={"id":old_id,"source":"ordin","title":"가상 지역 기준조례",
+               "published_at":"2025-03-01","url":"https://www.law.go.kr/older",
+               "ministry":"가상 지방기관"}
+        refs=connect_changes(
+            {changed["id"]:{"changes":[{"article":"제3조"}]}},
+            {old_id:{"clauses":{"제5조":take(
+                "「가상지원 기준고시」 제3조에 따른 금액을 적용한다.")}}},
+            {changed["id"]:changed,old_id:older})
+        self.assertEqual(len(refs),1)
+        self.assertTrue(refs[0]["reference_predates_amendment"])
+        self.assertFalse(refs[0]["required_action_verified"])
+
     def test_title_only_mention_does_not_prove_article(self):
         extracted=extract_references("「가상지원 기준고시」를 준용한다.")
         self.assertEqual(extracted[0]["article"],"")
