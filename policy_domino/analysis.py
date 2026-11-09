@@ -149,6 +149,47 @@ def actors_in(text: str) -> list[str]:
     return list(dict.fromkeys(m.group(1) for m in ACTOR.finditer(text)))
 
 
+def cross_document_actor_reviews(edges: list[dict], findings: dict) -> list[dict]:
+    """Candidate duties supported by exact references and explicit source actors.
+
+    This verifies the named actor appears in the referencing regulation.
+    It does not verify a distinct public service program or prescribe edits.
+    """
+    by_event = {eid:{c["article"]:c for c in f.get("changes",[])}
+                for eid,f in findings.items()}
+    results=[]
+    seen=set()
+    for edge in edges:
+        change=by_event.get(edge["source_event_id"],{}).get(
+            edge["changed_article"])
+        if not change:
+            continue
+        for actor in edge.get("explicit_actors",[]):
+            key=(edge["source_event_id"],edge["referencing_document_id"],
+                 edge["referencing_article"],actor)
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "source_event_id":edge["source_event_id"],
+                "actor":actor,
+                "work_regulation":edge["referencing_title"],
+                "target_location":edge["referencing_article"],
+                "changed_article":edge["changed_article"],
+                "review":edge["referencing_title"]+" "+edge["referencing_article"]+
+                         "에서 "+edge["changed_article"]+
+                         "의 변경된 기준을 실제 적용하는지 대조",
+                "old_policy_text":change["before"],
+                "new_policy_text":change["after"],
+                "citing_quote":edge["reference_quote"],
+                "source_url":edge["referencing_source_url"],
+                "verification":"exact_changed_article_cited_with_named_actor",
+                "operational_program_verified":False,
+                "required_action_verified":False,
+            })
+    return results
+
+
 def connect_changes(findings: dict, versions: dict, documents: dict,
                     max_edges: int = 1200) -> list[dict]:
     """Join exact published legal references to *changed* articles.

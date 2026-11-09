@@ -246,6 +246,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     docs = state.get("documents", {})
     findings = state.get("findings", {})
     edges = connect_changes(findings, state.get("versions", {}), docs)
+    from .analysis import cross_document_actor_reviews
+    work_reviews = cross_document_actor_reviews(edges, findings)
     indexed = sorted((d.copy() for d in docs.values() if not d.get("reference_only")),
                      key=lambda d: (
         d.get("published_at", ""), d.get("serial", "")), reverse=True)
@@ -262,6 +264,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "quality": quality(state),
         "documents": indexed,
         "relationships": edges,
+        "cross_document_review_candidates": work_reviews,
         "discovery_audit": state.get("discovery_metrics",{}),
         "principles": {
             "manual_institutions": False,

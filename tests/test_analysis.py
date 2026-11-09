@@ -67,6 +67,24 @@ class CausalityTests(unittest.TestCase):
         self.assertFalse(edges[0]["required_action_verified"])
         self.assertFalse(edges[0]["operational_program_verified"])
 
+    def test_named_actor_in_dependent_rule_yields_grounded_review_only(self):
+        from policy_domino.analysis import cross_document_actor_reviews
+        change={"article":"제3조","before":"지원액 20만원",
+                "after":"지원액 30만원"}
+        edges=[{"source_event_id":"event1","referencing_document_id":"rule1",
+                "referencing_article":"제7조","changed_article":"제3조",
+                "explicit_actors":["가상지원청장"],"referencing_title":"가상 조례",
+                "reference_quote":"제3조에 따라 처리한다",
+                "referencing_source_url":"https://www.law.go.kr/ref"}]
+        candidates=cross_document_actor_reviews(edges,{"event1":{"changes":[change]}})
+        self.assertEqual(len(candidates),1)
+        self.assertEqual(candidates[0]["actor"],"가상지원청장")
+        self.assertEqual(candidates[0]["target_location"],"제7조")
+        self.assertFalse(candidates[0]["operational_program_verified"])
+        self.assertFalse(candidates[0]["required_action_verified"])
+        self.assertEqual(cross_document_actor_reviews(
+            [{**edges[0],"explicit_actors":[]}],{"event1":{"changes":[change]}}),[])
+
     def test_older_subordinate_regulation_may_reference_changed_parent(self):
         changed=self.rec
         old_id=document_key("ordin","101","104")

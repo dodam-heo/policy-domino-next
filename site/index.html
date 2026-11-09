@@ -189,6 +189,17 @@
       append(impacts,create("div","muted-box",
         "개정 조문에 명시된 수행주체가 있더라도 다른 공공기관의 실제 사업기준을 어떻게 바꿔야 하는지는 별도로 확인해야 합니다. 인용만으로 기관에 조치 의무를 부여하지 않습니다."));
     }
+    const cross=(state.data.cross_document_review_candidates||[])
+       .filter(x=>x.source_event_id===doc.id);
+    for(const work of cross){
+      const card=create("div","agency-card");
+      append(card,create("strong","",work.actor),
+        create("div","micro",work.work_regulation+" · "+work.target_location),
+        create("p","",work.review),
+        create("div","micro","공식 변경 조문 직접 인용·수행주체 확인 · 실제 사업·조치 의무는 미확인"),
+        external(work.source_url,"업무 규정의 공식 근거"));
+      append(impacts,card);
+    }
     const direct=analysis.direct_actor_reviews||[];
     for(const actor of direct){
       const card=create("div","agency-card");
@@ -275,6 +286,7 @@
   function show(data){
     if(data.schema!=="policy-domino-next-v1")throw Error("잘못된 데이터 스키마");
     data.documents=data.documents||[];data.relationships=data.relationships||[];
+    data.cross_document_review_candidates=data.cross_document_review_candidates||[];
     state.data=data;state.selected=data.documents[0]?.id||null;
     const q=data.quality||{};
     $("indexed").textContent=num(data.documents.length);
