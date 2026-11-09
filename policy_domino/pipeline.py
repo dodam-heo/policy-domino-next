@@ -84,6 +84,9 @@ def work_queue(state: dict, today: dt.date, limit: int) -> list[dict]:
     pool = {source: [] for source in SOURCES}
     attempts = state.get("attempts", {})
     for doc in state.get("documents", {}).values():
+        if doc.get("reference_only"):
+            # Baselines fetched during comparison are not new events.
+            continue
         key = doc["id"]
         finding = state.get("findings", {}).get(key, {})
         if finding.get("status") in TERMINAL:
@@ -176,7 +179,8 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
                     "baseline_unavailable",
                     reason=history_error or "이전 공식 개정 이력 미확보")
     # Keep both official versions, but do not treat baseline as a new change.
-    state["documents"].setdefault(prior["id"], prior)
+    if prior["id"] not in state["documents"]:
+        state["documents"][prior["id"]] = {**prior, "reference_only": True}
     previous = state["versions"].get(prior["id"])
     if not previous:
         previous = parse_document(api.detail(prior))
@@ -198,7 +202,8 @@ def quality(state: dict) -> dict:
     findings = state.get("findings", {})
     result = {}
     for source in SOURCES:
-        ids = [k for k, value in docs.items() if value["source"] == source]
+        ids = [k for k, value in docs.items()
+               if value["source"] == source and not value.get("reference_only")]
         counts = Counter(findings.get(k, {}).get("status", "queued") for k in ids)
         result[source] = {
             "indexed": len(ids), "status_counts": dict(sorted(counts.items())),
@@ -235,7 +240,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     docs = state.get("documents", {})
     findings = state.get("findings", {})
     edges = connect_changes(findings, state.get("versions", {}), docs)
-    indexed = sorted(docs.values(), key=lambda d: (
+    indexed = sorted((d.copy() for d in docs.values() if not d.get("reference_only")),
+                     key=lambda d: (
         d.get("published_at", ""), d.get("serial", "")), reverse=True)
     for row in indexed:
         row["analysis"] = findings.get(row["id"], {
