@@ -1,0 +1,70 @@
+import unittest
+from policy_domino.analysis import compare, connect_changes, extract_references, review_topics
+from policy_domino.core import document_key
+from policy_domino.parser import take
+
+
+class CausalityTests(unittest.TestCase):
+    def setUp(self):
+        self.rec = {"id": document_key("admrul","1","12"),"source":"admrul",
+                    "title":"가상지원 기준고시","url":"https://www.law.go.kr/x",
+                    "published_at":"2026-11-09","ministry":"가상부처"}
+
+    def test_before_after_actual_text_and_amounts(self):
+        prior={"status":"extracted","clauses":{"제3조":take("제3조(기준) 지원액은 30만원이다.")}}
+        current={"status":"extracted","clauses":{"제3조":take("제3조(기준) 지원액은 40만원이다.")}}
+        result=compare(prior,current,self.rec)
+        self.assertEqual(result["status"],"compared")
+        self.assertEqual(len(result["changes"]),1)
+        self.assertEqual(result["changes"][0]["old_values"],["30만원"])
+        self.assertEqual(result["changes"][0]["new_values"],["40만원"])
+        self.assertIn("제3조",review_topics(result["changes"])[0]["review"])
+
+    def test_unmatched_articles_are_never_fake_deletions(self):
+        prior={"status":"extracted","clauses":{"제3조":take("기준 문구")}}
+        current={"status":"partial","clauses":{"제4조":take("다른 문구")}}
+        result=compare(prior,current,self.rec)
+        self.assertEqual(result["status"],"partial_unresolved")
+        self.assertFalse(result["changes"])
+        self.assertEqual(len(result["excluded"]),2)
+
+    def test_truncated_body_never_claims_real_change(self):
+        prior={"status":"partial","clauses":{"제3조":take("A"*16000)}}
+        current={"status":"extracted","clauses":{"제3조":take("B"*200)}}
+        result=compare(prior,current,self.rec)
+        self.assertFalse(result["changes"])
+        self.assertEqual(result["status"],"partial_unresolved")
+
+    def test_verified_reference_requires_exact_changed_article(self):
+        changed_id=self.rec["id"]
+        referring_id=document_key("ordin","3","31")
+        consumer={ "id":referring_id,"source":"ordin",
+            "title":"가상 지역지원 조례","published_at":"2026-11-09",
+            "url":"https://www.law.go.kr/y","ministry":"가상지자체"}
+        findings={changed_id:{"changes":[{"article":"제3조"}]}}
+        versions={referring_id:{"clauses":{
+            "제5조":take("이 조례는 「가상지원 기준고시」 제3조를 적용한다."),
+            "제7조":take("「가상지원 기준고시」 제4조는 변경과 무관하다.")}}}
+        docs={changed_id:self.rec,referring_id:consumer}
+        edges=connect_changes(findings,versions,docs)
+        self.assertEqual(len(edges),1)
+        self.assertEqual(edges[0]["changed_article"],"제3조")
+        self.assertEqual(edges[0]["referencing_title"],"가상 지역지원 조례")
+        self.assertFalse(edges[0]["required_action_verified"])
+        self.assertFalse(edges[0]["operational_program_verified"])
+
+    def test_title_only_mention_does_not_prove_article(self):
+        extracted=extract_references("「가상지원 기준고시」를 준용한다.")
+        self.assertEqual(extracted[0]["article"],"")
+        self.assertEqual(connect_changes(
+            {self.rec["id"]:{"changes":[{"article":"제3조"}]}},
+            {document_key("law","2","2"):{"clauses":{
+                "제1조":take("「가상지원 기준고시」를 준용한다.")}}},
+            {self.rec["id"]:self.rec,
+             document_key("law","2","2"):{"id":document_key("law","2","2"),
+              "source":"law","title":"가상 법","published_at":"2026-11-09",
+              "ministry":"가상청","url":"https://www.law.go.kr/z"}}),[])
+
+
+if __name__=="__main__":
+    unittest.main()
