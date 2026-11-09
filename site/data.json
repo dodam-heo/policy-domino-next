@@ -32,6 +32,7 @@
   },
   "documents": [],
   "relationships": [],
+  "discovery_audit": {},
   "principles": {
     "manual_institutions": false,
     "inferred_programs_count_as_confirmed": false,
