@@ -187,7 +187,17 @@
       e.required_action_verified);
     if(!confirmed.length){
       append(impacts,create("div","muted-box",
-        "변경된 정책이 특정 공공기관의 실제 사업기준을 어떻게 바꿔야 하는지까지 검증된 결과는 아직 없습니다. 관련 규정 인용만으로 기관에 변경 의무를 부여하지 않습니다."));
+        "개정 조문에 명시된 수행주체가 있더라도 다른 공공기관의 실제 사업기준을 어떻게 바꿔야 하는지는 별도로 확인해야 합니다. 인용만으로 기관에 조치 의무를 부여하지 않습니다."));
+    }
+    const direct=analysis.direct_actor_reviews||[];
+    for(const actor of direct){
+      const card=create("div","agency-card");
+      append(card,create("strong","",actor.actor),
+        create("div","micro",actor.article+" · 공식 변경 조문의 명시적 수행주체"),
+        create("p","",actor.review),
+        create("div","micro","해당 조문 검토 근거 확인 · 별도 사업 영향은 미확인"),
+        external(actor.source_url,"변경된 원문 확인"));
+      append(impacts,card);
     }
     for(const edge of confirmed){
       const card=create("div","agency-card");

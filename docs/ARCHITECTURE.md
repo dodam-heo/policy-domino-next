@@ -89,6 +89,7 @@ site/data.json: schema = policy-domino-next-v1
 - analysis.status: queued / compared / partial_compared / no_text_change / enactment / repeal / history_unavailable / baseline_unavailable / body_unavailable / partial_unresolved / source_error.
 - analysis.changes[]: article, before, after, actual_edits, category, old_values, new_values, source_url, evidence.
 - analysis.review_candidates[]: 기관이 미배정된 실제 변경 조문 검토 후보.
+- analysis.direct_actor_reviews[]: 변경 전후 공식 조문에 모두 명시된 수행주체에 한정한 직접 조문 검토. 실제 별도 기관 사업·조치 의무 확정은 아님.
 - relationships[]: source_event_id, referencing_document_id, referencing_article, changed_article, official_url, reference_quote, publishing_agency, explicit_actors, relationship, operational_program_verified=false, required_action_verified=false.
 - coverage[]: source, 날짜범위, edition, reported, collected, pages, complete, error.
 - quality: 원천별 indexed, verified_changes, waiting, unavailable_bodies, unavailable_history.

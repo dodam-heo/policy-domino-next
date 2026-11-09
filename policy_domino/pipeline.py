@@ -7,7 +7,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from .analysis import compare, review_topics
+from .analysis import compare, review_topics, direct_actor_reviews
 from .api import LawAPI
 from .core import SOURCES, document_key, load_state, new_state, utc_now, write_json
 from .parser import parse_document
@@ -193,6 +193,7 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
             "published_at": prior["published_at"], "url": prior["url"],
         },
         "review_candidates": review_topics(result["changes"]),
+        "direct_actor_reviews": direct_actor_reviews(result["changes"]),
     })
     return result
 

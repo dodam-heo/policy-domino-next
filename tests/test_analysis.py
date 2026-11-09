@@ -35,6 +35,20 @@ class CausalityTests(unittest.TestCase):
         self.assertFalse(result["changes"])
         self.assertEqual(result["status"],"partial_unresolved")
 
+    def test_direct_actor_review_is_derived_from_changed_clause_only(self):
+        from policy_domino.analysis import direct_actor_reviews
+        change={"article":"제3조","category":"금액·비율",
+                "before":"제3조(지원) 가상지원청장은 20만원을 지급한다.",
+                "after":"제3조(지원) 가상지원청장은 30만원을 지급한다.",
+                "source_url":"https://www.law.go.kr/가상"}
+        rows=direct_actor_reviews([change])
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]["actor"],"가상지원청장")
+        self.assertFalse(rows[0]["operational_program_verified"])
+        self.assertFalse(rows[0]["required_action_verified"])
+        self.assertEqual(direct_actor_reviews([{**change,
+            "after":"제3조(지원) 신청인은 30만원을 받는다."}]),[])
+
     def test_verified_reference_requires_exact_changed_article(self):
         changed_id=self.rec["id"]
         referring_id=document_key("ordin","3","31")

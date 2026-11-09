@@ -101,6 +101,35 @@ def review_topics(changes: list[dict]) -> list[dict]:
     } for c in changes]
 
 
+def direct_actor_reviews(changes: list[dict]) -> list[dict]:
+    """Changed clause directly names a duty actor. Not a proven program impact.
+
+    Both before and after must mention the same actor to avoid inventing
+    an operational role. The role is derived exclusively from source text.
+    """
+    results=[]
+    seen=set()
+    for c in changes:
+        old_actors=set(actors_in(c["before"]))
+        new_actors=set(actors_in(c["after"]))
+        for actor in sorted(old_actors & new_actors):
+            key=(actor,c["article"])
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "actor":actor,"article":c["article"],
+                "category":c["category"],
+                "review":c["article"]+"에서 해당 주체의 변경된 업무 문구를 대조",
+                "before":c["before"],"after":c["after"],
+                "source_url":c["source_url"],
+                "evidence_level":"changed_clause_explicit_actor",
+                "operational_program_verified":False,
+                "required_action_verified":False,
+            })
+    return results
+
+
 def extract_references(text: str) -> list[dict]:
     rows = []
     for match in CITATION.finditer(text):
