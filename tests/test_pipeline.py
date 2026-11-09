@@ -56,7 +56,7 @@ class PipelineTests(unittest.TestCase):
         ordin=record("ordin","3","31")
         state=new_state()
         api=DummyAPI([original,new,admrul,ordin])
-        run_once(state,api,dt.date(2026,11,09),limit=4)
+        run_once(state,api,dt.date(2026,11,9),limit=4)
         self.assertIn(new["id"],state["findings"])
         self.assertEqual(state["findings"][new["id"]]["status"],"compared")
         self.assertTrue(state["findings"][new["id"]]["changes"])
