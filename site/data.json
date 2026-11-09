@@ -32,6 +32,7 @@
   },
   "documents": [],
   "relationships": [],
+  "cross_document_review_candidates": [],
   "discovery_audit": {},
   "principles": {
     "manual_institutions": false,
