@@ -43,6 +43,12 @@
     .review-chip.active{background:#12435d;color:#fff;border-color:#12435d}
     .review-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     .agency-card .review-type{font-size:10px;color:#426f88;font-weight:850;margin-bottom:5px}
+    .agency-group{border-top:1px solid var(--line);margin-top:18px;padding-top:13px}
+    .agency-group-head{font-weight:850;font-size:15px;color:#1a3d54;margin:4px 0 9px}
+    .agency-nav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;padding:6px 0 10px}
+    .agency-jump{flex-shrink:0;background:#f0f7fa;border:1px solid #d9e9ef;color:#225872;font-size:11px;font-weight:750;border-radius:7px;padding:8px 10px}
+    .agency-jump:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    .agency-card p{font-size:12px;line-height:1.7;margin:9px 0}
     .item-type{font-size:10px;font-weight:800;border-radius:5px;background:#e8f2f7;color:#21637d;padding:4px 7px}
     .item-type.new{background:#e4f5ed;color:#157352}
     .item-type.repealed{background:#f9eef0;color:#945366}
@@ -259,11 +265,32 @@
       badge(analysisLabel(analysis)[0],analysisLabel(analysis)[1]),
       external(doc.url,"공식 법령 페이지"));
     append(root,top);
+    const diffs=analysis.changes||[];
+    const edges=state.data.relationships.filter(e=>e.source_event_id===doc.id);
+    const cross=(state.data.cross_document_review_candidates||[])
+      .filter(x=>x.source_event_id===doc.id);
+    const direct=analysis.direct_actor_reviews||[];
+    const confirmed=edges.filter(e=>e.operational_program_verified &&
+      e.required_action_verified);
+    const unassigned=analysis.review_candidates||[];
+    const overview=create("div","overview");
+    append(overview,create("div","overview-label","이번 개정, 한눈에 보기"));
+    const numeric=diffs.find(c=>c.old_values?.length===1 &&
+      c.new_values?.length===1 && c.old_values[0]!==c.new_values[0]);
+    append(overview,create("div","overview-title",
+      numeric?numeric.old_values[0]+" → "+numeric.new_values[0]:
+      diffs.length?"실제 변경 조문 "+num(diffs.length)+"개 확인":
+      analysisLabel(analysis)[0]));
+    const overviewTags=create("div","overview-tags");
+    append(overviewTags,create("span","", "검토 대상 조문 "+num(diffs.length)+"개"),
+      create("span","", "직접 인용 규정 "+num(edges.length)+"건"),
+      create("span","", "업무 검토 후보 "+num(direct.length+cross.length)+"건"));
+    append(overview,overviewTags);
+    append(root,overview);
 
     // ① Actual changed clauses always precede agency review.
     const changes=heading("① 정책에서 실제 바뀐 내용",
       "종전·현행 공식 문서에서 같은 조문을 대조한 결과입니다.");
-    const diffs=analysis.changes || [];
     if(!diffs.length){
       append(changes,create("div","muted-box",analysis.reason ||
         "종전 또는 현행 본문을 검증하지 못했습니다. 변경 내용을 임의로 작성하지 않습니다."));
@@ -281,44 +308,111 @@
     }
     append(root,changes);
 
-    // ② Verified program duties require INDEPENDENT operational evidence.
+    // ② Restored institution/workflow filter controls; evidence levels stay separate.
     const impacts=heading("② 기관별 변경 검토사항",
-      "공식 인용이 확인됐다는 사실과 실제 기관·사업의 조치가 필요하다는 판단은 구분합니다.");
-    const edges=state.data.relationships.filter(e=>e.source_event_id===doc.id);
-    const confirmed=edges.filter(e=>e.operational_program_verified &&
-      e.required_action_verified);
-    if(!confirmed.length){
-      append(impacts,create("div","muted-box",
-        "개정 조문에 명시된 수행주체가 있더라도 다른 공공기관의 실제 사업기준을 어떻게 바꿔야 하는지는 별도로 확인해야 합니다. 인용만으로 기관에 조치 의무를 부여하지 않습니다."));
+      "기관별 변경 필요사항 · 공식 원문에 명시된 주체와 직접 인용 관계를 구분합니다. 검토 후보는 실제 사업 조치가 확정된 결과가 아닙니다.");
+    const options=[
+      ["all","전체",confirmed.length+cross.length+direct.length+unassigned.length],
+      ["action","업무 반영 검토 필요",confirmed.length],
+      ["source","공식 사용 문구 확인",cross.length+direct.length],
+      ["research","집행기관 추가 조사",unassigned.length]
+    ];
+    const tabs=create("div","review-filters");
+    tabs.setAttribute("role","group");
+    tabs.setAttribute("aria-label","기관별 검토 필터");
+    for(const [type,title,count] of options){
+      const b=create("button","review-chip"+(state.detailFilter===type?" active":""),
+        title+" "+num(count));
+      b.type="button";b.dataset.reviewFilter=type;
+      b.setAttribute("aria-pressed",String(state.detailFilter===type));
+      b.onclick=()=>{state.detailFilter=type;renderDetail();};
+      append(tabs,b);
     }
-    const cross=(state.data.cross_document_review_candidates||[])
-       .filter(x=>x.source_event_id===doc.id);
-    for(const work of cross){
-      const card=create("div","agency-card");
-      append(card,create("strong","",work.actor),
-        create("div","micro",work.work_regulation+" · "+work.target_location),
-        create("p","",work.review),
-        create("div","micro","공식 변경 조문 직접 인용·수행주체 확인 · 실제 사업·조치 의무는 미확인"),
-        external(work.source_url,"업무 규정의 공식 근거"));
-      append(impacts,card);
+    append(impacts,tabs);
+    const visible=[];
+    if(["all","action"].includes(state.detailFilter)){
+      for(const edge of confirmed){
+        if(!edge.verified_agency||!edge.required_review||
+           !edge.official_operational_url)continue;
+        visible.push({agency:edge.verified_agency,kind:"실제 사업 적용 근거 확인",
+          detail:edge.verified_program||"공식 사업자료 검증",
+          review:edge.required_review,url:edge.official_operational_url,
+          level:"confirmed"});
+      }
     }
-    const direct=analysis.direct_actor_reviews||[];
-    for(const actor of direct){
-      const card=create("div","agency-card");
-      append(card,create("strong","",actor.actor),
-        create("div","micro",actor.article+" · 공식 변경 조문의 명시적 수행주체"),
-        create("p","",actor.review),
-        create("div","micro","해당 조문 검토 근거 확인 · 별도 사업 영향은 미확인"),
-        external(actor.source_url,"변경된 원문 확인"));
-      append(impacts,card);
+    if(["all","source"].includes(state.detailFilter)){
+      for(const work of cross){
+        visible.push({agency:work.actor||"수행주체 미확인",
+          kind:"공식 사용 문구 확인 · 다른 규정 직접 인용",
+          detail:(work.work_regulation||"관련 규정")+" · "+(work.target_location||"조문 미확인"),
+          review:work.review||"변경 조항 적용 문구 확인",url:work.source_url,
+          level:"source"});
+      }
+      for(const actor of direct){
+        visible.push({agency:actor.actor||"수행주체 미확인",
+          kind:"공식 사용 문구 확인 · 변경 조문에 명시",
+          detail:(actor.article||"변경 조문")+" · 법령상 수행주체",
+          review:actor.review||"변경된 업무 기준 대조",url:actor.source_url,
+          level:"source"});
+      }
     }
-    for(const edge of confirmed){
-      const card=create("div","agency-card");
-      append(card,create("strong","",edge.verified_agency),
-        create("div","micro",edge.verified_program),
-        create("p","",edge.required_review),
-        external(edge.official_operational_url,"사업 운영 근거"));
-      append(impacts,card);
+    if(["all","research"].includes(state.detailFilter)){
+      for(const candidate of unassigned){
+        visible.push({agency:"담당 집행기관 추가 조사",
+          kind:"집행기관 추가 조사 · 기관 미배정",
+          detail:(candidate.article||"변경 조문")+" · "+(candidate.category||"업무 검토"),
+          review:candidate.review||"관련 공공사업 적용 근거 확인",
+          url:candidate.source_url,level:"research"});
+      }
+    }
+    if(!visible.length){
+      const text=state.detailFilter==="action"?
+        "공식 사업 운영자료까지 교차 검증된 변경 조치는 아직 없습니다.":
+        state.detailFilter==="source"?
+        "공식 변경 조문에서 확인된 수행주체·직접 인용 문구가 없습니다.":
+        state.detailFilter==="research"?
+        "추가 조사 후보가 없습니다.":
+        "기관·사업의 검토사항을 확정할 만한 공식 근거가 아직 없습니다.";
+      append(impacts,create("div","muted-box",text));
+    }else{
+      // Keep the original agency-grouped presentation without enrolling names.
+      const groups=new Map();
+      for(const record of visible){
+        if(!groups.has(record.agency))groups.set(record.agency,[]);
+        groups.get(record.agency).push(record);
+      }
+      if(groups.size>1){
+        const nav=create("div","agency-nav");
+        for(const [name] of groups){
+          const button=create("button","agency-jump",name);
+          button.type="button";
+          button.onclick=()=>{
+            const target=groupElems.get(name);
+            if(target && typeof target.scrollIntoView==="function")
+              target.scrollIntoView({behavior:"smooth",block:"start"});
+          };
+          append(nav,button);
+        }
+        append(impacts,nav);
+      }
+      const groupElems=new Map();
+      for(const [name,records] of groups){
+        const group=create("div","agency-group");
+        groupElems.set(name,group);
+        append(group,create("h4","agency-group-head",name));
+        for(const record of records){
+          const card=create("div","agency-card");
+          append(card,create("div","review-type",record.kind),
+            create("div","micro",record.detail),
+            create("p","",record.review),
+            create("div","micro",record.level==="confirmed"?
+              "실제 사업 운영자료 근거 확인 · 조치 완료 여부는 미확인":
+              "실제 기관 사업 반영·조치 의무는 미확인"),
+            external(record.url,"공식 근거 보기"));
+          append(group,card);
+        }
+        append(impacts,group);
+      }
     }
     append(root,impacts);
 
