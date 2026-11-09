@@ -42,7 +42,8 @@
     .overview-title{font-size:21px;line-height:1.4;font-weight:850;letter-spacing:-.03em;margin:9px 0}
     .overview-tags{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
     .overview-tags span{background:#fff;border:1px solid #deeaef;border-radius:7px;padding:5px 8px;color:#4c6a7a;font-weight:700;font-size:11px}
-    .review-filters{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+    .review-filters{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 18px}
+    .agency-empty{padding:15px;border:1px dashed #dce7ed;border-radius:8px;font-size:12px;color:#6d8291}
     .review-chip{font-size:11px;font-weight:750;border-radius:9px;border:1px solid #dce6eb;padding:9px 10px;background:#fff;color:#42657c}
     .review-chip.active{background:#12435d;color:#fff;border-color:#12435d}
     .review-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -157,24 +158,24 @@
 <main class="container" id="layout">
   <aside class="panel" id="listPanel" aria-label="공식 변경 목록">
     <div class="panel-head">
-      <h2>업무에 영향을 주는 정책 변경</h2>
-      <div class="sub">실질적인 변경과 기관별 업무 영향 중심 · 공식 공포자료 기반</div>
+      <h2>공식 정책 변경 목록</h2>
+      <div class="sub">신규·개정·폐지 및 공식 원문 분석 상태를 확인합니다.</div>
       <div class="filters" aria-label="정책 필터와 정렬">
         <div class="filter-group" role="group" aria-label="변경 유형 필터">
-          <button type="button" class="filter-chip active" id="mode-substantive" data-mode="substantive" aria-pressed="true">실질 정책 변경</button>
+          <button type="button" class="filter-chip active" id="mode-all" data-mode="all" aria-pressed="true">전체 공식자료</button>
           <button type="button" class="filter-chip" id="mode-new" data-mode="new" aria-pressed="false">신규</button>
           <button type="button" class="filter-chip" id="mode-amended" data-mode="amended" aria-pressed="false">개정</button>
           <button type="button" class="filter-chip" id="mode-repealed" data-mode="repealed" aria-pressed="false">폐지</button>
-          <button type="button" class="filter-chip" id="mode-all" data-mode="all" aria-pressed="false">전체 공식자료</button>
+          <button type="button" class="filter-chip" id="mode-pending" data-mode="pending" aria-pressed="false">분석 대기</button>
         </div>
         <div class="filter-group" role="group" aria-label="정렬 방법">
-          <button type="button" class="filter-chip secondary active" id="sort-impact" data-sort="impact" aria-pressed="true">영향 큰 순</button>
+          <button type="button" class="filter-chip secondary active" id="sort-verified" data-sort="verified" aria-pressed="true">변경 확인 우선</button>
           <button type="button" class="filter-chip secondary" id="sort-latest" data-sort="latest" aria-pressed="false">최신순</button>
         </div>
       </div>
       <input class="search" id="search" type="search" autocomplete="off" placeholder="법령명·정책명·소관기관 검색" aria-label="정책 검색">
       <div class="sub" id="feed-state" aria-live="polite">원천자료 확인 중</div>
-      <p class="filter-explain" id="filter-explain">영향 큰 순은 확인된 규정 인용·수행주체 근거 수 기준이며 사회적 중요도 등급이 아닙니다.</p>
+      <p class="filter-explain" id="filter-explain">변경 확인 우선: 신구 원문 대조가 확인된 자료를 앞에 표시하며, 분석 대기 자료도 목록에 유지합니다.</p>
     </div>
     <div class="item-list" id="items"><div class="empty">원천자료를 불러오는 중</div></div>
     <button class="more" id="more" hidden>다음 목록 더 보기</button>
@@ -195,10 +196,10 @@
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  const FILTER_MODES=["substantive","new","amended","repealed","all"];
-  const SORT_MODES=["impact","latest"];
+  const FILTER_MODES=["all","new","amended","repealed","pending"];
+  const SORT_MODES=["verified","latest"];
   const state = {data: null, selected: null, query: "", visible: 80,
-                 mode:"substantive", sort:"impact", detailFilter:"all",
+                 mode:"all", sort:"verified", agencyFilter:"all",
                  linkCounts:new Map(), verifiedActionCounts:new Map(),
                  crossCounts:new Map()};
   // Mobile navigation follows the original policy-domino list→detail UX.
@@ -222,7 +223,7 @@
   function selectDoc(id,updateUrl=true){
     if(!state.data || !state.data.documents.some(d=>d.id===id))return;
     state.selected=id;
-    state.detailFilter="all";
+    state.agencyFilter="all";
     renderList();
     renderDetail();
     if(mobile()){
@@ -258,6 +259,10 @@
     const a = create("a","source",title || "공식 원문 확인");
     a.href = safe;a.target="_blank";a.rel="noopener noreferrer";
     return a;
+  }
+  function formatAgencyNames(name){
+    return String(name||"소관기관 미확인")
+      .split(/[,，、;；]+/).map(s=>s.trim()).filter(Boolean).join(" · ");
   }
   function analysisLabel(a){
     const x = a?.status || "queued";
@@ -354,7 +359,7 @@
     const top=create("header","detail-head");
     append(top,create("div","eyebrow",doc.kind+" · "+doc.published_at),
       create("h2","",doc.title),
-      create("div","sub",doc.ministry||"공식 소관기관 정보 없음"),
+      create("div","sub","공식 소관 · 발령기관: "+formatAgencyNames(doc.ministry)),
       badge(analysisLabel(analysis)[0],analysisLabel(analysis)[1]),
       external(doc.url,"공식 법령 페이지"));
     append(root,top);
@@ -392,107 +397,83 @@
     }
     append(root,changes);
 
-    // ② Restored institution/workflow filter controls; evidence levels stay separate.
+    // ② Agency-name filters, derived only from specific sourced actors/programs.
     const impacts=heading("② 기관별 변경 검토사항",
-      "기관별 변경 필요사항 · 공식 원문에 명시된 주체와 직접 인용 관계를 구분합니다. 검토 후보는 실제 사업 조치가 확정된 결과가 아닙니다.");
-    const options=[
-      ["all","전체",confirmed.length+cross.length+direct.length+unassigned.length],
-      ["action","업무 반영 검토 필요",confirmed.length],
-      ["source","공식 사용 문구 확인",cross.length+direct.length],
-      ["research","집행기관 추가 조사",unassigned.length]
-    ];
+      "기관 이름을 선택해 관련 검토사항을 확인합니다. 소관기관과 실제 집행기관은 구별합니다.");
+    const verifiedRows=[];
+    for(const edge of confirmed){
+      if(edge.verified_agency && edge.required_review && edge.official_operational_url)
+        verifiedRows.push({
+          agency:edge.verified_agency,kind:"공식 사업자료 적용관계 확인",
+          detail:edge.verified_program||"공식 사업자료",
+          review:edge.required_review,url:edge.official_operational_url,
+          evidenceLevel:"official_program_dependency"
+        });
+    }
+    for(const work of cross){
+      if(work.actor && work.source_url)
+        verifiedRows.push({
+          agency:work.actor,kind:"관련 규정에 명시된 수행주체",
+          detail:(work.work_regulation||"공식 규정")+" · "+(work.target_location||""),
+          review:work.review||"변경 조항 적용 문구 확인",url:work.source_url,
+          evidenceLevel:"named_actor_in_citing_rule"
+        });
+    }
+    for(const actor of direct){
+      if(actor.actor && actor.source_url)
+        verifiedRows.push({
+          agency:actor.actor,kind:"변경 조문에 명시된 수행주체",
+          detail:(actor.article||"변경 조문")+" · 원문 직접 기재",
+          review:actor.review||"변경된 업무 기준 대조",url:actor.source_url,
+          evidenceLevel:"named_actor_in_changed_clause"
+        });
+    }
+    // Publishing ministry is not itself proof of implementation. Never
+    // enroll it as a "review agency" solely because it issued the source.
+    const groups=new Map();
+    for(const item of verifiedRows){
+      const name=String(item.agency).trim();
+      if(!name)continue;
+      if(!groups.has(name))groups.set(name,[]);
+      const rows=groups.get(name);
+      if(!rows.some(row=>row.kind===item.kind&&row.detail===item.detail&&
+                          row.review===item.review))
+        rows.push(item);
+    }
+    if(!groups.has(state.agencyFilter))state.agencyFilter="all";
     const tabs=create("div","review-filters");
     tabs.setAttribute("role","group");
-    tabs.setAttribute("aria-label","기관별 검토 필터");
-    for(const [type,title,count] of options){
-      const b=create("button","review-chip"+(state.detailFilter===type?" active":""),
-        title+" "+num(count));
-      b.type="button";b.dataset.reviewFilter=type;
-      b.setAttribute("aria-pressed",String(state.detailFilter===type));
-      b.onclick=()=>{state.detailFilter=type;renderDetail();};
+    tabs.setAttribute("aria-label","기관 이름별 검토 필터");
+    const filters=[["all","전체 기관",verifiedRows.length],
+                   ...[...groups].map(([name,rows])=>[name,name,rows.length])];
+    for(const [key,name,count] of filters){
+      const active=state.agencyFilter===key;
+      const b=create("button","review-chip"+(active?" active":""),
+        name+" "+num(count));
+      b.type="button";b.dataset.agencyFilter=key;
+      b.setAttribute("aria-pressed",String(active));
+      b.onclick=()=>{state.agencyFilter=key;renderDetail();};
       append(tabs,b);
     }
     append(impacts,tabs);
-    const visible=[];
-    if(["all","action"].includes(state.detailFilter)){
-      for(const edge of confirmed){
-        if(!edge.verified_agency||!edge.required_review||
-           !edge.official_operational_url)continue;
-        visible.push({agency:edge.verified_agency,kind:"실제 사업 적용 근거 확인",
-          detail:edge.verified_program||"공식 사업자료 검증",
-          review:edge.required_review,url:edge.official_operational_url,
-          level:"confirmed"});
-      }
-    }
-    if(["all","source"].includes(state.detailFilter)){
-      for(const work of cross){
-        visible.push({agency:work.actor||"수행주체 미확인",
-          kind:"공식 사용 문구 확인 · 다른 규정 직접 인용",
-          detail:(work.work_regulation||"관련 규정")+" · "+(work.target_location||"조문 미확인"),
-          review:work.review||"변경 조항 적용 문구 확인",url:work.source_url,
-          level:"source"});
-      }
-      for(const actor of direct){
-        visible.push({agency:actor.actor||"수행주체 미확인",
-          kind:"공식 사용 문구 확인 · 변경 조문에 명시",
-          detail:(actor.article||"변경 조문")+" · 법령상 수행주체",
-          review:actor.review||"변경된 업무 기준 대조",url:actor.source_url,
-          level:"source"});
-      }
-    }
-    if(["all","research"].includes(state.detailFilter)){
-      for(const candidate of unassigned){
-        visible.push({agency:"담당 집행기관 추가 조사",
-          kind:"집행기관 추가 조사 · 기관 미배정",
-          detail:(candidate.article||"변경 조문")+" · "+(candidate.category||"업무 검토"),
-          review:candidate.review||"관련 공공사업 적용 근거 확인",
-          url:candidate.source_url,level:"research"});
-      }
-    }
-    if(!visible.length){
-      const text=state.detailFilter==="action"?
-        "공식 사업 운영자료까지 교차 검증된 변경 조치는 아직 없습니다.":
-        state.detailFilter==="source"?
-        "공식 변경 조문에서 확인된 수행주체·직접 인용 문구가 없습니다.":
-        state.detailFilter==="research"?
-        "추가 조사 후보가 없습니다.":
-        "기관·사업의 검토사항을 확정할 만한 공식 근거가 아직 없습니다.";
-      append(impacts,create("div","muted-box",text));
+    if(!groups.size){
+      append(impacts,create("div","agency-empty",
+        "해당 변경을 실제 업무에 적용하는 공공기관·수행주체가 공식 원문에서 아직 확인되지 않았습니다. 발령기관만으로 집행기관을 지정하지 않습니다."));
     }else{
-      // Keep the original agency-grouped presentation without enrolling names.
-      const groups=new Map();
-      for(const record of visible){
-        if(!groups.has(record.agency))groups.set(record.agency,[]);
-        groups.get(record.agency).push(record);
-      }
-      if(groups.size>1){
-        const nav=create("div","agency-nav");
-        for(const [name] of groups){
-          const button=create("button","agency-jump",name);
-          button.type="button";
-          button.onclick=()=>{
-            const target=groupElems.get(name);
-            if(target && typeof target.scrollIntoView==="function")
-              target.scrollIntoView({behavior:"smooth",block:"start"});
-          };
-          append(nav,button);
-        }
-        append(impacts,nav);
-      }
-      const groupElems=new Map();
-      for(const [name,records] of groups){
+      const selected=state.agencyFilter==="all"?groups:
+        new Map([[state.agencyFilter,groups.get(state.agencyFilter)]]);
+      for(const [name,records] of selected){
         const group=create("div","agency-group");
-        groupElems.set(name,group);
         append(group,create("h4","agency-group-head",name));
         for(const record of records){
           const card=create("div","agency-card");
           append(card,create("div","review-type",record.kind),
             create("div","micro",record.detail),
             create("p","",record.review),
-            create("div","micro",record.level==="confirmed"?
-              "실제 사업 운영자료 근거 확인 · 조치 완료 여부는 미확인":
-              "실제 기관 사업 반영·조치 의무는 미확인"),
-            external(record.url,"공식 근거 보기"));
+            create("div","micro",record.evidenceLevel==="official_program_dependency"?
+              "공식 사업자료 적용 관계 확인 · 실제 조치 완료는 미확인":
+              "공식 규정에 이름이 기재됨 · 별도 공공사업 적용·조치 의무는 미확인"),
+            external(record.url,"검토 근거 원문"));
           append(group,card);
         }
         append(impacts,group);
@@ -546,36 +527,29 @@
     if(/개정|정정/.test(revision))return "amended";
     return "unknown";
   }
-  function substantive(doc){
-    // A title, index-only item, or organisation-only edit is not proof of a
-    // substantive new eligibility, amount, procedure or service criterion.
-    return (doc.analysis?.changes||[]).some(c=>
-      c.before!==c.after && c.category!=="조직·정원" &&
-      c.before!==undefined && c.after!==undefined);
+  function verifiedScore(doc){
+    const a=doc.analysis||{};
+    if(a.status==="compared" && a.changes?.length)return 4;
+    if(a.status==="partial_compared" && a.changes?.length)return 3;
+    if(["enactment","repeal","no_text_change"].includes(a.status))return 2;
+    return 0;
   }
-  function impactRank(doc){
-    // Grounded ranking. A title match or speculative project is worth zero.
-    return [
-      state.verifiedActionCounts.get(doc.id)||0,
-      state.linkCounts.get(doc.id)||0,
-      (state.crossCounts.get(doc.id)||0)+(doc.analysis?.direct_actor_reviews?.length||0)
-    ];
+  function analysisPending(doc){
+    return verifiedScore(doc)===0;
   }
   function filtered(){
-    const data=state.data?.documents||[];
-    const rows=data.filter(doc=>{
+    const docs=state.data?.documents||[];
+    const rows=docs.filter(doc=>{
       const matches=normalize(doc.title+" "+doc.ministry).includes(state.query);
       if(!matches)return false;
       if(state.mode==="all")return true;
-      if(state.mode==="substantive")return substantive(doc);
+      if(state.mode==="pending")return analysisPending(doc);
       return policyType(doc)===state.mode;
     });
     rows.sort((a,b)=>{
-      if(state.sort==="impact"){
-        const x=impactRank(a),y=impactRank(b);
-        for(let i=0;i<x.length;i++){
-          if(y[i]!==x[i])return y[i]-x[i];
-        }
+      if(state.sort==="verified"){
+        const diff=verifiedScore(b)-verifiedScore(a);
+        if(diff)return diff;
       }
       return String(b.published_at||"").localeCompare(String(a.published_at||"")) ||
         String(b.serial||"").localeCompare(String(a.serial||""));
@@ -595,9 +569,9 @@
       else el.classList.remove("active");
       el.setAttribute("aria-pressed",String(active));
     }
-    $("filter-explain").textContent=state.sort==="impact"?
-      "영향 큰 순은 실제 확인된 기관별 조치·변경 조문 직접 인용·명시적 수행주체 수 기준입니다. 사회적 중요도 등급이 아닙니다.":
-      "최신순은 공식 공포·발령일을 기준으로 정렬합니다.";
+    $("filter-explain").textContent=state.sort==="verified"?
+      "변경 확인 우선: 신구 원문이 확인된 자료를 앞에 표시하고, 대기·실패 자료도 남겨둡니다.":
+      "최신순: 공식 공포·발령일에 따라 정렬하며, 미분석 항목도 함께 표시합니다.";
   }
   function renderList(){
     const list=$("items");list.replaceChildren();
@@ -606,9 +580,7 @@
     $("feed-state").textContent=num(state.data?.documents.length||0)+
        "개 공식 변경 사건 중 "+num(all.length)+"개 표시";
     if(!all.length)append(list,create("div","empty",
-      state.mode==="substantive"?
-      "아직 실제 전후 조문이 확인된 실질 변경이 없습니다. ‘전체 공식자료’에서 수집·분석 대기 항목을 확인할 수 있습니다.":
-      "이 조건에 해당하는 공식 변경 항목이 없습니다."));
+      "이 조건에 해당하는 공식 변경 항목이 없습니다. 전체 공식자료에서 다른 항목을 확인할 수 있습니다."));
     for(const doc of all.slice(0,state.visible)){
       const row=create("button","item"+(doc.id===state.selected?" selected":""));
       row.type="button";row.dataset.id=doc.id;
@@ -652,7 +624,7 @@
       const id=item.source_event_id;
       state.crossCounts.set(id,(state.crossCounts.get(id)||0)+1);
     }
-    if(!data.documents.some(substantive))state.mode="all";
+    state.mode="all";
     const linked=fragmentId();
     const hasLinked=linked && data.documents.some(doc=>doc.id===linked);
     state.selected=hasLinked?linked:(mobile()?null:(data.documents[0]?.id||null));
