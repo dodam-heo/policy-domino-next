@@ -36,7 +36,13 @@
     .pill.verified{background:#e6f4e8;color:#286245;border-color:#cae5d0}
     .pill.pending{background:#fff8eb;color:#92631c;border-color:#f2dfb7}
     .more{display:block;width:calc(100% - 34px);margin:16px auto;padding:11px;border-radius:8px;border:1px solid #ccdbe2;background:white;color:var(--blue)}
+    [hidden]{display:none!important}
+    .detail-pane{min-width:0}
+    .detail-toolbar{display:none}
     .detail{min-height:570px;padding:26px clamp(18px,3vw,37px)}
+    .item{position:relative}
+    .item::after{content:"›";position:absolute;right:18px;top:50%;transform:translateY(-50%);font-size:24px;color:#8ca3b0}
+    .item h3{padding-right:24px}
     .detail-head{border-bottom:1px solid var(--line);padding-bottom:21px;margin-bottom:24px}
     .detail-head h2{font-size:clamp(22px,2.3vw,31px);line-height:1.38;letter-spacing:-.04em;margin:8px 0 10px}
     .eyebrow{font-size:12px;color:var(--accent);font-weight:800;letter-spacing:.03em}
@@ -61,7 +67,23 @@
     .footer{max-width:1370px;margin:0 auto 35px;padding:0 22px;color:#778b97;font-size:11px}
     .footer a{color:inherit}
     .small-action{background:transparent;border:1px solid #d3e0e5;color:#315b6e;border-radius:6px;padding:5px 8px;font-size:11px}
-    @media(max-width:800px){.hero{padding:22px}.status{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 14px}.container{grid-template-columns:1fr;padding:0 14px 28px}.item-list{max-height:390px}.detail{min-height:320px}.two{grid-template-columns:1fr}.footer{padding:0 18px}}
+    @media(max-width:850px){
+      .hero{padding:22px}
+      .status{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 14px}
+      .container{display:block;padding:0 14px 28px}
+      .item-list{max-height:none;overflow:visible}
+      .detail-pane{display:none}
+      .container.detail-open #listPanel{display:none}
+      .container.detail-open #detailPanel{display:block}
+      body.detail-active .hero,body.detail-active .status{display:none}
+      .detail-toolbar{display:block;position:sticky;top:0;z-index:5;background:white;border-bottom:1px solid var(--line);padding:12px 16px}
+      .back-to-list{font:inherit;font-weight:750;font-size:14px;border:0;background:transparent;color:var(--blue);padding:7px 3px;cursor:pointer;min-height:42px}
+      .back-to-list:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:5px}
+      .detail{min-height:320px;padding:21px 18px}
+      .two{grid-template-columns:1fr}
+      .item{min-height:80px}
+      .footer{padding:0 18px}
+    }
   </style>
 </head>
 <body>
@@ -76,8 +98,8 @@
   <div class="metric"><b id="pending">—</b><span>분석 대기·재검증</span></div>
   <div class="metric"><b id="links">—</b><span>변경 조문 직접 인용</span></div>
 </div>
-<main class="container">
-  <aside class="panel" aria-label="공식 변경 목록">
+<main class="container" id="layout">
+  <aside class="panel" id="listPanel" aria-label="공식 변경 목록">
     <div class="panel-head">
       <h2>공식 변경 목록</h2>
       <div class="sub" id="feed-state">원천자료 확인 중</div>
@@ -86,7 +108,12 @@
     <div class="item-list" id="items"><div class="empty">원천자료를 불러오는 중</div></div>
     <button class="more" id="more" hidden>다음 목록 더 보기</button>
   </aside>
-  <article class="panel detail" id="detail" aria-live="polite"><div class="empty">변경된 정책을 선택하면 실제 바뀐 내용과 파급 근거를 확인할 수 있습니다.</div></article>
+  <section class="panel detail-pane" id="detailPanel" aria-label="선택한 정책의 변경 및 기관별 검토">
+    <nav class="detail-toolbar" aria-label="목록으로 돌아가기">
+      <button type="button" class="back-to-list" id="backToList">← 정책 변경 목록</button>
+    </nav>
+    <article class="detail" id="detail" aria-live="polite"><div class="empty">변경된 정책을 선택하면 실제 바뀐 내용과 파급 근거를 확인할 수 있습니다.</div></article>
+  </section>
 </main>
 <footer class="footer">
   출처: <a href="https://www.law.go.kr/" target="_blank" rel="noopener">국가법령정보센터</a> ·
@@ -98,6 +125,38 @@
   "use strict";
   const $ = id => document.getElementById(id);
   const state = {data: null, selected: null, query: "", visible: 80};
+  // Mobile navigation follows the original policy-domino list→detail UX.
+  // The detail is a distinct view, never an extra page section below the list.
+  const mobile = () => window.matchMedia("(max-width:850px)").matches;
+  function fragmentId(){
+    const match = location.hash.match(/^#change=(.+)$/);
+    try{return match ? decodeURIComponent(match[1]) : null;}catch{return null;}
+  }
+  function scrollTop(){
+    try{window.scrollTo({top:0,behavior:"instant"});}catch{window.scrollTo(0,0);}
+  }
+  function showList(updateUrl=true){
+    $("layout").classList.remove("detail-open");
+    document.body.classList.remove("detail-active");
+    if(updateUrl){
+      try{history.replaceState(null,"",location.pathname+location.search);}catch(e){}
+    }
+    if(mobile())scrollTop();
+  }
+  function selectDoc(id,updateUrl=true){
+    if(!state.data || !state.data.documents.some(d=>d.id===id))return;
+    state.selected=id;
+    renderList();
+    renderDetail();
+    if(mobile()){
+      $("layout").classList.add("detail-open");
+      document.body.classList.add("detail-active");
+      if(updateUrl){
+        try{history.pushState({policyId:id},"","#change="+encodeURIComponent(id));}catch(e){}
+      }
+      scrollTop();
+    }
+  }
   const create = (tag, className, content) => {
     const el = document.createElement(tag);
     if(className) el.className = className;
@@ -278,7 +337,7 @@
       const changes=doc.analysis?.changes?.length||0;
       if(changes)append(tags,badge("변경 조문 "+changes+"개"));
       append(row,tags);
-      row.onclick=()=>{state.selected=doc.id;renderList();renderDetail();};
+      row.onclick=()=>selectDoc(doc.id);
       append(list,row);
     }
     $("more").hidden=all.length<=state.visible;
@@ -287,7 +346,10 @@
     if(data.schema!=="policy-domino-next-v1")throw Error("잘못된 데이터 스키마");
     data.documents=data.documents||[];data.relationships=data.relationships||[];
     data.cross_document_review_candidates=data.cross_document_review_candidates||[];
-    state.data=data;state.selected=data.documents[0]?.id||null;
+    state.data=data;
+    const linked=fragmentId();
+    const hasLinked=linked && data.documents.some(doc=>doc.id===linked);
+    state.selected=hasLinked?linked:(mobile()?null:(data.documents[0]?.id||null));
     const q=data.quality||{};
     $("indexed").textContent=num(data.documents.length);
     $("compared").textContent=num(["law","admrul","ordin"].reduce(
@@ -296,11 +358,28 @@
       (sum,k)=>sum+(q[k]?.waiting||0),0));
     $("links").textContent=num(data.relationships.length);
     $("updated").textContent=data.generated_at?"마지막 분석 "+data.generated_at:
-      "원천 API 미실행 · LAW_OC 설정 후 공식 수집 시작";
-    if(data.configuration!=="running")
-      $("feed-state").textContent="LAW_OC 인증 설정 필요";
+      "공식 원천 갱신 대기";
     renderList();renderDetail();
+    if(hasLinked && mobile())selectDoc(linked,false);
+    else if(mobile())showList(false);
   }
+  $("backToList").onclick=()=>showList();
+  window.addEventListener("popstate",()=>{
+    const id=fragmentId();
+    if(id && state.data?.documents.some(doc=>doc.id===id))selectDoc(id,false);
+    else showList(false);
+  });
+  window.addEventListener("resize",()=>{
+    if(!mobile()){
+      $("layout").classList.remove("detail-open");
+      document.body.classList.remove("detail-active");
+      if(!state.selected && state.data?.documents.length){
+        state.selected=state.data.documents[0].id;renderList();renderDetail();
+      }
+    }else if(!fragmentId()){
+      showList(false);
+    }
+  });
   $("search").oninput=ev=>{state.query=normalize(ev.target.value);state.visible=80;renderList();};
   $("more").onclick=()=>{state.visible+=80;renderList();};
   fetch("./data.json",{cache:"no-store"}).then(res=>{
