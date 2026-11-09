@@ -48,8 +48,8 @@ class FakeElement {
 function setupBrowser(mobile=true,initialHash="",override=null){
   const ids=["layout","listPanel","detailPanel","detail","items","feed-state",
       "indexed","compared","pending","links","updated","search","more","backToList",
-      "filter-explain","mode-substantive","mode-new","mode-amended",
-      "mode-repealed","mode-all","sort-impact","sort-latest"];
+      "filter-explain","mode-all","mode-new","mode-amended",
+      "mode-repealed","mode-pending","sort-verified","sort-latest"];
   const dom=new Map(ids.map(x=>[x,new FakeElement()]));
   const body=new FakeElement("body");
   const listeners={};
@@ -190,15 +190,16 @@ async function verifyRealFilters(){
   const ui=setupBrowser(true,"",{documents:docs,relationships:rel,
                                     cross_document_review_candidates:cross});
   await flush();
-  // Screenshot: '실질 정책 변경' is the default: actual non-structural deltas only.
-  assert.deepEqual(cardIds(ui),["c1","c3"],"Default substantive policy filter");
-  assert.equal(ui.dom.get("mode-substantive").getAttribute("aria-pressed"),"true");
+  // Full official catalogue stays visible: never hide structural changes,
+  // enactments, repeals or incomplete source records behind a fake rating.
+  assert.deepEqual(cardIds(ui),["c3","c2","c1","n1","r1","p1"]);
+  assert.equal(ui.dom.get("mode-all").getAttribute("aria-pressed"),"true");
   ui.dom.get("sort-latest").onclick();
-  assert.deepEqual(cardIds(ui),["c3","c1"],"Latest should sort independently");
-  ui.dom.get("sort-impact").onclick();
-  assert.deepEqual(cardIds(ui),["c1","c3"],"Verified citation count should sort first");
-  ui.dom.get("mode-all").onclick();
-  assert.equal(cardIds(ui).length,6,"Full catalogue must preserve all events");
+  assert.deepEqual(cardIds(ui),["p1","c3","n1","c2","c1","r1"]);
+  ui.dom.get("sort-verified").onclick();
+  assert.deepEqual(cardIds(ui),["c3","c2","c1","n1","r1","p1"]);
+  ui.dom.get("mode-pending").onclick();
+  assert.deepEqual(cardIds(ui),["p1"],"Pending data is searchable without fabricated changes");
   ui.dom.get("mode-new").onclick();
   assert.deepEqual(cardIds(ui),["n1"]);
   ui.dom.get("mode-amended").onclick();
@@ -209,29 +210,68 @@ async function verifyRealFilters(){
   ui.dom.get("search").oninput({target:{value:"가상 c2"}});
   assert.deepEqual(cardIds(ui),["c2"],"Search must apply to the selected mode");
   ui.dom.get("search").oninput({target:{value:""}});
-  ui.dom.get("mode-substantive").onclick();
-  ui.dom.get("items").children[0].onclick();
+  ui.dom.get("items").children[2].onclick(); // c1 source with 2 named actors
   assert.equal(ui.dom.get("layout").classList.contains("detail-open"),true);
   const filterButtons=()=>flattened(ui.dom.get("detail"))
-    .filter(x=>x.dataset.reviewFilter!==undefined);
+    .filter(x=>x.dataset.agencyFilter!==undefined);
   let tabs=filterButtons();
-  assert.deepEqual(tabs.map(x=>x.dataset.reviewFilter),
-    ["all","action","source","research"]);
-  assert.ok(tabs.find(x=>x.dataset.reviewFilter==="source").textContent.includes("2"));
-  assert.ok(tabs.find(x=>x.dataset.reviewFilter==="research").textContent.includes("1"));
-  tabs.find(x=>x.dataset.reviewFilter==="source").onclick();
+  assert.deepEqual(tabs.map(x=>x.dataset.agencyFilter),
+    ["all","가상보건청장","가상청장"]);
+  assert.ok(!tabs.some(x=>x.textContent.includes("집행기관 추가 조사")),
+    "Never invent a fake agency name for unassigned source clauses");
+  tabs.find(x=>x.dataset.agencyFilter==="가상청장").onclick();
   tabs=filterButtons();
-  assert.equal(tabs.find(x=>x.dataset.reviewFilter==="source").getAttribute("aria-pressed"),"true");
-  const allText=()=>flattened(ui.dom.get("detail")).map(x=>x.textContent).join(" ");
-  assert.ok(allText().includes("가상청장"),"Statutory actor visible under source tab");
-  assert.ok(!allText().includes("담당 집행기관 추가 조사"),"Investigation tab excluded");
-  tabs.find(x=>x.dataset.reviewFilter==="research").onclick();
-  assert.ok(allText().includes("담당 집행기관 추가 조사"),"Research tab shows only unassigned sources");
-  assert.ok(!allText().includes("가상보건청장"),"Source tab excluded");
+  assert.equal(tabs.find(x=>x.dataset.agencyFilter==="가상청장")
+    .getAttribute("aria-pressed"),"true");
+  const impacts=()=>flattened(ui.dom.get("detail")).find(
+    x=>x.tag==="section" && flattened(x).some(child=>
+      child.tag==="h3" && child.textContent.includes("② 기관별")));
+  const sectionText=()=>flattened(impacts()).map(x=>x.textContent).join(" ");
+  assert.ok(sectionText().includes("가상청장"),"Statutory named actor must appear");
+  assert.ok(!sectionText().includes("가상보건청장"),
+    "Selecting a named actor must filter other agencies out");
+  assert.ok(!sectionText().includes("담당 집행기관 추가 조사"),
+    "Unassigned clause is not an institution");
+  tabs.find(x=>x.dataset.agencyFilter==="가상보건청장").onclick();
+  assert.ok(sectionText().includes("가상보건청장"),
+    "Different agency must show its own separately evidenced duties");
+  assert.ok(!sectionText().includes("가상청장"),
+    "Other actors must be excluded from selected agency cards");
   ui.dom.get("backToList").onclick();
   assert.equal(ui.dom.get("layout").classList.contains("detail-open"),false);
-  assert.deepEqual(cardIds(ui),["c1","c3"],"Mobile back should preserve filters");
-  console.log("PASS: seven restored list filters, independent sorting, agency review tabs and mobile navigation");
+  assert.deepEqual(cardIds(ui),["c3","c2","c1","n1","r1","p1"],
+    "Mobile back should preserve filters and verified sort");
+  // Long official before/after must be present ONLY within collapsed disclosure.
+  const largeBefore="제3조 앞 내용 "+"가".repeat(1200)+" 20만원 지급한다.";
+  const largeAfter ="제3조 앞 내용 "+"가".repeat(1200)+" 30만원 지급한다.";
+  const long=sample("long","일부개정","compared","2026-11-10");
+  long.analysis.changes=[{
+    article:"제3조",category:"금액·비율",
+    before:largeBefore,after:largeAfter,
+    actual_edits:[{old_excerpt:"지원 기준 20만원 지급",new_excerpt:"지원 기준 30만원 지급"}],
+    old_values:["20만원"],new_values:["30만원"],
+    source_url:"https://www.law.go.kr/법령/example"
+  }];
+  const detail=setupBrowser(true,"",{documents:[long]});
+  await flush();
+  detail.dom.get("items").children[0].onclick();
+  const rendered=flattened(detail.dom.get("detail"));
+  const disclosure=rendered.find(x=>x.tag==="details");
+  assert.ok(disclosure,"Full original clauses should be hidden in a disclosure");
+  assert.ok(rendered.some(x=>x.tag==="mark"&&x.textContent==="20"),
+    "Before changed digits must be highlighted");
+  assert.ok(rendered.some(x=>x.tag==="mark"&&x.textContent==="30"),
+    "After changed digits must be highlighted");
+  assert.ok(disclosure.children.some(x=>x.tag==="summary"),
+    "A clear show-full-text control is required");
+  assert.ok(flattened(disclosure).some(x=>x.textContent.includes("가".repeat(300))),
+    "Entire official text must remain available on demand");
+  assert.ok(!flattened(detail.dom.get("detail")).some(
+    x=>x.tag==="div" && x.className==="before" &&
+    x.children.some(z=>z.tag==="mark") &&
+    x.textContent.includes("가".repeat(300))),
+    "Default changed-text preview must not print a full giant provision");
+  console.log("PASS: trustworthy source filters, agency-name filters, compact highlighted clause diff and mobile navigation");
 }
 Promise.all([verifyNavigation(),verifyRealFilters()]).catch(error=>{
   console.error(error);process.exitCode=1;
