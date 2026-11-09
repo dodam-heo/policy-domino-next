@@ -87,6 +87,16 @@
     .change-title{font-weight:800;font-size:14px;margin-bottom:12px}
     .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .before,.after{border-radius:8px;padding:14px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;min-height:65px}
+    .diff-row{margin:10px 0 13px}
+    .diff-row .two{gap:8px}
+    .diff-row .before,.diff-row .after{min-height:0;line-height:1.7;font-size:13px}
+    .diff-focus{background:#ffe0a2;color:#4d350d;border-radius:3px;padding:1px 2px;font-weight:850}
+    .after .diff-focus{background:#b9edd6;color:#125642}
+    .diff-caption{font-size:11px;color:var(--muted);margin:9px 0 4px}
+    .original-drawer{margin:12px 0 5px;border:1px solid var(--line);border-radius:9px;background:#fbfcfd;padding:9px 12px}
+    .original-drawer summary{font-size:12px;font-weight:760;color:var(--blue);cursor:pointer}
+    .original-drawer .before,.original-drawer .after{max-height:320px;overflow:auto;font-size:11px}
+    .original-drawer .two{margin-top:12px}
     .before{background:#f7f4f1;border:1px solid #e9dfd7}
     .after{background:#eef7f3;border:1px solid #cfe7de}
     .value-label{display:block;font-size:11px;letter-spacing:.05em;font-weight:850;margin-bottom:6px}
@@ -271,6 +281,71 @@
     if(help)append(s,create("p","help",help));
     return s;
   };
+  function compactText(value,limit=125){
+    const s=String(value||"");
+    if(s.length<=limit)return s;
+    const left=Math.ceil(limit*0.65);
+    return s.slice(0,left)+" … [중간 생략] … "+s.slice(-Math.floor(limit*0.25));
+  }
+  function changedParts(before,after){
+    const a=String(before||""),b=String(after||"");
+    let prefix=0;
+    while(prefix<Math.min(a.length,b.length) && a[prefix]===b[prefix])prefix++;
+    let suffix=0;
+    while(suffix<Math.min(a.length-prefix,b.length-prefix) &&
+          a[a.length-1-suffix]===b[b.length-1-suffix])suffix++;
+    return {a,b,prefix,suffix};
+  }
+  function renderShortDelta(element,before,after,side){
+    // Bold/highlight ONLY the actual differing span. Context is kept short.
+    const {a,b,prefix,suffix}=changedParts(before,after);
+    const src=side==="before"?a:b;
+    const end=src.length-suffix;
+    const beforeContext=src.slice(Math.max(0,prefix-30),prefix);
+    const changed=src.slice(prefix,end);
+    const afterContext=src.slice(end,Math.min(src.length,end+30));
+    if(prefix>30)append(element,create("span","","…"));
+    append(element,create("span","",beforeContext));
+    const marker=create("mark","diff-focus",compactText(changed,125) ||
+      (side==="before"?"[신설 전 해당 문구 없음]":"[해당 문구 삭제]"));
+    append(element,marker,create("span","",afterContext));
+    if(src.length>end+30)append(element,create("span","","…"));
+  }
+  function sourceDiffCard(change){
+    const article=create("div","change");
+    append(article,create("div","change-title",
+      (change.article||"변경 조문")+" · "+(change.category||"문구 변경")));
+    const edits=(Array.isArray(change.actual_edits) && change.actual_edits.length?
+      change.actual_edits.map(x=>({
+        before:String(x.old_excerpt||""),after:String(x.new_excerpt||"")})):
+      [{before:String(change.before||""),after:String(change.after||"")}])
+      .filter(x=>x.before!==x.after);
+    for(const [index,edit] of edits.slice(0,3).entries()){
+      const block=create("div","diff-row");
+      if(edits.length>1)append(block,create("div","diff-caption","차이 "+(index+1)+
+        " / "+edits.length));
+      const columns=create("div","two");
+      const before=create("div","before"),after=create("div","after");
+      append(before,create("span","value-label","변경 전"));
+      append(after,create("span","value-label","변경 후"));
+      renderShortDelta(before,edit.before,edit.after,"before");
+      renderShortDelta(after,edit.before,edit.after,"after");
+      append(columns,before,after);append(block,columns);append(article,block);
+    }
+    if(edits.length>3)append(article,create("p","help",
+      "추가 차이 "+(edits.length-3)+"곳은 아래 원문에서 확인할 수 있습니다."));
+    const drawer=create("details","original-drawer");
+    const summary=create("summary","","종전·현행 조문 전체 펼쳐 보기");
+    const columns=create("div","two");
+    const before=create("div","before"),after=create("div","after");
+    append(before,create("span","value-label","변경 전 원문"),
+      create("div","",change.before||"원문 없음"));
+    append(after,create("span","value-label","변경 후 원문"),
+      create("div","",change.after||"원문 없음"));
+    append(columns,before,after);append(drawer,summary,columns);
+    append(article,drawer,external(change.source_url,"변경 조문 공식 출처"));
+    return article;
+  }
   function renderDetail(){
     const doc=state.data.documents.find(d=>d.id===state.selected);
     const root=$("detail");root.replaceChildren();
@@ -308,21 +383,12 @@
 
     // ① Actual changed clauses always precede agency review.
     const changes=heading("① 정책에서 실제 바뀐 내용",
-      "종전·현행 공식 문서에서 같은 조문을 대조한 결과입니다.");
+      "바뀐 문장·수치만 먼저 보여줍니다. 조문 전체는 필요한 경우 펼쳐서 확인할 수 있습니다.");
     if(!diffs.length){
       append(changes,create("div","muted-box",analysis.reason ||
         "종전 또는 현행 본문을 검증하지 못했습니다. 변경 내용을 임의로 작성하지 않습니다."));
     }else{
-      for(const c of diffs){
-        const card=create("div","change");
-        append(card,create("div","change-title",c.article+" · "+c.category));
-        const flex=create("div","two");
-        const old=create("div","before"),updated=create("div","after");
-        append(old,create("span","value-label","변경 전"),create("div","",c.before));
-        append(updated,create("span","value-label","변경 후"),create("div","",c.after));
-        append(flex,old,updated);append(card,flex,external(c.source_url,"변경 조문 공식 출처"));
-        append(changes,card);
-      }
+      for(const c of diffs)append(changes,sourceDiffCard(c));
     }
     append(root,changes);
 
