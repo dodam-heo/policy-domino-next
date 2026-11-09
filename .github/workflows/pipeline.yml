@@ -73,9 +73,27 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
+      - name: Check whether this new repository has GitHub Pages enabled
+        id: pages_status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")
+          if [ "$code" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Pages is not enabled yet; enable GitHub Actions as the Pages source in repository Settings > Pages."
+          fi
       - uses: actions/configure-pages@v5
+        if: steps.pages_status.outputs.enabled == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages_status.outputs.enabled == 'true'
         with:
           path: site
       - name: Deploy this verified snapshot
+        if: steps.pages_status.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4
