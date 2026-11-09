@@ -9,7 +9,7 @@ import difflib
 import re
 from .core import clean
 
-AMOUNT = re.compile(r"(?<!\d)\d[\d,]*(?:\.\d+)?\s*(?:원|만원|억\s*원|%|명|개월|일)(?![가-힣])")
+AMOUNT = re.compile(r"(?<![\d,])\d[\d,]*(?:\.\d+)?\s*(?:억\s*원|만원|원|%|명|개월|일)")
 CITATION = re.compile(r"「([^」]{2,110})」\s*(제\s*\d+\s*조(?:의\s*\d+)?)?")
 ACTOR = re.compile(
     r"(?<![가-힣])([가-힣]{2,35}(?:장관|청장|원장|시장|군수|구청장|위원회|공사|공단|기관장))"
