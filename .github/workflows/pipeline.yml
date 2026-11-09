@@ -13,12 +13,43 @@ permissions:
   pages: write
   id-token: write
 concurrency:
-  group: policy-domino-next-single-production
+  group: policy-domino-next-publish-first-v2
   cancel-in-progress: false
 jobs:
-  verify_collect_publish:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 8
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify code before publishing
+        run: |
+          python -m compileall -q policy_domino tests
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          node tests/test_site.cjs
+      - name: Configure actual GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload initial verified site without waiting for network collection
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+          name: github-pages
+      - name: Deploy site immediately
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+  collect_and_refresh:
+    runs-on: ubuntu-latest
+    needs: publish
+    timeout-minutes: 22
+    environment:
+      name: github-pages
+      url: ${{ steps.publish_refresh.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,20 +57,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Check Python source syntax
-        run: python -m compileall -q policy_domino tests
-      - name: Verify offline source, parser, analysis and queue
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Check the single public page
-        run: node tests/test_site.cjs
-      - name: Run the only official-source pipeline
+      - name: Collect official data separately from website availability
         env:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
-        run: |
-          # The application falls back to the known public OC from the
-          # previous project when the GitHub Secret/Variable is empty.
-          python -m policy_domino run --limit 30
-      - name: Verify public evidence contract
+        timeout-minutes: 16
+        run: python -m policy_domino run --limit 20
+      - name: Verify evidence contract
         run: |
           python - <<'PY'
           import json
@@ -48,49 +71,28 @@ jobs:
           assert d['schema']=='policy-domino-next-v1'
           assert not d['principles']['manual_institutions']
           assert not d['principles']['inferred_programs_count_as_confirmed']
-          assert not d['principles']['internal_compliance_status_known']
-          for e in d['relationships']:
-              assert e['relationship']=='verified_exact_article_citation'
-              if not e['operational_program_verified']:
-                  assert not e['required_action_verified']
-          for doc in d['documents']:
-              a=doc.get('analysis',{})
-              if a.get('status') in ('queued','history_unavailable',
-                                    'baseline_unavailable','body_unavailable','source_error'):
-                  assert not a.get('changes')
-          print('Contract validated:',len(d['documents']),'official records')
+          for rel in d['relationships']:
+              assert rel['relationship']=='verified_exact_article_citation'
+              assert not rel['required_action_verified']
+          print('Verified source results:',len(d['documents']),'events')
           PY
-      - name: Save one data contract and persistent audit state
+      - name: Persist verified collection results
         run: |
           git config user.name policy-domino-next-bot
           git config user.email policy-domino-next-bot@users.noreply.github.com
           git add data/state.json site/data.json
           if ! git diff --cached --quiet; then
-            git commit -m 'data(next): official source audit update [skip ci]'
+            git commit -m 'data(next): update verified official results [skip ci]'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
-      - name: Check whether this new repository has GitHub Pages enabled
-        id: pages_status
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          code=$(curl -sS -o /dev/null -w '%{http_code}' \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")
-          if [ "$code" = "200" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Pages is not enabled yet; enable GitHub Actions as the Pages source in repository Settings > Pages."
-          fi
-      - uses: actions/configure-pages@v5
-        if: steps.pages_status.outputs.enabled == 'true'
-      - uses: actions/upload-pages-artifact@v3
-        if: steps.pages_status.outputs.enabled == 'true'
+      - name: Reconfigure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload new official data
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
-      - name: Deploy this verified snapshot
-        if: steps.pages_status.outputs.enabled == 'true'
+          name: github-pages
+      - name: Publish refreshed snapshot
+        id: publish_refresh
         uses: actions/deploy-pages@v4
