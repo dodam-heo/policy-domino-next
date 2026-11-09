@@ -122,53 +122,55 @@ def actors_in(text: str) -> list[str]:
 
 def connect_changes(findings: dict, versions: dict, documents: dict,
                     max_edges: int = 1200) -> list[dict]:
-    """Discover downstream citations from *all sourced official documents*.
+    """Join exact published legal references to *changed* articles.
 
-    Verification proves an exact legal citation to a changed article. It does
-    NOT prove an institution's own program or that an internal change occurred.
+    Complexity: one pass over known official bodies plus a title/changed-
+    article index. Citation is verified; real business/program adaptation is
+    NOT inferred from citation alone.
     """
-    title_docs: dict[str, list[dict]] = {}
-    for doc in documents.values():
-        title_docs.setdefault(doc["title"], []).append(doc)
-    impacted: dict[tuple, dict] = {}
-    for affected_id, analysis in findings.items():
-        source_doc = documents.get(affected_id)
-        if not source_doc or not analysis.get("changes"):
+    changed_by_title = {}
+    for event_id, finding in findings.items():
+        doc = documents.get(event_id)
+        if not doc or not finding.get("changes"):
             continue
-        changed_articles = {x["article"] for x in analysis["changes"]}
-        source_title = source_doc["title"]
-        for consumer_id, package in versions.items():
-            consumer_doc = documents.get(consumer_id)
-            if not consumer_doc or consumer_id == affected_id:
+        for change in finding["changes"]:
+            changed_by_title.setdefault(
+                (doc["title"], change["article"]), []).append(doc)
+    edges = {}
+    for citing_id, package in versions.items():
+        citing = documents.get(citing_id)
+        if not citing:
+            continue
+        for article, entry in package.get("clauses", {}).items():
+            if not entry.get("complete"):
                 continue
-            # Avoid claiming a derived relationship from a source version
-            # published before the changed version.
-            if consumer_doc["published_at"] < source_doc["published_at"]:
-                continue
-            for article, entry in package.get("clauses", {}).items():
-                if not entry.get("complete"):
-                    continue
-                text = entry["text"]
-                for ref in extract_references(text):
-                    if ref["title"] != source_title:
+            body = entry["text"]
+            for reference in extract_references(body):
+                matched = changed_by_title.get(
+                    (reference["title"], reference["article"]), ())
+                for changed_doc in matched:
+                    if citing_id == changed_doc["id"]:
                         continue
-                    if ref["article"] not in changed_articles:
+                    # A document predating a policy change may continue to
+                    # reference it, but that is NOT a verified new impact.
+                    if citing["published_at"] < changed_doc["published_at"]:
                         continue
-                    key = (affected_id, consumer_id, article, ref["article"])
-                    impacted[key] = {
-                        "source_event_id": affected_id,
-                        "referencing_document_id": consumer_id,
-                        "referencing_title": consumer_doc["title"],
+                    key = (changed_doc["id"], citing_id, article,
+                           reference["article"])
+                    edges[key] = {
+                        "source_event_id": changed_doc["id"],
+                        "referencing_document_id": citing_id,
+                        "referencing_title": citing["title"],
                         "referencing_article": article,
-                        "changed_article": ref["article"],
-                        "reference_quote": ref["quote"],
-                        "referencing_source_url": consumer_doc["url"],
-                        "publishing_agency": consumer_doc["ministry"],
-                        "explicit_actors": actors_in(text),
+                        "changed_article": reference["article"],
+                        "reference_quote": reference["quote"],
+                        "referencing_source_url": citing["url"],
+                        "publishing_agency": citing.get("ministry", ""),
+                        "explicit_actors": actors_in(body),
                         "relationship": "verified_exact_article_citation",
                         "operational_program_verified": False,
                         "required_action_verified": False,
                     }
-                    if len(impacted) >= max_edges:
-                        return list(impacted.values())
-    return list(impacted.values())
+                    if len(edges) >= max_edges:
+                        return list(edges.values())
+    return list(edges.values())
