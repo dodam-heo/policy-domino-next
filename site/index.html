@@ -299,6 +299,15 @@
     let suffix=0;
     while(suffix<Math.min(a.length-prefix,b.length-prefix) &&
           a[a.length-1-suffix]===b[b.length-1-suffix])suffix++;
+    // A digit within a number must highlight the WHOLE source number:
+    // 192 → 197 (not only 2 → 7) and 20만원 → 30만원 (not 2 → 3).
+    if(/[0-9]/.test(a[prefix]||"") || /[0-9]/.test(b[prefix]||"") ||
+       /[0-9]/.test(a[prefix-1]||"")){
+      while(prefix>0 && /[0-9,.]/.test(a[prefix-1]||"") &&
+            a[prefix-1]===b[prefix-1])prefix--;
+      while(suffix>0 && /[0-9,.]/.test(a[a.length-suffix]||"") &&
+            a[a.length-suffix]===b[b.length-suffix])suffix--;
+    }
     return {a,b,prefix,suffix};
   }
   function renderShortDelta(element,before,after,side){

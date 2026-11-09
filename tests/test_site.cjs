@@ -226,7 +226,8 @@ async function verifyRealFilters(){
   const impacts=()=>flattened(ui.dom.get("detail")).find(
     x=>x.tag==="section" && flattened(x).some(child=>
       child.tag==="h3" && child.textContent.includes("② 기관별")));
-  const sectionText=()=>flattened(impacts()).map(x=>x.textContent).join(" ");
+  const sectionText=()=>flattened(impacts()).filter(x=>x.className==="agency-group")
+    .flatMap(flattened).map(x=>x.textContent).join(" ");
   assert.ok(sectionText().includes("가상청장"),"Statutory named actor must appear");
   assert.ok(!sectionText().includes("가상보건청장"),
     "Selecting a named actor must filter other agencies out");
