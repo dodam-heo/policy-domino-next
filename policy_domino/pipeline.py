@@ -231,6 +231,11 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24) -> dict:
                 "changes": [], "excluded": [], "review_candidates": [],
                 "reason": type(exc).__name__ + ": " + str(exc)[:160],
             }
+    # Search the official legal corpus beyond this week's indexed changes.
+    # Search hits become graph edges only after full-body exact article proof.
+    if hasattr(api,"request"):
+        from .discovery import discover_dependents
+        discover_dependents(api,state,limit_events=min(3,max(1,limit//8)))
     state["generated_at"] = utc_now()
     return state
 
@@ -256,6 +261,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "quality": quality(state),
         "documents": indexed,
         "relationships": edges,
+        "discovery_audit": state.get("discovery_metrics",{}),
         "principles": {
             "manual_institutions": False,
             "inferred_programs_count_as_confirmed": False,

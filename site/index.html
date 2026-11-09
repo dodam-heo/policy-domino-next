@@ -245,7 +245,7 @@
   function renderList(){
     const list=$("items");list.replaceChildren();
     const all=filtered();
-    $("feed-state").textContent=num(all.length)+"건 표시 · 공식 개정일 최신순";
+    $("feed-state").textContent=(state.data?.configuration!=="running"?"원천 API 미실행 · ":"")+num(all.length)+"건 표시 · 공식 개정일 최신순";
     if(!all.length)append(list,create("div","empty","수집된 항목이 없거나 검색 결과가 없습니다."));
     for(const doc of all.slice(0,state.visible)){
       const row=create("button","item"+(doc.id===state.selected?" selected":""));
