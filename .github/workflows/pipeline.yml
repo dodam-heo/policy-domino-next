@@ -32,6 +32,8 @@ jobs:
           python -m compileall -q policy_domino tests
           python -m unittest discover -s tests -p 'test_*.py' -v
           node tests/test_site.cjs
+      - name: Validate previously published official dataset before deploying
+        run: python -m policy_domino.contracts site/data.json
       - name: Configure actual GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload initial verified site without waiting for network collection
