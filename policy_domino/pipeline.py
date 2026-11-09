@@ -276,6 +276,13 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     return data
 
 
+DEFAULT_LAW_OC = "dori"  # Same public OC fallback as the prior project.
+
+
+def configured_law_oc() -> str:
+    return os.getenv("LAW_OC", "").strip() or DEFAULT_LAW_OC
+
+
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser()
@@ -286,9 +293,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     state = load_state(args.state)
     if args.mode == "run":
-        credential = os.getenv("LAW_OC", "")
-        if not credential:
-            raise SystemExit("LAW_OC missing: cannot claim a live source run")
+        # The previous project's publicly configured official API OC is
+        # "dori". It is an OC identifier, not a private API secret.
+        # Keep the same working fallback; explicit LAW_OC may override it.
+        credential = configured_law_oc()
         run_once(state, LawAPI(credential), dt.date.today(), max(1, min(args.limit, 150)))
         write_json(args.state, state)
     result = render(state, args.output)

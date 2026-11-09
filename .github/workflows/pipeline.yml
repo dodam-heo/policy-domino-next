@@ -34,14 +34,11 @@ jobs:
         run: node tests/test_site.cjs
       - name: Run the only official-source pipeline
         env:
-          LAW_OC: ${{ secrets.LAW_OC }}
+          LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
         run: |
-          if [ -n "$LAW_OC" ]; then
-            python -m policy_domino run --limit 30
-          else
-            echo "::warning::LAW_OC is not set; no live official data has been fetched."
-            python -m policy_domino render
-          fi
+          # The application falls back to the known public OC from the
+          # previous project when the GitHub Secret/Variable is empty.
+          python -m policy_domino run --limit 30
       - name: Verify public evidence contract
         run: |
           python - <<'PY'

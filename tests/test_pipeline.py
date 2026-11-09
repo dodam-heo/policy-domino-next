@@ -39,6 +39,15 @@ class DummyAPI:
 
 
 class PipelineTests(unittest.TestCase):
+    def test_public_oc_fallback_preserves_prior_working_configuration(self):
+        from unittest.mock import patch
+        from policy_domino.pipeline import configured_law_oc
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(configured_law_oc(),"dori")
+        with patch.dict("os.environ", {"LAW_OC":" custom-public-oc "}):
+            self.assertEqual(configured_law_oc(),"custom-public-oc")
+
+
     def test_round_robin_sources_without_manual_institution_registration(self):
         state=new_state()
         docs=[record("law",str(i),str(i)) for i in range(10)]

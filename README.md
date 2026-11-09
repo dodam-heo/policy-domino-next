@@ -43,13 +43,12 @@ export LAW_OC="발급받은 법제처 인증값"
 python -m policy_domino run --limit 30
 ~~~
 
-LAW_OC가 없으면 실제 API 수집은 실행하지 않으며 미실행 상태로 표시합니다. 초기 데이터는 예시 정책을 꾸며 넣지 않은 **빈 공식 목록**입니다.
+기존 프로젝트에서 사용하던 공개 법제처 공동활용 OC 식별자 `dori`를 **소스코드의 기본값으로 그대로 적용**했습니다. `LAW_OC`가 없어도 공식 API 수집을 시도합니다. 다른 인증값으로 변경하려는 경우에만 `LAW_OC` 환경변수(또는 GitHub Secret/Variable)를 설정하세요. 이 공개 OC 식별자 이외에 개인 비밀키를 코드에 저장하지 않습니다. 초기 데이터는 가짜 정책을 삽입하지 않은 **빈 공식 목록**이며, 실제 수집 전까지 실데이터가 아닙니다.
 
 ## GitHub 신규 저장소 설정
 
-1. Settings → Secrets and variables → Actions에서 새 Repository Secret **LAW_OC** 등록.
-2. Settings → Pages → Build and deployment → Source: **GitHub Actions** 지정.
-3. Actions → Policy Domino NEXT - Single Production Pipeline → Run workflow 실행.
-4. 실제 원천 수집 결과와 검증·부분·실패 상태를 살핀 후 Pages 공개 여부 확인.
+1. **[새 저장소 GitHub Pages 설정](https://github.com/dodam-heo/policy-domino-next/settings/pages)** → Build and deployment → Source: **GitHub Actions** 지정.
+2. [Actions](https://github.com/dodam-heo/policy-domino-next/actions/workflows/pipeline.yml)에서 최초 실행 또는 다음 정기 실행 확인.
+3. 실제 수집·추출·비교 건수와 공식 근거를 확인. `LAW_OC` Secret은 **필수 아님**.
 
 이전 프로젝트는 참고자료로만 보존하고 새 저장소에서 운영하지 않습니다.

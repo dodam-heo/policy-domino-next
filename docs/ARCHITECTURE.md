@@ -117,9 +117,9 @@ data/state.json: documents, versions, findings, coverage, attempts, cursor_days,
 
 ## 8. 보안과 운영
 
-- 법제처 인증키는 새 저장소의 GitHub Actions Secret LAW_OC에만 저장한다. 코드 기본값은 없다.
+- 기존 공개 프로젝트에서 검증한 법제처 공동활용 OC 식별자 `dori`를 소스의 기본값으로 사용한다. `LAW_OC` Secret/Variable은 선택적 덮어쓰기 수단이다. 비공개 인증키·계정 비밀번호는 코드에 저장하지 않는다.
 - Pages Source는 GitHub Actions를 사용한다.
-- 실제 공식 원천 조회 없이 render만 수행한 경우 data.json configuration은 not_run_or_credential_missing으로 유지한다.
+- `render`만 수행하고 공식 원천 조회가 없으면 data.json configuration은 미실행 상태를 유지한다. `run`은 `LAW_OC`를 지정하지 않아도 기존 공개 OC로 실제 원천 접근을 시도하고, 실패하면 coverage.error로 기록한다.
 - 기존 policy-domino의 코드·사이트·설정·API 시크릿은 삭제하거나 변경하지 않는다.
 
 공식 문서:
