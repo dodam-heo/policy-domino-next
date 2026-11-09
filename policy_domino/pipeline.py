@@ -272,6 +272,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
             "internal_compliance_status_known": False,
         },
     }
+    from .contracts import validate_public
+    validate_public(data)
     write_json(output, data)
     return data
 
