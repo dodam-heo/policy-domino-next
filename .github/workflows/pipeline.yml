@@ -14,7 +14,7 @@ permissions:
   id-token: write
 concurrency:
   group: policy-domino-next-publish-first-v2
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -92,7 +92,9 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
-          name: github-pages
+          name: github-pages-refresh
       - name: Publish refreshed snapshot
         id: publish_refresh
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-refresh
