@@ -3,7 +3,8 @@
   const $ = name => document.getElementById(name);
   const view = window.PolicyDominoView;
   const state = {
-    data: null, events: [], selected: null, mode: "all", query: "", visible: 60
+    data: null, events: [], selected: null, mode: "all", query: "", visible: 60,
+    institutionFilter: "all"
   };
   const MODES = view.MODES;
   const mobile = () => window.matchMedia("(max-width:850px)").matches;
@@ -63,6 +64,7 @@
   }
   function select(id, updateUrl=true) {
     if (!state.events.some(e => e.id === id)) return;
+    if (state.selected !== id) state.institutionFilter = "all";
     state.selected = id;
     renderList();
     renderDetail();
@@ -205,28 +207,116 @@
   }
   function renderInstitutions(event) {
     const section=heading("기관별 변경 검토사항",
-      "변경된 조문으로 검토 대상이 특정된 기관·사업입니다. 실제 반영 여부는 확인되지 않았습니다.");
+      "변경 조문으로 검토 대상이 특정된 기관·사업입니다. 실제 반영 여부는 확인되지 않았습니다.");
     const groups=view.impactGroups(event);
     if (!groups.length) {
       append(section,create("p","no-impacts",
         "변경 내용은 확인됐지만, 직접 규율받는 기관이나 사업의 연결 근거는 아직 확인되지 않았습니다."));
       return section;
     }
-    const counter=create("div","section-counter",
-      num(groups.length)+"개 기관 · "+num(event.review_count)+"건");
-    append(section,counter);
-    for (let i=0;i<groups.length;i++) {
-      const entry=groups[i];
-      const group=create("details","agency-group");
-      group.open=groups.length<=3||i===0;
-      const top=create("summary","agency-heading");
-      append(top,create("strong","",entry.agency),
-        create("span","",num(entry.reviews.length)+"건"));
-      append(group,top);
-      for (const review of entry.reviews)
-        append(group,reviewCard(review));
-      append(section,group);
+    // Names come solely from this event's verified institutional reviews.
+    // Switching policy events resets the selection in select(), never carrying
+    // an agency from another policy into an unrelated event.
+    if (state.institutionFilter!=="all" &&
+        !groups.some(g=>g.agency===state.institutionFilter)) {
+      state.institutionFilter="all";
     }
+
+    const layout=create("div","institution-layout");
+    const sidebar=create("aside","agency-filter-panel");
+    append(sidebar,create("div","agency-filter-title","기관명 필터"));
+    const search=create("input","agency-filter-search");
+    search.type="search";
+    search.placeholder="기관명 검색";
+    search.setAttribute("aria-label","검토 대상 기관명 검색");
+    const buttons=create("div","agency-filter-buttons");
+    append(sidebar,search,buttons);
+
+    const main=create("div","agency-filter-results");
+    const compactLabel=create("label","agency-select-label","기관 선택");
+    const compactSelect=create("select","agency-select");
+    compactSelect.id="institution-select-"+event.id;
+    compactLabel.setAttribute("for",compactSelect.id);
+    compactSelect.setAttribute("aria-label","기관별 변경 검토사항 기관 선택");
+    const all=create("option","","전체 기관 ("+num(groups.length)+")");
+    all.value="all";
+    append(compactSelect,all);
+    for(const entry of groups) {
+      const opt=create("option","",entry.agency+" ("+num(entry.reviews.length)+")");
+      opt.value=entry.agency;
+      append(compactSelect,opt);
+    }
+    compactSelect.value=state.institutionFilter;
+    const compactControl=create("div","agency-mobile-filter");
+    append(compactControl,compactLabel,compactSelect);
+    const counter=create("div","section-counter");
+    counter.setAttribute("aria-live","polite");
+    const results=create("div","agency-group-results");
+    append(main,compactControl,counter,results);
+    append(layout,sidebar,main);
+    append(section,layout);
+
+    function drawResults(){
+      const shown=state.institutionFilter==="all" ? groups :
+        groups.filter(g=>g.agency===state.institutionFilter);
+      const count=shown.reduce((total,g)=>total+g.reviews.length,0);
+      counter.textContent=num(shown.length)+"개 기관 · "+num(count)+"건";
+      compactSelect.value=state.institutionFilter;
+      results.replaceChildren();
+      for(let i=0;i<shown.length;i++){
+        const entry=shown[i];
+        const group=create("details","agency-group");
+        group.open=state.institutionFilter!=="all" ||
+          shown.length<=3 || i===0;
+        const top=create("summary","agency-heading");
+        append(top,create("strong","",entry.agency),
+          create("span","",num(entry.reviews.length)+"건"));
+        append(group,top);
+        for(const review of entry.reviews){
+          append(group,reviewCard(review));
+        }
+        append(results,group);
+      }
+    }
+    function drawFilterButtons(){
+      const term=search.value.trim().toLocaleLowerCase("ko-KR");
+      buttons.replaceChildren();
+      const allButton=create("button",
+        "agency-filter-button"+(state.institutionFilter==="all"?" active":""),
+        "전체 기관");
+      allButton.type="button";
+      allButton.setAttribute("aria-pressed",
+        String(state.institutionFilter==="all"));
+      append(allButton,create("span","agency-filter-count",num(groups.length)));
+      allButton.onclick=()=>choose("all");
+      append(buttons,allButton);
+      let matched=0;
+      for(const entry of groups){
+        if(!entry.agency.toLocaleLowerCase("ko-KR").includes(term))continue;
+        matched++;
+        const selected=state.institutionFilter===entry.agency;
+        const button=create("button",
+          "agency-filter-button"+(selected?" active":""));
+        button.type="button";
+        button.setAttribute("aria-pressed",String(selected));
+        button.dataset.institution=entry.agency;
+        append(button,create("span","agency-filter-name",entry.agency),
+          create("span","agency-filter-count",num(entry.reviews.length)));
+        button.onclick=()=>choose(entry.agency);
+        append(buttons,button);
+      }
+      if(!matched && term)
+        append(buttons,create("p","agency-no-match","검색된 기관이 없습니다."));
+    }
+    function choose(name){
+      state.institutionFilter=name;
+      drawFilterButtons();
+      drawResults();
+    }
+    search.oninput=()=>drawFilterButtons();
+    compactSelect.onchange=()=>choose(compactSelect.value);
+    drawFilterButtons();
+    drawResults();
     return section;
   }
   function renderEvidence(event) {
@@ -320,6 +410,7 @@
     state.data=data;
     state.events=data.events;
     state.mode="all";
+    state.institutionFilter="all";
     const stats=view.overview(data.events,data.ai_progress||{});
     $("stat-events").textContent=num(stats.events);
     $("stat-agencies").textContent=num(stats.institutions);

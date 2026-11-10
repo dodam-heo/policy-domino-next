@@ -195,6 +195,84 @@ async function mobileNavigation(){
   assert.ok(textOf(node(deep,"detail")).includes("가상공공기관"));
   console.log("PASS: mobile event detail, back, and deep link");
 }
+async function institutionFilterNavigation(){
+  const multi=sample("multi",{date:"2026-11-12",impact:true,group:true});
+  const first=multi.institutional_reviews[0];
+  multi.institutional_reviews=[
+    {...first,id:"r-a",institution:"가상교통공사",task:"교통 운영 변경 대조"},
+    {...first,id:"r-b",institution:"가상복지공단",task:"복지 기준 변경 대조"},
+    {...first,id:"r-c",institution:"가상교육청",task:"교육 지원 변경 대조"},
+  ];
+  multi.review_count=3;
+  multi.institution_count=3;
+  const other=sample("other",{date:"2026-11-11",impact:true});
+  other.institutional_reviews[0].institution="다른가상기관";
+  const data={schema:"policy-domino-next-v1",events:[multi,other],
+    ai_progress:{indexed_documents:80},generated_at:""};
+  const ui=browser(false,"",data);
+  await flush();
+  let detail=node(ui,"detail");
+  const pick=(root,klass)=>flatten(root).find(x=>x.className===klass);
+  const controls=pick(detail,"agency-filter-panel");
+  assert.ok(controls,"A policy detail with institutions needs the left agency filter");
+  const results=pick(detail,"agency-group-results");
+  assert.equal(results.children.length,3,
+    "All verified institutional reviews should be visible by default");
+  assert.ok(flatten(controls).some(x=>x.textContent==="기관명 필터"));
+  const agencyButtons=()=>flatten(controls).filter(x=>x.dataset.institution);
+  assert.equal(agencyButtons().length,3);
+  const welfare=agencyButtons().find(x=>x.dataset.institution==="가상복지공단");
+  welfare.onclick();
+  assert.equal(results.children.length,1,
+    "Selecting an institution must leave only that institution's review cards");
+  assert.ok(textOf(results).includes("복지 기준 변경 대조"));
+  assert.ok(!textOf(results).includes("교통 운영 변경 대조"));
+  assert.ok(!textOf(results).includes("교육 지원 변경 대조"));
+  assert.equal(agencyButtons().find(x=>x.dataset.institution==="가상복지공단")
+    .getAttribute("aria-pressed"),"true");
+  assert.ok(textOf(detail).includes("1개 기관 · 1건"));
+
+  const agencySearch=pick(detail,"agency-filter-search");
+  agencySearch.value="교육";
+  agencySearch.oninput();
+  assert.equal(agencyButtons().length,1,
+    "The institution search must filter names from this event, not all projects");
+  assert.equal(agencyButtons()[0].dataset.institution,"가상교육청");
+  agencySearch.value="";
+  agencySearch.oninput();
+
+  const all=flatten(controls).find(x=>x.className==="agency-filter-button");
+  assert.ok(all&&all.textContent==="전체 기관");
+  all.onclick();
+  assert.equal(results.children.length,3,"All institutions must be recoverable");
+  const next=flatten(node(ui,"items"))
+    .find(x=>x.dataset.eventId==="other");
+  next.onclick();
+  detail=node(ui,"detail");
+  const nextResults=pick(detail,"agency-group-results");
+  assert.equal(nextResults.children.length,1);
+  assert.ok(textOf(nextResults).includes("다른가상기관"),
+    "Switching events should reset the prior event's agency filter");
+  assert.equal(pick(detail,"agency-select").value,"all");
+
+  const mobile=browser(true,"",data);
+  await flush();
+  node(mobile,"items").children[0].onclick();
+  const mobileDetail=node(mobile,"detail");
+  const mobileSelect=pick(mobileDetail,"agency-select");
+  const mobileResults=pick(mobileDetail,"agency-group-results");
+  assert.equal(mobileSelect.children.length,4,
+    "Mobile selector includes all agencies and the all-institutions option");
+  mobileSelect.value="가상교육청";
+  mobileSelect.onchange();
+  assert.equal(mobileResults.children.length,1);
+  assert.ok(textOf(mobileResults).includes("교육 지원 변경 대조"));
+  mobileSelect.value="all";
+  mobileSelect.onchange();
+  assert.equal(mobileResults.children.length,3);
+  console.log("PASS: detail institution filter, search, reset, and mobile select");
+}
+
 async function noFabricatedImpact(){
   const only=sample("nothing",{impact:false,benefit:true});
   const ui=browser(false,"",{
@@ -209,5 +287,6 @@ async function noFabricatedImpact(){
   console.log("PASS: no invented institutions or operational actions");
 }
 Promise.all([
-  verifiedNavigation(),mobileNavigation(),noFabricatedImpact()
+  verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
+  institutionFilterNavigation()
 ]).catch(error=>{console.error(error);process.exitCode=1});

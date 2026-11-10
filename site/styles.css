@@ -101,6 +101,27 @@ a{color:var(--blue);text-underline-offset:3px}
 .impact-numbers span{font-size:11px;font-weight:780;color:#275f7c;
   border:1px solid #c9dde7;border-radius:5px;padding:4px 8px;background:#fff}
 .section-counter{font-size:12px;color:#295a70;font-weight:780;margin:10px 0}
+.institution-layout{display:grid;grid-template-columns:minmax(170px,205px) minmax(0,1fr);gap:15px;align-items:start}
+.agency-filter-panel{position:sticky;top:12px;padding:13px 11px 11px;background:#f6f9fb;
+  border:1px solid #d7e4eb;border-radius:9px;min-width:0}
+.agency-filter-title{font-size:12px;font-weight:820;color:#1a5673;margin-bottom:8px}
+.agency-filter-search{width:100%;padding:8px 9px;border:1px solid #cbdbe4;border-radius:7px;
+  font-size:12px;background:#fff;outline-color:var(--blue)}
+.agency-filter-buttons{display:grid;gap:4px;max-height:400px;overflow-y:auto;margin-top:9px;
+  padding-right:2px}
+.agency-filter-button{display:flex;justify-content:space-between;align-items:center;text-align:left;
+  width:100%;gap:8px;padding:8px 9px;background:transparent;border:1px solid transparent;
+  border-radius:6px;font-size:12px;color:#496779;line-height:1.4}
+.agency-filter-button:hover{background:#e8f2f7}
+.agency-filter-button.active{background:#dceff5;color:#0e5775;border-color:#b4d6e4;font-weight:800}
+.agency-filter-name{overflow-wrap:anywhere}
+.agency-filter-count{font-size:10px;color:#607e90;font-variant-numeric:tabular-nums;white-space:nowrap}
+.agency-no-match{font-size:11px;color:#677f8c;padding:7px 5px;margin:0}
+.agency-filter-results{min-width:0}
+.agency-mobile-filter{display:none}
+.agency-select-label{font-size:12px;font-weight:800;color:#1a5673}
+.agency-select{width:100%;padding:10px 11px;border:1px solid #bdd6e3;border-radius:7px;
+  background:white;color:var(--ink);font-size:13px}
 .agency-group{border:1px solid #dce6ec;border-radius:9px;margin:9px 0;overflow:hidden;
   background:#fff}
 .agency-group[open]{border-color:#b9d5e3}
@@ -155,6 +176,12 @@ a{color:var(--blue);text-underline-offset:3px}
 @media(max-width:1150px){
   .summary{grid-template-columns:repeat(3,85px)}
   .intro{gap:15px}
+}
+@media(max-width:1200px){
+  .institution-layout{grid-template-columns:minmax(0,1fr)}
+  .agency-filter-panel{display:none}
+  .agency-mobile-filter{display:grid;gap:6px}
+  .agency-filter-results .section-counter{margin:8px 0 10px}
 }
 @media(max-width:850px){
   .top-inner{padding:12px 15px}.brand-sub{display:none}
