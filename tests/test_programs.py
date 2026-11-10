@@ -150,6 +150,8 @@ class PublicDirectoryTests(unittest.TestCase):
                     'bsnTyp=DET">사업</a></li><input name="pageNo" value="123"/>') +
                    '<a href="/business/bsnDetail.do?bsnSeq=2183">중복</a>')
         self.assertEqual(listing_detail_urls(listing), [PROGRAM_URL])
+        self.assertEqual(listing_detail_urls(
+            "<li onclick=\\\"fnDetail('2183','DET')\\\">사업</li>"), [PROGRAM_URL])
 
     def test_extract_actual_field_names_from_official_like_html(self):
         document = ("""<html><h3>교육/연구 > 가상 장학지원 사업</h3>
@@ -174,7 +176,7 @@ class PublicDirectoryTests(unittest.TestCase):
                 운영하는 공공장학 신청 안내 사업입니다.</p>
                 <div>사업 기간</div><p>상시</p>"""
         def transport(url):
-            if "bsnBySctList" in url:
+            if "bsnByLifeList" in url:
                 return ('<a href="/business/bsnDetail.do?bsnSeq=2183'
                         '&amp;bsnTyp=DET">가상 사업</a>')
             if "bsnDetail.do" in url:
