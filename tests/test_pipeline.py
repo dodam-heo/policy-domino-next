@@ -39,6 +39,29 @@ class DummyAPI:
 
 
 class PipelineTests(unittest.TestCase):
+    def test_ai_check_cli_prints_json_and_detects_failure(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from policy_domino.core import write_json
+        from policy_domino.pipeline import main
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            state = new_state()
+            state["ai_run"] = {
+                "status": "generated", "attempted": 1,
+                "generated": 1, "errors": 0,
+            }
+            write_json(state_path, state)
+            capture = StringIO()
+            with redirect_stdout(capture):
+                main(["ai-check", "--state", str(state_path)])
+            self.assertIn('"status": "generated"', capture.getvalue())
+            state["ai_run"]["status"] = "failed"
+            write_json(state_path, state)
+            with redirect_stdout(StringIO()), self.assertRaises(SystemExit) as ctx:
+                main(["ai-check", "--state", str(state_path)])
+            self.assertEqual(ctx.exception.code, 1)
+
     def test_public_oc_fallback_preserves_prior_working_configuration(self):
         from unittest.mock import patch
         from policy_domino.pipeline import configured_law_oc
