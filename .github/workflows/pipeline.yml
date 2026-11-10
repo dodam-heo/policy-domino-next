@@ -29,6 +29,20 @@ jobs:
           python -m compileall -q policy_domino tests
           python -m unittest discover -s tests -p 'test_*.py' -v
           node tests/test_site.cjs
+      - name: Audit real ALIOPLUS program responses (nonblocking)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          python - <<'PY'
+          from policy_domino.alioplus import ALIOPlusClient
+          state = {}
+          report = ALIOPlusClient(delay_seconds=0).collect(state, max_details=2)
+          print("Live program source audit:", report)
+          print("Verified record count:", len(state.get("official_programs", {})))
+          if report["accepted"] == 0:
+              raise SystemExit("No verified program: public source compatibility is unproven")
+          PY
       - name: Validate existing official publication evidence
         run: python -m policy_domino.contracts site/data.json
 
