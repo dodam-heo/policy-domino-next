@@ -12,6 +12,29 @@ class SubmissionArchitectureTests(unittest.TestCase):
         workflows = sorted((ROOT / ".github/workflows").glob("*.yml"))
         self.assertEqual([x.name for x in workflows], ["pipeline.yml"])
 
+    def test_pages_deployment_cannot_block_official_collection(self):
+        workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(
+            encoding="utf-8")
+        refresh = workflow.split("  collect_and_refresh:\n", 1)[1].split(
+            "  publish:\n", 1)[0]
+        publish = workflow.split("  publish:\n", 1)[1]
+        self.assertIn("needs: verify", refresh)
+        self.assertNotIn("needs: publish", refresh)
+        self.assertNotIn("actions/deploy-pages@", refresh)
+        self.assertIn("github.event_name == 'schedule'", refresh)
+        self.assertIn("github.event_name == 'workflow_dispatch'", refresh)
+        self.assertEqual(workflow.count("uses: actions/deploy-pages@"), 1)
+        self.assertIn("needs: [verify, collect_and_refresh]", publish)
+        self.assertIn("needs.verify.result == 'success'", publish)
+        self.assertIn("needs.collect_and_refresh.result == 'skipped'", publish)
+        self.assertIn("timeout-minutes: 25", publish)
+        self.assertIn("timeout: '1200000'", publish)
+        self.assertIn("actions/deploy-pages@v5", publish)
+        self.assertIn("actions/checkout@v5", workflow)
+        self.assertIn("actions/setup-python@v6", workflow)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+                      workflow)
+
     def test_html_does_not_mix_application_programming_and_css(self):
         html = (ROOT / "site/index.html").read_text(encoding="utf-8")
         self.assertIn('href="./styles.css"', html)
