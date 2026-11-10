@@ -15,7 +15,7 @@
        ↓
 공식 공공사업 원문 ── alioplus.py / programs.py
        ↓
-증거 기반 검토 초안 ── ai.py (LLM: API 키가 있을 때만 실행)
+증거 기반 검토 초안 ── ai.py (Gemini: 공식자료 수집과 별도 실행)
        ↓
 contracts.py (모든 출처·인용 검증) → pipeline.py (유일한 운영 경로)
        ↓
@@ -48,25 +48,32 @@ python -m policy_domino render
 python -m unittest discover -s tests -p 'test_*.py' -v
 node tests/test_site.cjs
 
-# 공식 원천 수집 → 비교 → 연관 사업 확인 → AI 검토(인증키 있을 때만)
+# 공식 원천 수집·비교 (AI 호출 없이 실행)
 python -m policy_domino run --limit 20
+
+# 저장된 공식 변경 근거만 AI 검토 (실행당 요청 최대 2회)
+python -m policy_domino ai --limit 2
+python -m policy_domino ai-check
 ```
 
 공식 법제처 공개 API OC 식별자는 기존 `dori`를 기본값으로 사용합니다. 본인의 발급값은 `LAW_OC` 환경변수로 덮어쓸 수 있습니다.
 
-### AI 분석 활성화 (서버에서만)
+### 무료 Gemini AI 분석 (서버에서만)
 
-OpenAI Responses API의 **구조화된 JSON 출력**을 사용합니다. API 키와 모델 설정은 소스나 웹사이트에 기록하지 않습니다. ChatGPT 이용권과 API 사용 권한·과금은 별개입니다.
+Google Gemini `generateContent`의 **JSON 구조화 출력**을 사용합니다. 기본 모델은 무료 이용 구간이 있는 `gemini-3.1-flash-lite`입니다. 실제 무료 한도는 AI Studio 프로젝트별·모델별 설정에 따릅니다. Google 무료 티어의 데이터 사용 정책을 확인하고 비공개 내부문서는 전송하지 마세요. AI 입력은 공식 공개 변경 원문과 검증된 공공사업 근거로 제한합니다.
 
 ```bash
-export OPENAI_API_KEY="발급받은 API 키"
-export OPENAI_MODEL="gpt-4.1-mini" # 생략 가능
+export GEMINI_API_KEY="Google AI Studio에서 발급한 API 키"
 python -m policy_domino ai --limit 2
+python -m policy_domino ai-check
 ```
 
-`ai` 명령은 저장된 공식 변경자료를 분석하고 `site/data.json`을 갱신합니다. `run` 명령도 `OPENAI_API_KEY`가 설정되어 있으면 수집 직후 제한된 건수의 AI 분석을 수행합니다. 키가 없으면 **`ai_status=not_configured`**로 남고, AI가 실행됐다고 표시하지 않습니다. 모델 API 호출 실패·증거 검증 실패 시에도 허위 초안을 배포하지 않습니다.
-
-GitHub Actions 자동 운영에 연결하려면 저장소 **Settings → Secrets and variables → Actions → New repository secret**에서 `OPENAI_API_KEY`를 등록합니다. 선택적으로 Variables에 `OPENAI_MODEL`을 지정할 수 있습니다. GitHub Pages는 API 키를 받지 않으며, 정적 페이지에서 직접 LLM API를 호출하지 않습니다.
+- GitHub Actions의 **Settings → Secrets and variables → Actions**에 `GEMINI_API_KEY`만 등록하면 됩니다. 모델은 워크플로에 고정되어 있으므로 Variables 설정은 필요하지 않습니다.
+- `run`은 공식자료 수집만 실행합니다. 별도 `ai` 단계가 **API 요청 최대 2회**를 실행합니다. 모두 실패해도 추가 호출을 반복하지 않습니다. 네트워크 타임아웃은 요청당 40초, Actions의 AI 분석 단계는 최대 4분입니다.
+- 원문 발췌·기관명·사업 식별자·출처 SHA를 검증한 결과만 게시합니다. 동일 근거·동일 모델의 기존 검증 결과는 캐시로 재사용합니다.
+- `ai_run`에는 시도·생성·재사용·오류 건수와 정형화된 실패 코드만 기록합니다. 인증키와 외부 모델의 오류 메시지/응답 원문은 기록하지 않습니다.
+- `ai-check`는 `failed`, `partial_generated`, `not_configured` 상태를 실패로 판정합니다. 공식 자료는 먼저 저장·배포하며 **배포 후 AI 실패 여부를 최종 확인**하므로 자동화가 실패를 성공으로 감추지 않습니다. 분석 대상이 없으면 `no_eligible_changes`, 모두 캐시되었으면 `cached`를 표시합니다.
+- GitHub Pages는 API 키를 받지 않으며 정적 페이지에서 직접 AI 모델을 호출하지 않습니다. 기존 `OPENAI_API_KEY`와 `OPENAI_MODEL` 설정은 사용하지 않습니다.
 
 ## 프로젝트 설명서
 

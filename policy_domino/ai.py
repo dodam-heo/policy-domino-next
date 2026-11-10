@@ -9,14 +9,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from collections import defaultdict
 
 from .core import utc_now
 
-API_URL = "https://api.openai.com/v1/responses"
-DEFAULT_MODEL = "gpt-4.1-mini"
+API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
 MAX_INPUT_CHARS = 16_000
 
 INSCRIPTION = (
@@ -124,65 +125,106 @@ def source_fingerprint(packet: dict) -> str:
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+class AIRequestError(AIAnalysisError):
+    """Categorized HTTP/API failure without credentials or response bodies."""
+
+    def __init__(self, code: str, *, blocking: bool = False):
+        super().__init__(code)
+        self.code = code
+        self.blocking = blocking
+
+
+def _gemini_schema(value):
+    """Send Google's supported schema subset; retain strict local validation."""
+    if isinstance(value, dict):
+        return {k: _gemini_schema(v) for k, v in value.items()
+                if k != "additionalProperties"}
+    if isinstance(value, list):
+        return [_gemini_schema(v) for v in value]
+    return value
+
+
 def _get_text(data: dict) -> str:
-    if data.get("status") != "completed":
-        raise AIAnalysisError("AI response incomplete or failed")
-    pieces = []
-    for item in data.get("output", []):
-        if item.get("type") != "message":
-            continue
-        for part in item.get("content", []):
-            if part.get("type") == "output_text" and isinstance(part.get("text"), str):
-                pieces.append(part["text"])
+    if not isinstance(data, dict):
+        raise AIAnalysisError("invalid_model_response")
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise AIAnalysisError("missing_model_candidate")
+    candidate = candidates[0]
+    if candidate.get("finishReason") != "STOP":
+        raise AIAnalysisError("model_not_completed")
+    parts = candidate.get("content", {}).get("parts", [])
+    pieces = [part["text"] for part in parts
+              if isinstance(part, dict) and isinstance(part.get("text"), str)
+              and not part.get("thought")]
     if not pieces:
-        raise AIAnalysisError("No AI text output")
+        raise AIAnalysisError("empty_model_response")
     return "".join(pieces)
+
+
+def _http_error(status: int) -> AIRequestError:
+    codes = {
+        400: "http_400_invalid_request",
+        401: "http_401_invalid_key",
+        403: "http_403_forbidden",
+        404: "http_404_model_unavailable",
+        429: "http_429_rate_or_quota",
+        500: "http_500_server_error",
+        503: "http_503_overloaded",
+    }
+    return AIRequestError(codes.get(status, "http_" + str(status)),
+                          blocking=status in (400, 401, 403, 404, 429))
 
 
 def call_model(packet: dict, *, key: str, model: str = DEFAULT_MODEL,
                transport=None) -> dict:
-    """Use a real Responses API request. transport is injectable ONLY for tests."""
+    """Gemini generateContent. Test transport accepts raw request body bytes."""
     if not key:
-        raise AIAnalysisError("OPENAI_API_KEY not configured")
+        raise AIAnalysisError("GEMINI_API_KEY not configured")
+    if not re.fullmatch(r"[a-zA-Z0-9_.-]{3,100}", model):
+        raise AIAnalysisError("invalid_model_name")
     user_input = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
     if len(user_input) > MAX_INPUT_CHARS:
-        raise AIAnalysisError("Verified text exceeds bounded AI input size")
+        raise AIAnalysisError("verified_input_exceeds_limit")
     payload = {
-        "model": model, "store": False,
-        "instructions": INSCRIPTION,
-        "input": [{"role": "user", "content": "공식 근거 자료:\n" + user_input}],
-        "text": {"format": {"type": "json_schema",
-                            "name": "policy_impact_review",
-                            "strict": True, "schema": RESULT_SCHEMA}},
-        "max_output_tokens": 2400,
+        "systemInstruction": {"parts": [{"text": INSCRIPTION}]},
+        "contents": [{"role": "user", "parts": [
+            {"text": "공식 근거 자료:\n" + user_input}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": _gemini_schema(RESULT_SCHEMA),
+            "maxOutputTokens": 4096,
+            "temperature": 0.2,
+        },
     }
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     if transport is None:
         request = urllib.request.Request(
-            API_URL, data=body,
-            headers={"Authorization": "Bearer " + key,
-                     "Content-Type": "application/json",
-                     "User-Agent": "PolicyDominoNext/1.0"}, method="POST")
+            API_URL.format(model=model), data=body,
+            headers={"x-goog-api-key": key, "Content-Type": "application/json",
+                     "User-Agent": "PolicyDominoNext/2.0"}, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=45) as response:
+            with urllib.request.urlopen(request, timeout=40) as response:
                 if response.status != 200:
-                    raise AIAnalysisError("AI API non-success status")
+                    raise _http_error(response.status)
                 raw = response.read(240_000)
-        except (OSError, urllib.error.HTTPError, urllib.error.URLError) as exc:
-            raise AIAnalysisError("AI API request failed: " + type(exc).__name__) from exc
+        except urllib.error.HTTPError as exc:
+            raise _http_error(exc.code) from None
+        except (OSError, urllib.error.URLError):
+            raise AIRequestError("network_error") from None
     else:
         raw = transport(body)
     if isinstance(raw, bytes):
         try:
             data = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError) as exc:
-            raise AIAnalysisError("Invalid AI JSON response") from exc
+            raise AIAnalysisError("invalid_model_json") from exc
     else:
         data = raw
     try:
         return json.loads(_get_text(data))
     except (ValueError, TypeError) as exc:
-        raise AIAnalysisError("Invalid structured AI output") from exc
+        raise AIAnalysisError("invalid_structured_output") from exc
 
 
 def validate_draft(packet: dict, proposed: dict) -> dict:
@@ -241,47 +283,60 @@ def validate_draft(packet: dict, proposed: dict) -> dict:
                 not 5 <= len(row[key_name]) <= 500):
                 raise AIAnalysisError("AI program rationale invalid")
         program_items.append(dict(row))
+    if not check_items:
+        raise AIAnalysisError("no_supported_change_reviews")
     return {"change_reviews": check_items, "program_reviews": program_items}
 
 
-def analyze_batch(state: dict, dependencies: list[dict], *, limit: int = 3,
+def analyze_batch(state: dict, dependencies: list[dict], *, limit: int = 2,
                   model: str | None = None, key: str | None = None,
                   transport=None) -> dict:
-    """Run bounded, cached and source-versioned LLM analysis.
-
-    No credentials => no generated output, never mock/fallback pretending to be AI.
-    Previously generated drafts are retained only if their evidence hash matches.
-    """
-    key = (os.getenv("OPENAI_API_KEY", "") if key is None else key).strip()
-    model = model or os.getenv("OPENAI_MODEL", DEFAULT_MODEL)
+    """Review verified changes. Budget actual requests, not successful results."""
+    key = (os.getenv("GEMINI_API_KEY", "") if key is None else key).strip()
+    model = model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
     results = state.setdefault("ai_reviews", {})
-    attempts = state.setdefault("ai_errors", {})
+    errors_by_event = state.setdefault("ai_errors", {})
+    report = {
+        "status": "not_configured", "model": model, "attempted": 0,
+        "generated": 0, "cached": 0, "eligible": 0, "errors": 0,
+        "error_codes": {}, "checked_at": utc_now(),
+    }
     if not key:
-        state["ai_status"] = "not_configured"
-        return {"status": "not_configured", "generated": 0, "errors": 0}
+        state["ai_status"] = report["status"]
+        state["ai_run"] = report
+        return report
     selected = sorted(
         (d for d in state.get("documents", {}).values()
-         if not d.get("reference_only")), key=lambda d: d.get("published_at", ""),
-        reverse=True)
-    done, errors = 0, 0
+         if not d.get("reference_only")),
+        key=lambda d: d.get("published_at", ""), reverse=True)
+    budget = max(0, min(limit, 5))
     for document in selected:
-        if done >= max(0, min(limit, 10)):
+        if report["attempted"] >= budget:
             break
         event_id = document["id"]
         packet = source_packet(state, event_id, dependencies)
         if packet is None:
             continue
+        report["eligible"] += 1
         digest = source_fingerprint(packet)
         cached = results.get(event_id, {})
         if (cached.get("source_sha256") == digest and cached.get("model") == model
-            and cached.get("status") == "generated"):
+                and cached.get("status") == "generated"):
+            report["cached"] += 1
             continue
+        report["attempted"] += 1
         try:
-            draft = validate_draft(packet, call_model(
-                packet, key=key, model=model, transport=transport))
+            draft = validate_draft(
+                packet, call_model(packet, key=key, model=model, transport=transport))
         except (AIAnalysisError, ValueError, KeyError, TypeError) as exc:
-            errors += 1
-            attempts[event_id] = type(exc).__name__ + ": " + str(exc)[:130]
+            report["errors"] += 1
+            code = exc.code if isinstance(exc, AIRequestError) else (
+                "invalid_evidence" if "quote" in str(exc).lower() or
+                "citation" in str(exc).lower() else "invalid_model_output")
+            errors_by_event[event_id] = code
+            report["error_codes"][code] = report["error_codes"].get(code, 0) + 1
+            if isinstance(exc, AIRequestError) and exc.blocking:
+                break
             continue
         results[event_id] = {
             "status": "generated", "source_sha256": digest,
@@ -289,10 +344,19 @@ def analyze_batch(state: dict, dependencies: list[dict], *, limit: int = 3,
             "required_action_verified": False,
             **draft,
         }
-        attempts.pop(event_id, None)
-        done += 1
-    state["ai_status"] = "generated" if done or results else "configured_no_results"
-    return {"status": state["ai_status"], "generated": done, "errors": errors}
+        errors_by_event.pop(event_id, None)
+        report["generated"] += 1
+    if report["errors"]:
+        report["status"] = "partial_generated" if report["generated"] else "failed"
+    elif report["generated"]:
+        report["status"] = "generated"
+    elif report["cached"]:
+        report["status"] = "cached"
+    else:
+        report["status"] = "no_eligible_changes"
+    state["ai_status"] = report["status"]
+    state["ai_run"] = report
+    return report
 
 
 def publishable_draft(state: dict, event_id: str, dependencies: list[dict]) -> dict | None:

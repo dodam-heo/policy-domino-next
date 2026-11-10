@@ -81,10 +81,14 @@ jobs:
       - name: Collect official data separately from website availability
         env:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
         timeout-minutes: 16
         run: python -m policy_domino run --limit 20
+      - name: Analyze verified changes using Gemini (max 2 calls)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-3.1-flash-lite
+        timeout-minutes: 4
+        run: python -m policy_domino ai --limit 2
       - name: Enforce public source and impact evidence contract
         run: python -m policy_domino.contracts site/data.json
       - name: Persist verified collection results
@@ -109,3 +113,5 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           artifact_name: github-pages-refresh
+      - name: Verify AI result after official data is saved and deployed
+        run: python -m policy_domino ai-check

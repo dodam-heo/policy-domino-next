@@ -13,12 +13,12 @@ LAW_OC -> LawAPI.search_window()/history()/detail()
           -> parser.parse_document() -> analysis.compare()
           -> discovery.discover_dependents() / analysis.connect_changes()
           -> ALIOPlusClient.collect() / programs.discover_program_links()
-          -> ai.analyze_batch() (OPENAI_API_KEY가 있을 때만)
+          -> [별도 Gemini AI 단계] ai.analyze_batch() (GEMINI_API_KEY)
           -> contracts.validate_public()
           -> pipeline.render() -> site/data.json -> site/presentation.js + app.js
 ```
 
-유일한 명령 진입점은 `python -m policy_domino {run,ai,render}`, 유일한 운영 GitHub Actions는 `.github/workflows/pipeline.yml`이다. 각 모듈의 입력·출력은 다음과 같다.
+유일한 명령 진입점은 `python -m policy_domino {run,ai,ai-check,render}`, 유일한 운영 GitHub Actions는 `.github/workflows/pipeline.yml`이다. 각 모듈의 입력·출력은 다음과 같다.
 
 | 모듈 | 책임 | 주된 결과 |
 |---|---|---|
@@ -47,11 +47,11 @@ LAW_OC -> LawAPI.search_window()/history()/detail()
 
 ## 4. AI 입출력과 검증
 
-입력은 동일 변경 사건의 공식 신구 조문(최대 3개)과, 실제 인용이 확인된 사업 링크(최대 6개)이다. 전체 요청 크기를 제한하며 외부 문서는 명령이 아닌 자료로 취급한다. LLM은 실제 `POST https://api.openai.com/v1/responses`를 호출하고 `text.format.type=json_schema`를 사용한다.
+입력은 동일 변경 사건의 공식 신구 조문(최대 3개)과, 실제 인용이 확인된 사업 링크(최대 6개)이다. 전체 요청 크기를 제한하며 외부 문서는 명령이 아닌 자료로 취급한다. LLM은 독립 AI 단계에서 Gemini `models.generateContent`를 호출하고 `responseMimeType=application/json` 및 `responseSchema`를 사용한다. 전체 API 요청 수를 실행당 최대 2회로 제한한다.
 
 출력은 **변경 조문별 차이 요약·검토 질문**, **인용으로 연결된 공공사업별 적용 검토 질문** 두 종류다. 모델이 제시한 이전·현재 문구가 공식 조문에 실제 존재하는지, 기관명·사업ID·조문번호가 검증된 입력에 존재하는지, 사업 인용 문구가 공식 원문에서 유래했는지 다시 검사한다. 위조·누락·형식 오류·모델 실패는 생성 기록으로 인정하지 않는다.
 
-AI 분석 실행 시 `OPENAI_API_KEY`는 서버 환경변수에서만 읽고 `site/`에 복사하지 않는다. 키 미설정 시 `ai_status=not_configured`, 모델 출력 실패 시 기존 확정된 법적 원문 비교와 별도로 오류를 보관한다. 모델명이 기록되더라도 사용자에게는 **'AI 검토 초안 · 실제 조치 필요성 미확정'**으로 표시한다.
+AI 분석 실행 시 `GEMINI_API_KEY`는 서버 환경변수에서만 읽고 `site/`에 복사하지 않는다. 키 미설정 시 `ai_status=not_configured`, 모델 출력 실패 시 기존 확정된 법적 원문 비교와 별도로 오류를 보관한다. 모델명이 기록되더라도 사용자에게는 **'AI 검토 초안 · 실제 조치 필요성 미확정'**으로 표시한다.
 
 해당 변경 사건의 공식 변경 원문이나 연결 사업 근거가 달라지면, 이전 AI 초안은 출처 SHA 비교로 자동 무효화되어 게시되지 않는다. 해당 API 호출 비용과 외부 모델 사용 여부를 README에서 명확히 안내한다.
 
@@ -78,3 +78,12 @@ python -m policy_domino.contracts site/data.json
 ```
 
 모델 요청은 테스트에서 가짜 전송 계층으로 검증하지만 **실제 OpenAI API 키를 이용한 운영 추론이 성공했다는 증거로 취급하지 않는다**. 공식 사업 적용의 발견율과 오판정 검증도 추가 실측이 필요하다.
+
+
+## 7. 모델 실행 통제 및 운영 검증
+
+AI 모델 호출은 공식 법령 수집 루프에서 완전히 분리한다. 수집 후 저장된 공식 변경 증거만 분석하며, 1회 실행당 2건의 실제 요청으로 제한한다. 변경 사항이 아직 확인되지 않은 항목은 API 요청 대상이 아니다.
+
+모델 응답은 사전 JSON Schema 형식에 더해 실제 공식 인용, 조문, 기관·사업 ID, 본문 해시를 다시 검증한다. 429(호출량 초과), 인증 실패 또는 모델 미지원 오류는 남은 호출을 중단한다. 상태는 `generated`, `cached`, `no_eligible_changes`, `partial_generated`, `failed`, `not_configured`로 구별한다.
+
+`ai_run`에 실제 시도·생성·캐시·오류 수를 남긴다. 로그에는 API 키나 오류 응답 원문을 출력하지 않는다. Actions는 공식 수집 데이터를 보존하고 사이트를 배포한 뒤 `ai-check`로 AI 단계의 실제 성공 여부를 별도로 검사해 실행 전체의 최종 상태에 반영한다.

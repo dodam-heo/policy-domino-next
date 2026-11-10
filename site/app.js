@@ -273,6 +273,11 @@
         append(ai,card);
       }
       append(root,ai);
+    }else if((state.data.ai_status==="failed" ||
+              state.data.ai_status==="partial_generated") && diffs.length){
+      append(root,create("div","state-note",
+        "AI 분석 요청 또는 검증 실패 · 공식 변경 조문은 확인할 수 있으나"+
+        " 이 문서의 AI 검토 초안은 생성되지 않았습니다."));
     }else if(state.data.ai_status==="not_configured" && diffs.length){
       append(root,create("div","state-note",
         "AI 분석 미실행 · 모델 인증키 미설정. 공식 신구 비교 결과는 별도로 제공됩니다."));

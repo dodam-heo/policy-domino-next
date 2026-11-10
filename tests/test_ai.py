@@ -71,11 +71,8 @@ def proposal(packet):
 
 
 def fake_api_return(payload):
-    return {"status": "completed", "output": [
-        {"type": "message", "content": [
-            {"type": "output_text", "text": json.dumps(payload, ensure_ascii=False)}
-        ]}
-    ]}
+    return {"candidates": [{"finishReason": "STOP", "content": {
+        "parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
 
 
 class AIIntegrationTests(unittest.TestCase):
@@ -88,7 +85,7 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(packet["programs"][0]["article"], "제3조")
         self.assertIsNone(source_packet(state, "unknown", links))
 
-    def test_real_responses_request_is_structured_not_keyword_matching(self):
+    def test_gemini_request_is_structured_not_keyword_matching(self):
         state, links = state_and_links()
         packet = source_packet(state, "e1", links)
         requests = []
@@ -98,12 +95,13 @@ class AIIntegrationTests(unittest.TestCase):
         result = call_model(packet, key="TEST_INJECTED_ONLY", transport=transport)
         self.assertEqual(result["change_reviews"][0]["after_quote"], "40만원")
         self.assertEqual(len(requests), 1)
-        self.assertEqual(requests[0]["model"], "gpt-4.1-mini")
-        self.assertEqual(requests[0]["text"]["format"]["type"], "json_schema")
-        self.assertTrue(requests[0]["text"]["format"]["strict"])
-        self.assertEqual(requests[0]["store"], False)
+        self.assertEqual(requests[0]["generationConfig"]["responseMimeType"], "application/json")
+        self.assertEqual(requests[0]["generationConfig"]["responseSchema"]["type"], "object")
+        self.assertEqual(requests[0]["generationConfig"]["maxOutputTokens"], 4096)
+        self.assertIn("systemInstruction", requests[0])
+        self.assertNotIn("additionalProperties", json.dumps(requests[0]))
         self.assertNotIn("TEST_INJECTED_ONLY", json.dumps(requests[0]))
-        self.assertNotIn("OPENAI_API_KEY", json.dumps(state))
+        self.assertNotIn("GEMINI_API_KEY", json.dumps(state))
 
     def test_grounded_response_accepts_questions_not_actions(self):
         state, links = state_and_links()
@@ -194,6 +192,53 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(len(ai["change_reviews"]), 1)
         self.assertEqual(len(ai["program_reviews"]), 1)
         self.assertFalse(ai["required_action_verified"])
+
+
+    def test_failed_attempts_are_capped_and_reported(self):
+        state, links = state_and_links()
+        state["documents"]["e2"] = dict(state["documents"]["e1"], id="e2")
+        state["findings"]["e2"] = state["findings"]["e1"]
+        hits = []
+        def transport(body):
+            hits.append(body)
+            return {"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": []}}]}
+        report = analyze_batch(state, links, key="TEST", limit=2, transport=transport)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["attempted"], 2)
+        self.assertEqual(report["errors"], 2)
+        self.assertEqual(len(hits), 2)
+        self.assertEqual(state["ai_run"]["status"], "failed")
+
+    def test_quota_limit_stops_more_calls(self):
+        from policy_domino.ai import AIRequestError
+        state, links = state_and_links()
+        state["documents"]["e2"] = dict(state["documents"]["e1"], id="e2")
+        state["findings"]["e2"] = state["findings"]["e1"]
+        hits = []
+        def transport(body):
+            hits.append(body)
+            raise AIRequestError("http_429_rate_or_quota", blocking=True)
+        report = analyze_batch(state, links, key="TEST", limit=2, transport=transport)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["attempted"], 1)
+        self.assertEqual(report["error_codes"], {"http_429_rate_or_quota": 1})
+        self.assertEqual(len(hits), 1)
+
+    def test_no_eligible_change_does_not_call_api(self):
+        state = new_state()
+        report = analyze_batch(state, [], key="TEST",
+                               transport=lambda _: self.fail("unexpected Gemini call"))
+        self.assertEqual(report["status"], "no_eligible_changes")
+        self.assertEqual(report["attempted"], 0)
+
+    def test_empty_ai_review_is_rejected(self):
+        state, links = state_and_links()
+        report = analyze_batch(state, links, key="TEST",
+                               transport=lambda _: fake_api_return(
+                                   {"change_reviews": [], "program_reviews": []}))
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["generated"], 0)
+
 
 
 if __name__ == "__main__":

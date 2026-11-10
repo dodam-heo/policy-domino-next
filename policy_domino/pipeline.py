@@ -243,14 +243,8 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24) -> dict:
     if isinstance(api, LawAPI):
         from .alioplus import ALIOPlusClient
         state["program_source_audit"] = ALIOPlusClient().collect(state, max_details=6)
-    # LLM review runs only with an explicitly configured API key. Model output
-    # is a draft, and the source evidence is revalidated before publication.
-    from .analysis import connect_changes
-    from .programs import discover_program_links
-    from .ai import analyze_batch
-    graph = connect_changes(state["findings"], state["versions"], state["documents"])
-    program_links = discover_program_links(state, graph)
-    analyze_batch(state, program_links, limit=2)
+    # LLM calls run in a separate bounded step against persisted source data.
+    # Collection must never burn API quota or conceal a failed analysis.
     state["generated_at"] = utc_now()
     return state
 
@@ -287,6 +281,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "cross_document_review_candidates": work_reviews,
         "program_dependencies": program_links,
         "ai_status": state.get("ai_status", "not_run"),
+        "ai_run": state.get("ai_run", {}),
         "program_discovery_audit": {
             **program_audit(state, program_links),
             "source": state.get("program_source_audit", {}),
@@ -314,7 +309,7 @@ def configured_law_oc() -> str:
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("run", "render", "ai"))
+    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check"))
     parser.add_argument("--limit", type=int, default=24)
     parser.add_argument("--state", type=Path, default=STATE_FILE)
     parser.add_argument("--output", type=Path, default=DATA_FILE)
@@ -327,6 +322,12 @@ def main(argv=None):
         credential = configured_law_oc()
         run_once(state, LawAPI(credential), dt.date.today(), max(1, min(args.limit, 150)))
         write_json(args.state, state)
+    if args.mode == "ai-check":
+        report = state.get("ai_run", {})
+        print("Policy Domino AI verification:", json.dumps(report, ensure_ascii=False))
+        if report.get("status") not in ("generated", "cached", "no_eligible_changes"):
+            raise SystemExit(1)
+        return
     if args.mode == "ai":
         from .analysis import connect_changes
         from .programs import discover_program_links
@@ -335,7 +336,7 @@ def main(argv=None):
         links = discover_program_links(state, edges)
         report = analyze_batch(state, links, limit=max(1, min(args.limit, 10)))
         write_json(args.state, state)
-        print("Policy Domino AI:", report)
+        print("Policy Domino AI:", json.dumps(report, ensure_ascii=False))
     result = render(state, args.output)
     print("Policy Domino Next:", {
         "documents": len(result["documents"]),
