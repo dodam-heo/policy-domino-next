@@ -19,6 +19,8 @@ class SubmissionArchitectureTests(unittest.TestCase):
             "  publish:\n", 1)[0]
         publish = workflow.split("  publish:\n", 1)[1]
         self.assertIn("needs: verify", refresh)
+        self.assertIn("ref: main", refresh,
+                      "Refresh must use the latest persisted official ledger")
         self.assertNotIn("needs: publish", refresh)
         self.assertNotIn("actions/deploy-pages@", refresh)
         self.assertIn("github.event_name == 'schedule'", refresh)
