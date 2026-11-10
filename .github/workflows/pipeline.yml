@@ -51,6 +51,14 @@ jobs:
           report = ALIOPlusClient(delay_seconds=0).collect(state, max_details=2)
           print("Live program source audit:", report)
           print("Verified record count:", len(state.get("official_programs", {})))
+          for item in list(state.get("official_programs", {}).values())[:2]:
+              print("REAL RECORD:", item["name"], "/", item["agency"],
+                    "/ text:", item["description"][:90], "/ url:", item["url"])
+          for word in ("fnPage", "pageIndex", "pageNo", "currentPage",
+                       "pageNum", "paging", "firstPage"):
+              match = re.search(word, content, re.IGNORECASE)
+              print("PAGE MARKER", word, ":", repr(content[max(0, match.start()-110):
+                    match.end()+240]) if match else "none")
           if report["accepted"] == 0:
               raise SystemExit("No verified program: public source compatibility is unproven")
           PY
