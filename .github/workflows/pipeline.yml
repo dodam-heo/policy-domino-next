@@ -58,8 +58,8 @@ jobs:
           paging = re.search(r'<div class="paging">', content, re.IGNORECASE)
           print("PAGE CONTROL HTML:", repr(content[paging.start():paging.start()+1500]) if paging else "none")
           page2 = ALIOPlusClient(delay_seconds=0).fetch(INDEX + "?pageNo=2")
-          pagedef = re.search(r'function\\s+fnSetPage\\s*\\(', content)
-          print("PAGING FUNCTION:", repr(content[pagedef.start():pagedef.start()+1000]) if pagedef else "not found")
+          page_def_pos = content.find("function fnSetPage")
+          print("PAGING FUNCTION:", repr(content[page_def_pos:page_def_pos+1100]) if page_def_pos>=0 else "not found")
           for tag in ("검색 결과", "전체", "검색 결과가 존재하지", "fnSetPage", "paging"):
               match = re.search(tag, page2)
               print("PAGE2 MARKER", tag, repr(page2[max(0, match.start()-120):match.end()+180]) if match else "none")
