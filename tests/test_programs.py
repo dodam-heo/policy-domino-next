@@ -221,7 +221,7 @@ class PublicDirectoryTests(unittest.TestCase):
         self.assertEqual(len(discover_program_links(s, [])), 1)
         second = client.collect(s, max_details=1)
         self.assertEqual(second["accepted"], 0)
-        self.assertIn("No new", second["error"])
+        self.assertIn("Index page 1 exhausted", second["error"])
 
 
 if __name__ == "__main__":
