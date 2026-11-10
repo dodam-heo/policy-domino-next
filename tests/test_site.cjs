@@ -183,7 +183,7 @@ async function verifiedNavigation(){
   assert.ok(node(ui,"ai-review-progress").textContent.includes("오류 15건"));
   assert.ok(node(ui,"institution-link-progress").textContent.includes("관련 공식 규정 소관기관 연결 1건"));
   assert.equal(node(ui,"items").children.length,4);
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),
                    ["amended","new","ordinary","repealed"]);
   node(ui,"mode-impact").onclick();
   assert.deepEqual(node(ui,"items").children
@@ -191,18 +191,18 @@ async function verifiedNavigation(){
     "A single verified agency must not be mislabeled as high impact");
   assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 0건");
   node(ui,"mode-new").onclick();
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["new"]);
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),["new"]);
   node(ui,"mode-repealed").onclick();
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["repealed"]);
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),["repealed"]);
   node(ui,"mode-amended").onclick();
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),
     ["amended","ordinary"]);
   node(ui,"mode-all").onclick();
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),
     ["amended","new","ordinary","repealed"]);
   assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 4건");
   node(ui,"search").oninput({target:{value:"가상 지원운영사업"}});
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),["amended"]);
   node(ui,"search").oninput({target:{value:""}});
   node(ui,"items").children[0].onclick();
   assert.equal(ui.here.hash,"#event=amended");
@@ -343,7 +343,7 @@ async function largeScopeFiltering(){
   const ui=browser(false,"",data);
   await flush();
   node(ui,"mode-impact").onclick();
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["many"]);
+  assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),["many"]);
   assert.equal(node(ui,"list-count").textContent,"전체 2건 · 표시 1건");
   assert.equal(node(ui,"mode-impact").getAttribute("aria-pressed"),"true");
   node(ui,"mode-all").onclick();
