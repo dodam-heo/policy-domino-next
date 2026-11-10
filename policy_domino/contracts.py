@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .core import SCHEMA, SOURCES
+from .meaning import explain
 
 
 class ContractError(ValueError):
@@ -395,7 +396,9 @@ def validate_public(payload: dict) -> dict:
                    "institutional review source must match changed official clause")
             # The concise operator-facing change must be copied from the
             # actual legal comparison, not a proposed impact or generated text.
-            focus = (change.get("meaning", {}).get("focus") or [])
+            focus = explain(
+                change.get("before", ""), change.get("after", "")
+            ).get("focus") or []
             initial = focus[0] if focus else {}
             old_delta = str(initial.get("before", {}).get("changed", "")).strip()
             new_delta = str(initial.get("after", {}).get("changed", "")).strip()
