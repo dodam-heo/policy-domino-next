@@ -90,6 +90,8 @@ function setupBrowser(mobile=true,initialHash="",override=null){
     schema:"policy-domino-next-v1",configuration:"running",
     documents:override?.documents||fakeDocs,
     relationships:override?.relationships||[],quality:{},
+    program_dependencies:override?.program_dependencies||[],
+    ai_status:override?.ai_status||"not_run",
     cross_document_review_candidates:override?.cross_document_review_candidates||[],
     generated_at:"",
   })});
@@ -272,7 +274,64 @@ async function verifyRealFilters(){
   assert.ok(flattened(disclosure).some(x=>x.textContent.includes("가".repeat(300))));
   console.log("PASS: latest-first, actual duties separated from research leads, focused comparison");
 }
-Promise.all([verifyNavigation(),verifyRealFilters()]).catch(error=>{
+async function verifyAIProgramEvidence(){
+  const document=sample("ai1","일부개정","compared","2026-11-10","금액·비율");
+  const official={
+    source_event_id:"ai1",changed_article:"제3조",agency:"가상장학공사",
+    program:"학비지원 운영사업",program_id:"official-program-1",
+    referenced_article:"제3조",path:"direct",
+    verification:"verified_program_citation",operational_program_verified:true,
+    required_action_verified:false,
+    review:"지급금액 적용 여부를 기관에서 확인",
+    citation_quote:"「가상 ai1 정책」 제3조에 따른 지급기준",
+    program_url:"https://www.alioplus.go.kr/business/bsnDetail.do?bsnSeq=814&bsnTyp=DET"
+  };
+  document.analysis.ai={
+    status:"generated",source_sha256:"f".repeat(64),model:"gpt-4.1-mini",
+    generated_at:"2026-11-10T03:00:00Z",required_action_verified:false,
+    change_reviews:[{
+      article:"제3조",summary:"지급액이 달라짐",
+      before_quote:"20만원",after_quote:"30만원",
+      review_question:"지급액 변경을 사업 기준에 적용할지 확인할까?"
+    }],
+    program_reviews:[{
+      program_id:"official-program-1",article:"제3조",agency:"가상장학공사",
+      program_quote:"「가상 ai1 정책」 제3조",
+      reason:"공식 인용 사업의 적용 대상이 달라질 수 있음",
+      review_question:"신구 지급 기준을 사업 공고와 대조해야 하는가?"
+    }]
+  };
+  const ui=setupBrowser(true,"",{
+    documents:[document],program_dependencies:[official],ai_status:"generated"
+  });
+  await flush();
+  ui.dom.get("items").children[0].onclick();
+  const nodes=flattened(ui.dom.get("detail"));
+  const all=nodes.map(x=>x.textContent).join(" ");
+  assert.ok(all.includes("가상장학공사"));
+  assert.ok(all.includes("학비지원 운영사업"));
+  assert.ok(all.includes("공식 사업자료에서 제3조 인용 확인"));
+  assert.ok(all.includes("AI 업무 검토 초안"));
+  assert.ok(all.includes("신구 지급 기준을 사업 공고와 대조"));
+  assert.ok(all.includes("③ AI 변경 영향 분석"));
+  assert.ok(all.includes("지급액 변경을 사업 기준에 적용할지"));
+  assert.ok(nodes.some(x=>x.tag==="a"&&x.href===official.program_url),
+    "Official program URLs should be reachable");
+  assert.deepEqual(nodes.filter(x=>x.dataset.agencyFilter!==undefined)
+    .map(x=>x.dataset.agencyFilter),["all","가상장학공사"]);
+  const noAI=setupBrowser(true,"",{
+    documents:[sample("plain","일부개정","compared","2026-11-10","금액·비율")],
+    ai_status:"not_configured"
+  });
+  await flush();
+  noAI.dom.get("items").children[0].onclick();
+  const texts=flattened(noAI.dom.get("detail")).map(x=>x.textContent).join(" ");
+  assert.ok(texts.includes("AI 분석 미실행"));
+  assert.ok(!texts.includes("③ AI 변경 영향 분석"),
+    "Missing credentials must not produce synthetic AI inference");
+  console.log("PASS: official program links and clearly labeled AI proposals");
+}
+Promise.all([verifyNavigation(),verifyRealFilters(),verifyAIProgramEvidence()]).catch(error=>{
   console.error(error);process.exitCode=1;
 });
 
