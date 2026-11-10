@@ -35,6 +35,14 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
                       workflow)
 
+    def test_gov24_credential_can_be_checked_without_full_reindex(self):
+        workflow=(ROOT/".github/workflows/pipeline.yml").read_text(encoding="utf-8")
+        self.assertIn("[gov24-sync]",workflow)
+        self.assertIn("Verify registered Gov24 key against real official API results",workflow)
+        self.assertIn("not report.get('accepted')",workflow)
+        self.assertIn("if: github.event_name != 'push'",workflow)
+        self.assertIn("GOV24_SERVICE_KEY: ${{ secrets.GOV24_SERVICE_KEY }}",workflow)
+
     def test_html_does_not_mix_application_programming_and_css(self):
         html = (ROOT / "site/index.html").read_text(encoding="utf-8")
         self.assertIn('href="./styles.css"', html)

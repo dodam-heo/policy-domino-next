@@ -55,7 +55,7 @@ def official_service_url(value: object) -> str:
     return ""
 
 
-def normalize_record(raw: dict) -> dict:
+def normalize_record(raw: dict, *, allow_missing_agency: bool = False) -> dict:
     """Never create an agency/service name not supplied by the public API."""
     if not isinstance(raw, dict):
         raise Gov24SourceError("official record must be an object")
@@ -63,7 +63,7 @@ def normalize_record(raw: dict) -> dict:
     name = _safe_text(raw.get("서비스명"), 260)
     agency = _safe_text(raw.get("소관기관명"), 190)
     agency_type = _safe_text(raw.get("소관기관유형"), 80)
-    if not service_id or not name or not agency:
+    if not service_id or not name or (not agency and not allow_missing_agency):
         raise Gov24SourceError("service ID, name and public agency are required")
     if re.search(r"민간업체|민간기업|사기업", agency_type):
         raise Gov24SourceError("private provider cannot be an impacted public institution")
@@ -139,8 +139,12 @@ class Gov24Client:
                     if len(body) > 2_000_000:
                         raise Gov24SourceError("Gov24 official response too large")
                     result = json.loads(body.decode("utf-8"))
-            except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                # Don't leak the serviceKey embedded in a request URL.
+            except urllib.error.HTTPError as exc:
+                # HTTP status is safe; never include the credential-bearing URL.
+                raise Gov24SourceError(
+                    "official source rejected request (HTTP " + str(exc.code) + ")"
+                ) from None
+            except (urllib.error.URLError, TimeoutError, ValueError):
                 raise Gov24SourceError("official source request or JSON failed") from None
         if not isinstance(result, dict) or not isinstance(result.get("data"), list):
             raise Gov24SourceError("official response has no data list")
@@ -185,7 +189,8 @@ def collect_gov24(state: dict, key: str, *, pages_per_feed: int = 2,
             audit["total_known"][source] = response["totalCount"]
             for item in response["data"]:
                 try:
-                    fresh = normalize_record(item)
+                    fresh = normalize_record(
+                        item, allow_missing_agency=(source == "serviceList"))
                     old = store.get(fresh["service_id"])
                     store[fresh["service_id"]] = merge_record(old, fresh)
                     audit["accepted"] += 1
@@ -237,6 +242,8 @@ def discover_public_service_leads(state: dict, events: list[dict],
         for change in event.get("changes", []):
             title, article = change["document_title"], change["article"]
             for service in sources.values():
+                if not service.get("agency") or not service.get("service_name"):
+                    continue
                 basis = _explicit_law_basis(service, title, article)
                 if not basis:
                     continue

@@ -51,6 +51,22 @@ class Gov24Tests(unittest.TestCase):
         altered["상세조회URL"] = "https://attacker.example/service"
         self.assertEqual(normalize_record(altered)["service_url"], "")
 
+    def test_official_list_without_agency_is_kept_until_detail_supplies_issuer(self):
+        raw=record("S090")
+        raw.pop("소관기관명")
+        partial=normalize_record(raw,allow_missing_agency=True)
+        self.assertEqual(partial["agency"],"")
+        state={"public_services":{"S090":partial}}
+        ev=policy_event()
+        discover_public_service_leads(state,[ev])
+        self.assertEqual(ev["public_service_lead_count"],0)
+        from policy_domino.gov24 import merge_record
+        detailed=normalize_record(record("S090"))
+        state["public_services"]["S090"]=merge_record(partial,detailed)
+        ev=policy_event()
+        discover_public_service_leads(state,[ev])
+        self.assertEqual(ev["public_service_lead_count"],1)
+
     def test_missing_key_collects_nothing_and_shows_unconfigured(self):
         state = {}
         result = collect_gov24(state, "")
