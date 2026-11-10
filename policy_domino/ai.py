@@ -210,7 +210,8 @@ def validate_draft(packet: dict, proposed: dict) -> dict:
         if (not isinstance(before, str) or not before.strip() or
             not isinstance(after, str) or not after.strip() or
             len(before) > 180 or len(after) > 180 or
-            before not in ref["before"] or after not in ref["after"]):
+            before not in ref["before"] or after not in ref["after"] or
+            before == after):
             raise AIAnalysisError("AI quotes not found in official before/after")
         for key in ("summary", "review_question"):
             if (not isinstance(row[key], str) or not 5 <= len(row[key]) <= 500):
