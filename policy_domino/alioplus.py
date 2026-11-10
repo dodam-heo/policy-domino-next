@@ -122,6 +122,53 @@ def listing_detail_urls(content: str) -> list[str]:
     return [x for x in found if x]
 
 
+class _ListingTitles(HTMLParser):
+    """Associate list display names only with their explicit official detail URL."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.names = {}
+        self.url = ""
+        self.title_depth = 0
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        props = dict(attrs)
+        if tag == "a":
+            href = props.get("href", "") + " " + props.get("onclick", "")
+            matched = re.search(
+                r"fnDetail\\s*\\(\\s*['\\\"]?(\\d{1,12})['\\\"]?\\s*,"
+                r"\\s*['\\\"]?(?:DET|SCT)['\\\"]?", href, re.IGNORECASE)
+            self.url = (canonical_url(DETAIL + "?bsnSeq=" + matched.group(1) +
+                                      "&bsnTyp=DET") if matched else "")
+            self.parts = []
+        elif tag == "div" and self.url and "tit" in props.get("class", "").split():
+            self.title_depth = 1
+        elif self.title_depth:
+            self.title_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag == "a":
+            title = " ".join(self.parts).strip()
+            if self.url and 3 <= len(title) <= 240:
+                self.names[self.url] = title
+            self.url = ""
+            self.parts = []
+            self.title_depth = 0
+        elif self.title_depth:
+            self.title_depth -= 1
+
+    def handle_data(self, data):
+        if self.title_depth and self.url:
+            self.parts.append(data.strip())
+
+
+def listing_business_titles(content: str) -> dict[str, str]:
+    parser = _ListingTitles()
+    parser.feed(content)
+    return parser.names
+
+
 class ALIOPlusClient:
     """Bounded, auditable public portal connector; no credential required."""
 
@@ -159,6 +206,7 @@ class ALIOPlusClient:
         try:
             raw = self.fetch(INDEX)
             urls = listing_detail_urls(raw)
+            display_names = listing_business_titles(raw)
             audit["ids_discovered"] = len(urls)
             if not urls:
                 raise ProgramSourceError(
@@ -173,7 +221,12 @@ class ALIOPlusClient:
             for url in todo[:max(0, min(max_details, 15))]:
                 try:
                     body = self.fetch(url)
-                    records.append(parse_detail(body, url))
+                    record = parse_detail(body, url)
+                    # The list's labelled title excludes category prefixes
+                    # which can be concatenated in the detail-page heading.
+                    if url in display_names:
+                        record["name"] = display_names[url]
+                    records.append(record)
                 except (ProgramSourceError, OSError, ValueError) as exc:
                     audit["rejected"] += 1
                     audit.setdefault("reasons", []).append(type(exc).__name__ + ": " +
