@@ -177,6 +177,26 @@ class PublicDirectoryTests(unittest.TestCase):
         with self.assertRaises(ProgramSourceError):
             parse_detail("<html><h3>사업소개</h3>이름 미확인</html>", PROGRAM_URL)
 
+    def test_official_total_is_reported_not_claimed_as_full_coverage(self):
+        def transport(url):
+            if "bsnByLifeList" in url:
+                return ("""<div class="total">전체 <strong>5379</strong>건</div>
+                    <a href="javascript:fnDetail('2183','DET');">
+                    <div class="tit">가상 장학지원 사업</div></a>""")
+            if "bsnDetail" in url:
+                return ("""<h3>교육 > 가상 장학지원 사업</h3>
+                          <div>기관명</div><div>가상 공사</div>
+                          <div>사업소개</div><p>공공 장학지원 사업의
+                          수혜 기준, 신청 자격 및 운영 계획 안내입니다.</p>
+                          <div>사업 기간</div><p>상시</p>""")
+            raise OSError("Unknown official resource")
+        audit = ALIOPlusClient(transport=transport,delay_seconds=0).collect(
+            state_with_change(), max_details=1)
+        self.assertEqual(audit["reported_total"], 5379)
+        self.assertEqual(audit["accepted"], 1)
+        self.assertFalse(audit["complete"])
+        self.assertFalse(audit["pagination_verified"])
+
     def test_bounded_collection_ingests_only_verified_detail(self):
         body = """<h3>교육/연구 > 가상 장학지원 사업</h3>
                 <div>기관명</div><div>가상 공사</div>
@@ -196,6 +216,8 @@ class PublicDirectoryTests(unittest.TestCase):
         self.assertEqual(audit["accepted"], 1)
         self.assertEqual(audit["pages_checked"], 1)
         self.assertFalse(audit["complete"])
+        self.assertEqual(audit["scope"], "index_page_1_only")
+        self.assertFalse(audit["pagination_verified"])
         self.assertEqual(len(discover_program_links(s, [])), 1)
         second = client.collect(s, max_details=1)
         self.assertEqual(second["accepted"], 0)
