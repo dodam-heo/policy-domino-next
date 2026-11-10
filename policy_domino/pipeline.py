@@ -263,8 +263,10 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
                      key=lambda d: (
         d.get("published_at", ""), d.get("serial", "")), reverse=True)
     from .ai import publishable_draft
+    from .events import build_events
     verified_count = 0
     ai_review_count = 0
+    validated_ai = {}
     for row in indexed:
         row["analysis"] = findings.get(row["id"], {
             "status": "queued", "changes": [], "review_candidates": [],
@@ -274,7 +276,17 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
             verified_count += 1
         if generated is not None:
             row["analysis"]["ai"] = generated
+            validated_ai[row["id"]] = generated
             ai_review_count += 1
+    # Document records remain the audited *input*. Public navigation is
+    # constructed from exact officially verified *change events*, never
+    # directly from an unverified document index.
+    events = build_events(
+        docs, findings, relationships=edges,
+        program_dependencies=program_links,
+        cross_document_reviews=work_reviews,
+        ai_reviews=validated_ai,
+    )
     data = {
         "schema": state["schema"],
         "generated_at": state.get("generated_at", ""),
@@ -283,14 +295,23 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "coverage": state.get("coverage", []),
         "quality": quality(state),
         "documents": indexed,
+        "events": events,
         "relationships": edges,
         "cross_document_review_candidates": work_reviews,
         "program_dependencies": program_links,
         "ai_progress": {
-            "source_events": len(indexed),
-            "verified_events": verified_count,
-            "analyzed_events": ai_review_count,
-            "pending_events": max(0, verified_count - ai_review_count),
+            "indexed_documents": len(indexed),
+            "source_events": len(events),
+            "verified_events": len(events),
+            "analyzed_events": sum(bool(e["ai_count"]) for e in events),
+            "pending_events": sum(not e["ai_count"] for e in events),
+            "analyzed_documents": ai_review_count,
+            "verified_document_changes": verified_count,
+            "institutional_reviews": sum(e["review_count"] for e in events),
+            "affected_institutions": len({
+                a["institution"]
+                for e in events for a in e["institutional_reviews"]
+            }),
             "last_checked_at": state.get("ai_run", {}).get("checked_at", ""),
             "last_attempted": state.get("ai_run", {}).get("attempted", 0),
             "last_generated": state.get("ai_run", {}).get("generated", 0),

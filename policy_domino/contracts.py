@@ -48,7 +48,7 @@ def validate_public(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ContractError("Public result must be a JSON object")
     verify(payload.get("schema") == SCHEMA, "schema", "unknown schema")
-    for key in ("documents", "relationships"):
+    for key in ("documents", "relationships", "events"):
         verify(isinstance(payload.get(key), list), key, "must be a list")
     if errors:
         raise ContractError("\n".join(errors))
@@ -244,6 +244,200 @@ def validate_public(payload: dict) -> dict:
             verify(bool(proposal.get("reason")) and
                    bool(proposal.get("review_question")), location,
                    "AI program review lacks concrete rationale or check item")
+    # The user-facing unit is an OFFICIAL CHANGE EVENT, not a raw index row.
+    # Every combined event and every institutional review is independently
+    # checked against current source documents and their verified provenance.
+    from .events import ORGANIZATION_RULE, event_identity, _id
+    seen_event_ids = set()
+    covered_source_ids = set()
+    event_actions = 0
+    for i, event in enumerate(payload["events"]):
+        pos = f"events[{i}]"
+        if not isinstance(event, dict):
+            verify(False, pos, "event must be an object")
+            continue
+        event_id = event.get("id")
+        verify(bool(event_id) and event_id not in seen_event_ids,
+               pos, "missing or repeated policy event identity")
+        seen_event_ids.add(event_id)
+        source_ids = event.get("source_documents", [])
+        if not isinstance(source_ids, list) or not source_ids:
+            verify(False, pos, "event must name actual official source documents")
+            continue
+        verify(len(source_ids) == len(set(source_ids)), pos,
+               "duplicate document inside change event")
+        source_docs = [docs[x] for x in source_ids if x in docs]
+        verify(len(source_docs) == len(source_ids), pos,
+               "event points to missing source document")
+        if not source_docs:
+            continue
+        group_keys = {event_identity(d) for d in source_docs}
+        verify(len(group_keys) == 1 and
+               event.get("identity") in group_keys and
+               event_id == _id(event.get("identity", "")), pos,
+               "event grouping must use identical official promulgation identifiers")
+        verify(len(source_docs) == event.get("source_count") and
+               event.get("source_count") == len(event.get("members", [])),
+               pos, "event member count does not match official source documents")
+        for source_id in source_ids:
+            verify(source_id not in covered_source_ids, pos,
+                   "one source document cannot belong to multiple policy events")
+            covered_source_ids.add(source_id)
+        changes_in_event = event.get("changes", [])
+        if not isinstance(changes_in_event, list):
+            verify(False, pos, "event changes must be a list")
+            continue
+        by_clause = {
+            (document.get("id"), ch.get("article")): ch
+            for document in source_docs
+            for ch in document.get("analysis", {}).get("changes", [])
+            if isinstance(ch, dict)
+        }
+        verified_event_changes = set()
+        for j, change in enumerate(changes_in_event):
+            loc = pos + f".changes[{j}]"
+            if not isinstance(change, dict):
+                verify(False, loc, "event change must be object")
+                continue
+            clause_key = (change.get("document_id"), change.get("article"))
+            actual = by_clause.get(clause_key)
+            verify(bool(actual), loc, "change not present in verified official clauses")
+            if not actual:
+                continue
+            verified_event_changes.add(clause_key)
+            verify(actual.get("before") == change.get("before") and
+                   actual.get("after") == change.get("after") and
+                   actual.get("evidence") == change.get("evidence") and
+                   actual.get("source_url") == change.get("source_url"),
+                   loc, "event changes must preserve exact official before/after and hashes")
+        verify(verified_event_changes == set(by_clause), pos,
+               "policy event omitted or invented a verified changed provision")
+
+        actions = event.get("institutional_reviews", [])
+        if not isinstance(actions, list):
+            verify(False, pos, "institutional reviews must be a list")
+            continue
+        verify(len(actions) == event.get("review_count"), pos,
+               "institutional review count mismatch")
+        verify(len({x.get("institution") for x in actions
+                    if isinstance(x, dict)}) == event.get("institution_count"), pos,
+               "institution count mismatch")
+        unique_action_ids = set()
+        for j, action in enumerate(actions):
+            loc = pos + f".institutional_reviews[{j}]"
+            if not isinstance(action, dict):
+                verify(False, loc, "review must be object")
+                continue
+            aid = action.get("id")
+            verify(aid and aid not in unique_action_ids, loc,
+                   "review identity must be nonempty and unique")
+            unique_action_ids.add(aid)
+            doc_id = action.get("document_id")
+            article = action.get("article")
+            institution = action.get("institution")
+            source = docs.get(doc_id, {})
+            change = by_clause.get((doc_id, article))
+            verify(bool(source) and bool(change) and bool(institution), loc,
+                   "review requires an actual changed clause and target institution")
+            if not change:
+                continue
+            verify(action.get("source_url") == change.get("source_url"), loc,
+                   "institutional review source must match changed official clause")
+            verify(bool(action.get("task")) and
+                   action.get("implementation_status") == "not_verified", loc,
+                   "review may not claim verified operational implementation")
+            tier = action.get("basis_tier")
+            if tier == "direct_regulated_institution":
+                match = ORGANIZATION_RULE.fullmatch(source.get("title", "").strip())
+                verify(bool(match and match.group(1).strip() == institution) and
+                       str(action.get("basis_quote", "")).strip() in
+                       (change.get("after") or change.get("before") or ""), loc,
+                       "direct subject requires the regulated organization title and literal clause")
+                verify(not action.get("program"), loc,
+                       "direct legal rule cannot invent a public program")
+            elif tier == "explicit_changed_clause":
+                actor_reviews = source.get("analysis", {}).get(
+                    "direct_actor_reviews", [])
+                verify(any(r.get("actor") == institution and
+                           r.get("article") == article and
+                           r.get("evidence_level") == "changed_clause_explicit_actor"
+                           for r in actor_reviews), loc,
+                       "direct actor is not verified in the changed source clause")
+                verify(not action.get("program"), loc,
+                       "actor mention alone cannot prove a public program")
+            elif tier == "verified_program_citation":
+                evidence = next((
+                    dep for dep in payload.get("program_dependencies", [])
+                    if dep.get("source_event_id") == doc_id and
+                    dep.get("changed_article") == article and
+                    dep.get("agency") == institution and
+                    dep.get("program_id") == action.get("program_id") and
+                    dep.get("program") == action.get("program") and
+                    dep.get("program_url") == action.get("program_url") and
+                    dep.get("verification") == "verified_program_citation"
+                ), None)
+                quote = action.get("basis_quote", "")
+                verify(bool(evidence) and bool(quote) and
+                       quote in (evidence or {}).get("citation_quote", ""),
+                       loc, "program review requires independently verified literal citation")
+            else:
+                verify(False, loc, "unsupported institutional review evidence tier")
+            if action.get("ai"):
+                ai = action["ai"]
+                model = source.get("analysis", {}).get("ai", {})
+                if ai.get("work_impact"):
+                    original = next((
+                        row for row in model.get("institution_reviews", [])
+                        if row.get("review_id") == action.get("id") and
+                        row.get("agency") == institution and
+                        row.get("article") == article
+                    ), None)
+                    verify(bool(original) and
+                           ai.get("work_impact") == original.get("work_impact") and
+                           ai.get("question") == original.get("review_question"),
+                           loc, "institutional AI draft must match validated actor/quote")
+                elif ai.get("reason"):
+                    original = next((
+                        row for row in model.get("program_reviews", [])
+                        if row.get("program_id") == action.get("program_id") and
+                        row.get("agency") == institution and
+                        row.get("article") == article
+                    ), None)
+                    verify(bool(original) and
+                           ai.get("reason") == original.get("reason") and
+                           ai.get("question") == original.get("review_question"),
+                           loc, "program AI draft must match source-bound review")
+            event_actions += 1
+
+        for j, draft in enumerate(event.get("ai_summaries", [])):
+            loc = pos + f".ai_summaries[{j}]"
+            if not isinstance(draft, dict):
+                verify(False, loc, "AI summary must be object")
+                continue
+            document = docs.get(draft.get("document_id"), {})
+            analysis = document.get("analysis", {})
+            original = next((
+                x for x in analysis.get("ai", {}).get("change_reviews", [])
+                if x.get("article") == draft.get("article")
+            ), None)
+            verify(bool(original) and
+                   draft.get("summary") == (original or {}).get("summary") and
+                   draft.get("before_quote") == (original or {}).get("before_quote") and
+                   draft.get("after_quote") == (original or {}).get("after_quote"),
+                   loc, "AI event summary must reproduce verified source-bound proposal")
+        verify(event.get("ai_count") == len(event.get("ai_summaries", [])), pos,
+               "AI summary count mismatch")
+
+    expected_covered = {
+        d["id"] for d in payload["documents"]
+        if (d.get("analysis", {}).get("status") in {"enactment", "repeal"} or
+            (d.get("analysis", {}).get("status") in
+             {"compared", "partial_compared"} and
+             d.get("analysis", {}).get("changes")))
+    }
+    verify(covered_source_ids == expected_covered, "events",
+           "officially changed source documents must form exactly one policy event")
+
     for key in ("manual_institutions", "inferred_programs_count_as_confirmed",
                 "internal_compliance_status_known"):
         verify(payload.get("principles", {}).get(key) is False, "principles." + key,
@@ -255,6 +449,8 @@ def validate_public(payload: dict) -> dict:
         "source_events": len(docs),
         "changed_provisions": changes_count,
         "confirmed_direct_legal_references": len(payload["relationships"]),
+        "verified_policy_events": len(payload["events"]),
+        "source_bound_institutional_reviews": event_actions,
     }
 
 

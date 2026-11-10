@@ -3,78 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="정책 변경의 공식 신구 근거부터 AI 검토 결과, 공공기관별 영향 확인까지 한 화면에서 추적합니다.">
-  <title>정책도미노 NEXT | 정책 변경 영향 분석</title>
+  <meta name="description" content="공식 정책 변경 사건에서 공공기관·사업별 업무 영향과 검토할 변경사항을 확인합니다.">
+  <title>정책도미노 NEXT | 정책 변경과 공공기관 업무 영향</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-<header class="hero">
-  <div class="hero-inner">
-    <div class="brand">POLICY DOMINO <span>NEXT</span></div>
-    <h1>바뀐 정책, 무엇을 검토해야 할까?</h1>
-    <p>공식 변경 근거와 AI 검토 결과를 구분해 보여줍니다. 공공기관에 필요한 검토 지점을 확인하세요.</p>
+<header class="topbar">
+  <div class="top-inner">
+    <div class="brand">POLICY <strong>DOMINO</strong> <span>NEXT</span></div>
+    <div class="brand-sub">정책 변화 → 공공기관 업무 영향</div>
   </div>
 </header>
-
-<section class="overview" aria-label="정책 수집 및 AI 분석 현황">
-  <div class="overview-title">
-    <div>
-      <h2>분석 현황</h2>
-      <p>공식 변경 사건과 AI가 실제 분석한 사건을 구분합니다.</p>
-    </div>
-    <span class="update-time" id="updated">자료 확인 중</span>
+<div class="intro">
+  <div class="intro-copy">
+    <p class="eyebrow">공식 정책 변경 자동 분석</p>
+    <h1>무엇이 바뀌고, 어디에 영향을 줄까?</h1>
+    <p>개정 내용을 하나의 사건으로 묶고, 근거가 확인된 기관별 업무 변경 검토사항을 보여줍니다.</p>
   </div>
-  <div class="stats">
-    <div class="stat"><span>공식 수집 사건</span><strong id="indexed-count">—</strong></div>
-    <div class="stat"><span>신구 변경 확인</span><strong id="verified-count">—</strong></div>
-    <div class="stat stat-ai"><span>AI 분석 완료</span><strong id="analyzed-count">—</strong></div>
-    <div class="stat"><span>AI 분석 대기</span><strong id="pending-count">—</strong></div>
+  <div class="summary" aria-label="확인된 정책 변경 결과">
+    <div><small>정책 변경 사건</small><strong id="stat-events">—</strong></div>
+    <div><small>검토 대상 기관</small><strong id="stat-agencies">—</strong></div>
+    <div><small>업무 검토사항</small><strong id="stat-actions">—</strong></div>
   </div>
-  <div class="run-summary" id="ai-run-summary" aria-live="polite">AI 실행 이력 확인 중</div>
-  <div class="quick-head">
-    <h3>최근 AI 분석 결과</h3>
-    <button type="button" id="show-ai" class="text-action">분석 완료 전체 보기</button>
-  </div>
-  <div id="ai-picks" class="ai-picks"><p class="sub">분석 결과를 확인하는 중입니다.</p></div>
-</section>
-
-<main class="container" id="layout">
-  <aside class="panel" id="listPanel" aria-label="공식 정책 변경 목록">
-    <div class="panel-head">
-      <div class="panel-title-row">
-        <h2>정책 변경 찾기</h2>
-        <span class="panel-kicker">공식자료 기준</span>
+</div>
+<main id="layout" class="layout">
+  <aside class="panel list-panel" id="listPanel" aria-label="정책 변경 사건 목록">
+    <div class="list-heading">
+      <div class="panel-title">
+        <h2>신규·개정 정책</h2>
+        <span id="list-count">조회 중</span>
       </div>
-      <input class="search" id="search" type="search" autocomplete="off" placeholder="정책명 · 기관명 검색" aria-label="정책명 또는 소관기관 검색">
-      <div class="filters" aria-label="정책 목록 필터">
-        <div class="filter-group primary-filters" role="group" aria-label="분석 상태">
-          <button type="button" class="filter-chip filter-ai" id="mode-ai" data-mode="ai" aria-pressed="false">AI 분석 완료</button>
-          <button type="button" class="filter-chip" id="mode-verified" data-mode="verified" aria-pressed="false">신구 확인</button>
-          <button type="button" class="filter-chip active" id="mode-all" data-mode="all" aria-pressed="true">전체</button>
-        </div>
-        <div class="filter-group" role="group" aria-label="변경 유형">
-          <button type="button" class="filter-chip" id="mode-new" data-mode="new" aria-pressed="false">제정</button>
-          <button type="button" class="filter-chip" id="mode-amended" data-mode="amended" aria-pressed="false">개정</button>
-          <button type="button" class="filter-chip" id="mode-repealed" data-mode="repealed" aria-pressed="false">폐지</button>
-        </div>
+      <div class="filter-row" role="group" aria-label="정책 변경 사건 필터">
+        <button id="mode-all" type="button" class="filter active" aria-pressed="true">전체</button>
+        <button id="mode-impact" type="button" class="filter" aria-pressed="false">기관 영향</button>
+        <button id="mode-benefit" type="button" class="filter" aria-pressed="false">급여·지원기준</button>
+        <button id="mode-new" type="button" class="filter" aria-pressed="false">제정</button>
+        <button id="mode-amended" type="button" class="filter" aria-pressed="false">개정</button>
+        <button id="mode-repealed" type="button" class="filter" aria-pressed="false">폐지</button>
       </div>
-      <div class="feed-state" id="feed-state" aria-live="polite">정책 데이터를 확인하는 중</div>
+      <input id="search" type="search" class="search" aria-label="정책·기관·사업 검색"
+        placeholder="정책명·기관명·사업명 검색" autocomplete="off">
+      <div class="source-status" id="source-status" aria-live="polite">공식 근거 데이터 확인 중</div>
     </div>
-    <div class="item-list" id="items"><div class="empty">공식자료를 불러오는 중입니다.</div></div>
-    <button class="more" id="more" hidden>정책 더 보기</button>
+    <div id="items" class="items"><p class="empty">변경 사건을 불러오는 중입니다.</p></div>
+    <button id="more" class="more" type="button" hidden>변경 사건 더 보기</button>
   </aside>
-
-  <section class="panel detail-pane" id="detailPanel" aria-label="선택한 정책의 변경 내용과 AI 분석 결과">
-    <nav class="detail-toolbar" aria-label="목록으로 돌아가기">
-      <button type="button" class="back-to-list" id="backToList">← 정책 목록</button>
-    </nav>
-    <article class="detail" id="detail" aria-live="polite"><div class="empty">정책을 선택하면 공식 근거와 검토 내용을 볼 수 있습니다.</div></article>
+  <section class="panel detail-panel" id="detailPanel" aria-label="선택한 정책의 변경 및 기관별 업무 검토">
+    <div class="mobile-back"><button id="backToList" type="button">← 정책 목록</button></div>
+    <article id="detail" class="detail" aria-live="polite">
+      <p class="empty">왼쪽의 정책 변경 사건을 선택하세요.</p>
+    </article>
   </section>
 </main>
 <footer class="footer">
-  공식자료 출처: <a href="https://www.law.go.kr/" target="_blank" rel="noopener noreferrer">국가법령정보센터</a> ·
+  공식 근거: <a href="https://www.law.go.kr/" target="_blank" rel="noopener noreferrer">국가법령정보센터</a> ·
   <a href="https://www.alioplus.go.kr/" target="_blank" rel="noopener noreferrer">알리오플러스</a>
-  <span> · AI 분석은 검토 초안이며 기관의 수정 의무를 확정하지 않습니다.</span>
+  <span id="updated"></span>
 </footer>
 <script src="./presentation.js"></script>
 <script src="./app.js"></script>

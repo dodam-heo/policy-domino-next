@@ -31,6 +31,7 @@ INSCRIPTION = (
     "사용자 입력에 없는 법률·기관·사업·시기·의무를 만들어내지 않는다. "
     "제시된 공식 변경 조문의 실제 전후 차이를 요약하고 근거에 기반한 검토 질문을 제안하라. "
     "사업별 분석은 입력에 포함된 검증된 조문 인용 사업에만 작성한다. "
+    "기관별 분석은 institutions 안에 있는 review_id·기관·조문·원문 근거에만 한정해 업무 영향을 설명한다. "
     "기관이 변경을 해야 한다거나 이미 반영했다는 사실을 확정하지 말고 검토 질문 형식으로 쓴다. "
     "before_quote, after_quote, program_quote는 제공한 원문에서 글자 그대로 복사한 짧은 인용문이어야 한다. "
     "근거가 없으면 항목을 비워라. JSON 스키마에 맞는 출력만 작성한다."
@@ -62,6 +63,22 @@ PROGRAM_SCHEMA = {
         "review_question": {"type": "string"},
     },
 }
+INSTITUTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["review_id", "article", "agency", "basis_quote",
+                 "work_impact", "review_question"],
+    "properties": {
+        "review_id": {"type": "string"},
+        "article": {"type": "string"},
+        "agency": {"type": "string"},
+        "basis_quote": {"type": "string"},
+        "work_impact": {"type": "string"},
+        "review_question": {"type": "string"},
+    },
+}
+
+
 RESULT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -69,6 +86,7 @@ RESULT_SCHEMA = {
     "properties": {
         "change_reviews": {"type": "array", "items": CHANGE_SCHEMA},
         "program_reviews": {"type": "array", "items": PROGRAM_SCHEMA},
+        "institution_reviews": {"type": "array", "items": INSTITUTION_SCHEMA},
     },
 }
 
@@ -122,8 +140,28 @@ def source_packet(state: dict, event_id: str, dependencies: list[dict]) -> dict 
         })
         if len(programs) >= 6:
             break
-    return {"event_id": event_id, "title": doc["title"], "changes": changes,
-            "programs": programs}
+    packet = {
+        "event_id": event_id, "title": doc["title"],
+        "changes": changes, "programs": programs,
+    }
+    # The institution candidates are constructed by the SAME official-source
+    # event engine used for publication, not invented in the model prompt.
+    from .events import build_events
+    scoped = build_events({event_id: doc}, {event_id: finding},
+                          program_dependencies=dependencies)
+    if scoped:
+        institutions = [{
+            "review_id": item["id"],
+            "article": item["article"], "agency": item["institution"],
+            "program": item["program"],
+            "task": item["task"],
+            "tier": item["basis_tier"],
+            "basis_quote": item["basis_quote"][:250],
+        } for item in scoped[0]["institutional_reviews"]
+            if item["article"] in articles][:6]
+        if institutions:
+            packet["institutions"] = institutions
+    return packet
 
 
 def source_fingerprint(packet: dict) -> str:
@@ -237,7 +275,9 @@ def validate_draft(packet: dict, proposed: dict) -> dict:
     """Reject hallucinated document IDs, agencies, quotations and obligations."""
     if not isinstance(proposed, dict):
         raise AIAnalysisError("AI output must be an object")
-    if set(proposed) != {"change_reviews", "program_reviews"}:
+    keys = set(proposed)
+    if not {"change_reviews", "program_reviews"} <= keys or not keys <= {
+            "change_reviews", "program_reviews", "institution_reviews"}:
         raise AIAnalysisError("Unexpected AI output keys")
     changes = {c["article"]: c for c in packet["changes"]}
     programs = {(p["program_id"], p["article"]): p for p in packet["programs"]}
@@ -289,9 +329,38 @@ def validate_draft(packet: dict, proposed: dict) -> dict:
                 not 5 <= len(row[key_name]) <= 500):
                 raise AIAnalysisError("AI program rationale invalid")
         program_items.append(dict(row))
+    institution_items = []
+    source_institutions = {
+        i["review_id"]: i for i in packet.get("institutions", [])
+    }
+    institution_rows = proposed.get("institution_reviews", [])
+    if (not isinstance(institution_rows, list) or
+            len(institution_rows) > len(source_institutions)):
+        raise AIAnalysisError("Institution review size invalid")
+    seen.clear()
+    for row in institution_rows:
+        if not isinstance(row, dict) or set(row) != set(INSTITUTION_SCHEMA["required"]):
+            raise AIAnalysisError("Invalid institution review fields")
+        review_id = row["review_id"]
+        source = source_institutions.get(review_id)
+        if not source or review_id in seen:
+            raise AIAnalysisError("Institution review reference not verified")
+        seen.add(review_id)
+        quote = row["basis_quote"]
+        if (row["article"] != source["article"] or
+                row["agency"] != source["agency"] or
+                not isinstance(quote, str) or not quote.strip() or
+                len(quote) > 180 or quote not in source["basis_quote"]):
+            raise AIAnalysisError("Institution review has unsupported literal evidence")
+        for field in ("work_impact", "review_question"):
+            if (not isinstance(row[field], str) or
+                    not 5 <= len(row[field]) <= 450):
+                raise AIAnalysisError("Invalid institution analysis text")
+        institution_items.append(dict(row))
     if not check_items:
         raise AIAnalysisError("no_supported_change_reviews")
-    return {"change_reviews": check_items, "program_reviews": program_items}
+    return {"change_reviews": check_items, "program_reviews": program_items,
+            "institution_reviews": institution_items}
 
 
 TRANSIENT_API_ERRORS = frozenset({
@@ -466,7 +535,8 @@ def publishable_draft(state: dict, event_id: str, dependencies: list[dict]) -> d
     # Check every generated quote again on each publish; source drift invalidates it.
     try:
         validate_draft(packet, {k: record[k] for k in
-                               ("change_reviews", "program_reviews")})
+                               ("change_reviews", "program_reviews",
+                                "institution_reviews") if k in record})
     except (AIAnalysisError, KeyError, TypeError):
         return None
     return dict(record)

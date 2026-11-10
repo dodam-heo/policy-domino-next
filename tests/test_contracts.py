@@ -4,10 +4,11 @@ import unittest
 
 from policy_domino.contracts import ContractError, validate_public
 from policy_domino.core import SCHEMA
+from policy_domino.events import build_events
 
 
 def example():
-    return {
+    data = {
         "schema": SCHEMA,
         "documents": [{
             "id": "official-1", "source": "law", "title": "가상 지원기준",
@@ -31,6 +32,10 @@ def example():
             "internal_compliance_status_known": False,
         },
     }
+    doc = data["documents"][0]
+    data["events"] = build_events({doc["id"]: doc},
+                                 {doc["id"]: doc["analysis"]})
+    return data
 
 
 class EvidenceContractTests(unittest.TestCase):
@@ -81,7 +86,39 @@ class EvidenceContractTests(unittest.TestCase):
         x = example()
         x["documents"][0]["analysis"] = {
             "status": "history_unavailable", "changes": []}
+        x["events"] = []
         self.assertEqual(validate_public(x)["changed_provisions"], 0)
+
+    def test_forged_institutional_review_fails_contract(self):
+        x = example()
+        source = x["documents"][0]
+        event = x["events"][0]
+        review = {
+            "id": "fake", "document_id": source["id"], "article": "제3조",
+            "institution": "근거없는가상기관", "program": "",
+            "task": "상관없는 사업 변경", "source_url": source["url"],
+            "basis_tier": "direct_regulated_institution",
+            "basis_quote": "10일 이내 처리한다",
+            "implementation_status": "not_verified",
+        }
+        event["institutional_reviews"] = [review]
+        event["institution_count"] = 1
+        event["review_count"] = 1
+        with self.assertRaisesRegex(ContractError, "direct subject requires"):
+            validate_public(x)
+
+    def test_forged_omnibus_merge_fails_contract(self):
+        x = example()
+        doc = copy.deepcopy(x["documents"][0])
+        doc["id"] = "official-2"
+        doc["published_at"] = "2026-11-10"
+        x["documents"].append(doc)
+        x["events"][0]["source_documents"].append(doc["id"])
+        x["events"][0]["source_count"] = 2
+        x["events"][0]["members"].append(
+            {"id": doc["id"], "title": doc["title"]})
+        with self.assertRaisesRegex(ContractError, "identical official promulgation"):
+            validate_public(x)
 
 
 if __name__ == "__main__":

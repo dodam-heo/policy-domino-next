@@ -52,6 +52,8 @@ def parse_record(node: ET.Element, source: str) -> dict | None:
     number = field(node, "공포번호", True) or field(node, "발령번호", True)
     revision = field(node, "제개정구분명", True) or field(node, "제개정구분", True)
     ministry = field(node, cfg["ministry"], True)
+    law_type = (field(node, "법령구분명", True) or
+                field(node, "법령구분", True) or cfg["type"])
     if source == "ordin" and not ministry:
         ministry = field(node, "지자체명", True)
     return {
@@ -59,7 +61,7 @@ def parse_record(node: ET.Element, source: str) -> dict | None:
         "stable_id": stable, "serial": serial, "title": title,
         "published_at": issued, "effective_date": date_string(field(node, "시행일자", True)),
         "number": number, "revision": revision,
-        "ministry": ministry, "kind": cfg["type"],
+        "ministry": ministry, "kind": cfg["type"], "law_type": law_type,
         "url": official_url(source, title),
     }
 

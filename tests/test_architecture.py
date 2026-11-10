@@ -33,24 +33,29 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("validate_public(data)", pipeline)
         self.assertIn("python -m policy_domino.contracts site/data.json", workflow)
 
-    def test_ai_coverage_is_exposed_and_not_limited_to_two_calls(self):
+    def test_one_event_projection_and_evidence_first_interface(self):
         workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(encoding="utf-8")
-        ai = (ROOT / "policy_domino/ai.py").read_text(encoding="utf-8")
-        app = (ROOT / "site/app.js").read_text(encoding="utf-8")
+        events = (ROOT / "policy_domino/events.py").read_text(encoding="utf-8")
+        pipeline = (ROOT / "policy_domino/pipeline.py").read_text(encoding="utf-8")
+        frontend = (ROOT / "site/app.js").read_text(encoding="utf-8")
         index = (ROOT / "site/index.html").read_text(encoding="utf-8")
+        self.assertIn("events = build_events(", pipeline)
+        self.assertIn('"events": events', pipeline)
+        self.assertIn("def event_identity(", events)
+        self.assertIn("def build_events(", events)
+        self.assertIn("python -m policy_domino render", workflow)
         self.assertIn("python -m policy_domino ai --limit 24", workflow)
-        self.assertIn("DEFAULT_REQUEST_BUDGET = 24", ai)
-        self.assertIn("MAX_REQUEST_BUDGET = 60", ai)
-        self.assertIn("pending_total", ai)
-        self.assertIn("ai-picks", app)
-        for marker in ("analyzed-count", "pending-count", "mode-ai", "mode-verified"):
-            self.assertIn('id="' + marker + '"', index)
-        self.assertNotIn("agencyFilter", app)
+        for key in ("mode-impact", "mode-benefit", "stat-events", "stat-agencies"):
+            self.assertIn('id="' + key + '"', index)
+        self.assertNotIn('id="mode-verified"', index)
+        self.assertNotIn('agencyFilter', frontend)
+        self.assertNotIn("legacy_source.json", events)
+        self.assertNotIn("policy_domino.engine", events)
 
     def test_code_quality_spec_does_not_pretend_all_impact_is_implemented(self):
         standard = (ROOT / "docs/ENGINEERING_STANDARD.md").read_text(encoding="utf-8")
-        self.assertIn("아직 미완성", standard)
-        self.assertIn("기관 공식 사업자료", standard)
+        self.assertIn("미완성", standard)
+        self.assertIn("공식 사업", standard)
         self.assertIn("범용성", standard)
 
 

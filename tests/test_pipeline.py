@@ -139,7 +139,12 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(report["ai_progress"]["pending_events"],
                              report["ai_progress"]["verified_events"])
             self.assertEqual(report["ai_progress"]["source_events"],
-                             len(report["documents"]))
+                             len(report["events"]))
+            self.assertLessEqual(len(report["events"]), len(report["documents"]))
+            self.assertTrue(all(e["source_documents"] for e in report["events"]))
+            self.assertEqual(
+                report["ai_progress"]["institutional_reviews"],
+                sum(e["review_count"] for e in report["events"]))
             self.assertTrue(all(not x.get("reference_only")
                                 for x in report["documents"]))
 

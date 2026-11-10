@@ -85,6 +85,38 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(packet["programs"][0]["article"], "제3조")
         self.assertIsNone(source_packet(state, "unknown", links))
 
+    def test_source_verified_institution_review_is_model_bound(self):
+        state, links = state_and_links()
+        packet = source_packet(state, "e1", links)
+        self.assertEqual(len(packet["institutions"]), 1)
+        proof = packet["institutions"][0]
+        self.assertEqual(proof["agency"], "가상장학공사")
+        draft = proposal(packet)
+        draft["institution_reviews"] = [{
+            "review_id": proof["review_id"],
+            "article": proof["article"],
+            "agency": proof["agency"],
+            "basis_quote": proof["basis_quote"][:70],
+            "work_impact": "교육비 지원운영 사업의 산정 기준이 달라지는지 검토합니다.",
+            "review_question": "공식 사업 운영 기준의 변경 전후를 대조해야 하는가?",
+        }]
+        validated = validate_draft(packet, draft)
+        self.assertEqual(len(validated["institution_reviews"]), 1)
+        self.assertEqual(validated["institution_reviews"][0]["review_id"],
+                         proof["review_id"])
+        wrong = json.loads(json.dumps(draft, ensure_ascii=False))
+        wrong["institution_reviews"][0]["agency"] = "출처없는기관"
+        with self.assertRaises(AIAnalysisError):
+            validate_draft(packet, wrong)
+        wrong = json.loads(json.dumps(draft, ensure_ascii=False))
+        wrong["institution_reviews"][0]["basis_quote"] = "공식 문서에 없는 구절"
+        with self.assertRaises(AIAnalysisError):
+            validate_draft(packet, wrong)
+        wrong = json.loads(json.dumps(draft, ensure_ascii=False))
+        wrong["institution_reviews"][0]["review_id"] = "forged-review"
+        with self.assertRaises(AIAnalysisError):
+            validate_draft(packet, wrong)
+
     def test_gemini_request_is_structured_not_keyword_matching(self):
         state, links = state_and_links()
         packet = source_packet(state, "e1", links)

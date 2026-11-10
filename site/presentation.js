@@ -1,134 +1,82 @@
-/* Pure presentation projections. No DOM access and no inferred agency duties. */
+/* Pure projections for source-verified POLICY EVENTS (not raw document rows). */
 (function (global) {
   "use strict";
+  const MODES = Object.freeze([
+    "all","impact","benefit","new","amended","repealed"
+  ]);
+  const BENEFITS = new Set(["금액·비율","선정·자격"]);
 
-  const TYPES = Object.freeze(["all", "new", "amended", "repealed", "verified", "ai"]);
-
-  function policyType(doc) {
-    const revision = String(doc.revision || "");
-    const status = doc.analysis?.status;
-    if (status === "repeal" || /폐지|실효/.test(revision)) return "repealed";
-    if (status === "enactment" || (/제정|신설/.test(revision) && !/개정/.test(revision))) return "new";
-    if (/개정|정정/.test(revision)) return "amended";
-    return "unknown";
+  function category(event) {
+    if (event.kind === "new") return "신규 제정";
+    if (event.kind === "repealed") return "폐지";
+    return "개정";
   }
 
-  function aiComplete(doc) {
-    return doc?.analysis?.ai?.status === "generated" &&
-      Array.isArray(doc.analysis.ai.change_reviews) &&
-      doc.analysis.ai.change_reviews.length > 0;
+  function hasInstitutionalReview(event) {
+    return Array.isArray(event.institutional_reviews) &&
+      event.institutional_reviews.length > 0;
   }
 
-  function hasVerifiedDifference(doc) {
-    return ["compared", "partial_compared"].includes(doc?.analysis?.status) &&
-      Array.isArray(doc.analysis.changes) && doc.analysis.changes.length > 0;
+  function isBenefitEvent(event) {
+    return Array.isArray(event.changes) &&
+      event.changes.some(change => BENEFITS.has(change.category));
   }
 
-  function analysisProgress(documents) {
-    const verified = documents.filter(hasVerifiedDifference).length;
-    const analyzed = documents.filter(aiComplete).length;
-    return {
-      indexed: documents.length, verified, analyzed,
-      pending: Math.max(0, verified - analyzed),
-    };
+  function matches(event, mode) {
+    if (mode === "all") return true;
+    if (mode === "impact") return hasInstitutionalReview(event);
+    if (mode === "benefit") return isBenefitEvent(event);
+    return event.kind === mode;
   }
 
-  function filterDocuments(documents, { query = "", mode = "all" } = {}) {
-    if (!TYPES.includes(mode)) throw new Error("Unsupported policy type");
-    const phrase = String(query).toLocaleLowerCase("ko-KR");
-    return [...documents].filter(doc => {
-      if (!String(doc.title + " " + (doc.ministry || "")).toLocaleLowerCase("ko-KR").includes(phrase)) {
-        return false;
-      }
-      if (mode === "ai") return aiComplete(doc);
-      if (mode === "verified") return hasVerifiedDifference(doc);
-      return mode === "all" || policyType(doc) === mode;
-    }).sort((left, right) =>
-      String(right.published_at || "").localeCompare(String(left.published_at || "")) ||
-      String(right.serial || "").localeCompare(String(left.serial || "")));
+  function filterEvents(events, {mode = "all", query = ""} = {}) {
+    if (!MODES.includes(mode)) throw new Error("Unsupported event filter");
+    const term = String(query).trim().toLocaleLowerCase("ko-KR");
+    return [...events].filter(event => {
+      const names = (event.institutional_reviews || []).map(x =>
+        x.institution + " " + (x.program || "")).join(" ");
+      const searchable = [
+        event.title, event.headline, event.ministry,
+        ...(event.members || []).map(x => x.title),
+        names,
+      ].join(" ").toLocaleLowerCase("ko-KR");
+      return matches(event, mode) && searchable.includes(term);
+    }).sort((a,b) =>
+      String(b.published_at || "").localeCompare(String(a.published_at || "")) ||
+      (b.institution_count || 0) - (a.institution_count || 0) ||
+      String(a.id || "").localeCompare(String(b.id || "")));
   }
 
-  function groupByAgency(rows) {
-    const groups = new Map();
-    const seen = new Set();
-    for (const row of rows) {
-      const agency = String(row.agency || "").trim();
+  function impactGroups(event) {
+    const grouped = new Map();
+    for (const review of event.institutional_reviews || []) {
+      const agency = String(review.institution || "").trim();
       if (!agency) continue;
-      const key = JSON.stringify([agency, row.program, row.review, row.url, row.location]);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (!groups.has(agency)) groups.set(agency, []);
-      groups.get(agency).push(row);
+      if (!grouped.has(agency)) grouped.set(agency, []);
+      grouped.get(agency).push(review);
     }
-    return groups;
+    return Array.from(grouped, ([agency, reviews]) => ({
+      agency, reviews,
+    })).sort((a,b) => a.agency.localeCompare(b.agency, "ko-KR"));
   }
 
-  function impactView(doc, relationships = [], crossDocumentCandidates = [], programDependencies = []) {
-    const edges = relationships.filter(edge => edge.source_event_id === doc.id);
-    const actions = [];
-    const namedActors = [];
-    const programs = [];
-    for (const dep of programDependencies) {
-      if (dep.source_event_id !== doc.id ||
-          dep.verification !== "verified_program_citation" ||
-          dep.operational_program_verified !== true ||
-          dep.required_action_verified !== false ||
-          !dep.agency || !dep.program || !dep.program_url || !dep.citation_quote) continue;
-      programs.push({
-        agency: dep.agency, program: dep.program, programId: dep.program_id,
-        article: dep.changed_article, path: dep.path,
-        review: dep.review || "사업에 변경된 정책 기준이 적용되는지 확인",
-        citation: dep.citation_quote, url: dep.program_url,
-        location: dep.referenced_article || "", evidence: "verified_citation"
-      });
-    }
-
-    for (const edge of edges) {
-      // An exact legal citation is never an independently established program duty.
-      if (edge.operational_program_verified === true &&
-          edge.required_action_verified === true &&
-          edge.verified_agency && edge.verified_program && edge.required_review &&
-          edge.official_operational_url) {
-        actions.push({
-          agency: edge.verified_agency, program: edge.verified_program,
-          review: edge.required_review, url: edge.official_operational_url,
-          location: edge.operational_location || "", evidence: "program"
-        });
-      }
-    }
-    for (const candidate of crossDocumentCandidates) {
-      if (candidate.source_event_id !== doc.id ||
-          candidate.operational_program_verified !== false ||
-          candidate.required_action_verified !== false ||
-          !candidate.actor || !candidate.source_url) continue;
-      namedActors.push({
-        agency: candidate.actor, program: candidate.work_regulation || "관련 규정",
-        location: candidate.target_location || "",
-        review: candidate.review || "관련 조문 검토",
-        url: candidate.source_url, evidence: "cited_actor"
-      });
-    }
-    for (const candidate of doc.analysis?.direct_actor_reviews || []) {
-      if (candidate.operational_program_verified !== false ||
-          candidate.required_action_verified !== false ||
-          !candidate.actor || !candidate.source_url) continue;
-      namedActors.push({
-        agency: candidate.actor, program: "변경 조문",
-        location: candidate.article || "",
-        review: candidate.review || "관련 조문 검토",
-        url: candidate.source_url, evidence: "named_actor"
-      });
-    }
+  function overview(events, progress = {}) {
+    const agencies = new Set(
+      events.flatMap(e => (e.institutional_reviews || [])
+        .map(x => x.institution).filter(Boolean))
+    );
     return {
-      actions: groupByAgency(actions),
-      programs: groupByAgency(programs),
-      namedActors: groupByAgency(namedActors),
-      citations: edges,
+      events: events.length,
+      institutions: agencies.size,
+      actions: events.reduce((sum,e) =>
+        sum + (e.institutional_reviews || []).length, 0),
+      sources: Number(progress.indexed_documents || 0),
+      comparedDocuments: Number(progress.verified_document_changes || 0),
     };
   }
 
   global.PolicyDominoView = Object.freeze({
-    policyType, filterDocuments, aiComplete, hasVerifiedDifference, analysisProgress,
-    groupByAgency, impactView
+    MODES, category, hasInstitutionalReview, isBenefitEvent,
+    filterEvents, impactGroups, overview,
   });
 })(window);
