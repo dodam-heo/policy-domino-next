@@ -63,6 +63,10 @@ jobs:
           for tag in ("검색 결과", "전체", "검색 결과가 존재하지", "fnSetPage", "paging"):
               match = re.search(tag, page2)
               print("PAGE2 MARKER", tag, repr(page2[max(0, match.start()-120):match.end()+180]) if match else "none")
+          form_pos = content.find('id="listFrm"')
+          print("LIST FORM HTML:", repr(content[max(0, form_pos-120):form_pos+2200]) if form_pos>=0 else "not found")
+          pag2_pos = page2.find('class="paging"')
+          print("PAGE2 PAGING:", repr(page2[max(0,pag2_pos-50):pag2_pos+650]) if pag2_pos>=0 else "not found")
           print("PAGE2 comparison:", len(page2),
                 "page1 ids:", listing_detail_urls(content)[:6],
                 "page2 ids:", listing_detail_urls(page2)[:6])
