@@ -293,7 +293,8 @@
     for(const mode of FILTER_MODES){
       const control=$("mode-"+mode);
       const active=mode===state.mode;
-      control.classList.toggle("active",active);
+      if(active)control.classList.add("active");
+      else control.classList.remove("active");
       control.setAttribute("aria-pressed",String(active));
     }
   }
