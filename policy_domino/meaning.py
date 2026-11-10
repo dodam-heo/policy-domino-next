@@ -80,6 +80,49 @@ def _score_fragment(old: str, new: str) -> int:
     return score
 
 
+def _large_clause_fragment(before: str, after: str) -> list[dict]:
+    """Linear fallback for huge annexes; never perform quadratic token diff.
+
+    Remove the identical prefix and suffix. This isolates a genuine changed
+    source span even when a long clause has no paragraph separators.
+    """
+    left = 0
+    limit = min(len(before), len(after))
+    while left < limit and before[left] == after[left]:
+        left += 1
+    right = 0
+    while (right < limit-left and
+           before[len(before)-right-1] == after[len(after)-right-1]):
+        right += 1
+    last_old = len(before)-right if right else len(before)
+    last_new = len(after)-right if right else len(after)
+
+    def excerpt(text: str, first: int, last: int) -> str:
+        if first == last:
+            first = max(0, first - 35)
+            last = min(len(text), last + 45)
+        else:
+            first = max(0, first - 35)
+            last = min(len(text), last + 35)
+        # For multiple distant replacements keep a bounded preview,
+        # while full official before/after text remains available on demand.
+        if last - first > 250:
+            last = first + 190
+        # Expand toward a complete word where possible.
+        while first > 0 and not text[first-1].isspace() and (
+                text[first-1].isalnum()) and first > max(0,left-100):
+            first -= 1
+        max_end = min(len(text), last + 80)
+        while last < max_end and text[last].isalnum():
+            last += 1
+        return _abbreviate(text[first:last])
+
+    a = excerpt(before, left, last_old)
+    b = excerpt(after, left, last_new)
+    return [{"before": a, "after": b,
+             "score": _score_fragment(a,b), "offset": left}]
+
+
 def explain(before: str, after: str) -> dict:
     """Describe *literal* changed phrases, distinguishing mechanical edits.
 
@@ -87,22 +130,28 @@ def explain(before: str, after: str) -> dict:
     AI-generated natural-language description belongs in a separate, verified
     field instead of replacing official-source evidence.
     """
-    a, b = _tokens(before), _tokens(after)
     ranked = []
-    for tag, i, j, k, m in difflib.SequenceMatcher(
-            None, a, b, autojunk=False).get_opcodes():
-        if tag == "equal":
-            continue
-        old = _local_phrase(a, i, j)
-        new = _local_phrase(b, k, m)
-        if old == new:
-            continue
-        ranked.append({
-            "before": _abbreviate(old),
-            "after": _abbreviate(new),
-            "score": _score_fragment(old, new),
-            "offset": i,
-        })
+    # Huge published annexes may contain tens of thousands of repeated tokens.
+    # SequenceMatcher(autojunk=False) can become prohibitively slow there.
+    if len(before) + len(after) > 8000:
+        ranked = _large_clause_fragment(before, after)
+    else:
+        a, b = _tokens(before), _tokens(after)
+        for tag, i, j, k, m in difflib.SequenceMatcher(
+                None, a, b, autojunk=(len(a)+len(b) > 350)
+                ).get_opcodes():
+            if tag == "equal":
+                continue
+            old = _local_phrase(a, i, j)
+            new = _local_phrase(b, k, m)
+            if old == new:
+                continue
+            ranked.append({
+                "before": _abbreviate(old),
+                "after": _abbreviate(new),
+                "score": _score_fragment(old, new),
+                "offset": i,
+            })
     if not ranked:
         # Rare case where tokenization erased only a whitespace adjustment.
         ranked = [{"before": _abbreviate(before), "after": _abbreviate(after),

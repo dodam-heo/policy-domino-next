@@ -69,6 +69,18 @@ class MeaningTests(unittest.TestCase):
         self.assertTrue(all(not c["meaning"]["editorial"] for c in featured))
         self.assertIn("공고·공표 방식", [x["meaning"]["label"] for x in featured])
 
+    def test_very_long_annex_uses_bounded_diff_and_keeps_real_change(self):
+        shared = "관할 공공업무의 집행 기준과 절차를 확인한다. " * 700
+        before = shared + "관보에 공고한다. " + shared
+        after = shared + "인터넷 홈페이지에 공고한다. " + shared
+        result = explain(before, after)
+        self.assertEqual(result["label"], "공고·공표 방식")
+        self.assertTrue(result["before"])
+        self.assertTrue(result["after"])
+        self.assertLess(len(result["before"]), 400)
+        self.assertLess(len(result["after"]), 400)
+        self.assertIn("공고", before[result["priority"]*0:])
+
     def test_unclassified_rule_still_has_intelligible_description(self):
         result = explain("제2조 필요한 조치는 A에 따른다.",
                          "제2조 필요한 조치는 B에 따른다.")
