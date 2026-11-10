@@ -188,6 +188,62 @@ def validate_public(payload: dict) -> dict:
                    "indirect link requires a proven intermediary legal edge")
         else:
             verify(False, pos, "unsupported program dependency path")
+    # LLM analysis is evidence-anchored draft text, never official action.
+    for i, document in enumerate(payload["documents"]):
+        analysis = document.get("analysis", {}) if isinstance(document, dict) else {}
+        ai = analysis.get("ai") if isinstance(analysis, dict) else None
+        if ai is None:
+            continue
+        pos = f"documents[{i}].analysis.ai"
+        if not isinstance(ai, dict):
+            verify(False, pos, "AI analysis must be an object")
+            continue
+        verify(ai.get("status") == "generated" and bool(ai.get("model")),
+               pos, "AI model invocation not recorded")
+        verify(ai.get("required_action_verified") is False,
+               pos, "AI cannot confirm mandatory institutional actions")
+        fingerprint = ai.get("source_sha256", "")
+        verify(isinstance(fingerprint, str) and len(fingerprint) == 64 and
+               all(ch in "0123456789abcdef" for ch in fingerprint),
+               pos, "source evidence fingerprint required")
+        source_changes = {
+            ch.get("article"): ch for ch in analysis.get("changes", [])
+            if isinstance(ch, dict)
+        }
+        for j, proposal in enumerate(ai.get("change_reviews", [])):
+            location = pos + f".change_reviews[{j}]"
+            if not isinstance(proposal, dict):
+                verify(False, location, "change review must be object")
+                continue
+            before_after = source_changes.get(proposal.get("article"), {})
+            before_q = proposal.get("before_quote")
+            after_q = proposal.get("after_quote")
+            verify(bool(before_after) and isinstance(before_q, str) and
+                   bool(before_q.strip()) and before_q in before_after.get("before", "") and
+                   isinstance(after_q, str) and bool(after_q.strip()) and
+                   after_q in before_after.get("after", ""),
+                   location, "AI literal before-after evidence not found")
+            verify(bool(proposal.get("summary")) and
+                   bool(proposal.get("review_question")), location,
+                   "AI change review must describe what changed and what to check")
+        for j, proposal in enumerate(ai.get("program_reviews", [])):
+            location = pos + f".program_reviews[{j}]"
+            if not isinstance(proposal, dict):
+                verify(False, location, "program review must be object")
+                continue
+            matched = next((dep for dep in payload.get("program_dependencies", [])
+                            if dep.get("source_event_id") == document.get("id") and
+                            dep.get("program_id") == proposal.get("program_id") and
+                            dep.get("changed_article") == proposal.get("article") and
+                            dep.get("agency") == proposal.get("agency")), None)
+            snippet = proposal.get("program_quote")
+            verify(matched is not None and isinstance(snippet, str) and
+                   bool(snippet.strip()) and
+                   snippet in (matched or {}).get("citation_quote", ""),
+                   location, "AI program quote not found in verified official citation")
+            verify(bool(proposal.get("reason")) and
+                   bool(proposal.get("review_question")), location,
+                   "AI program review lacks concrete rationale or check item")
     for key in ("manual_institutions", "inferred_programs_count_as_confirmed",
                 "internal_compliance_status_known"):
         verify(payload.get("principles", {}).get(key) is False, "principles." + key,
