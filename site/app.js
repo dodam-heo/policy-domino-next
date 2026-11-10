@@ -289,7 +289,16 @@
   }
   const policyType=view.policyType;
   const filtered=()=>view.filterDocuments(state.data?.documents||[],state);
+  function updateModeControls(){
+    for(const mode of FILTER_MODES){
+      const control=$("mode-"+mode);
+      const active=mode===state.mode;
+      control.classList.toggle("active",active);
+      control.setAttribute("aria-pressed",String(active));
+    }
+  }
   function renderList(){
+    updateModeControls();
     const list=$("items");list.replaceChildren();
     const all=filtered();
     $("feed-state").textContent=num(state.data?.documents.length||0)+
