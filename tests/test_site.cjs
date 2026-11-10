@@ -11,9 +11,9 @@ const style=fs.readFileSync("site/styles.css","utf8");
 new vm.Script(app,{filename:"site/app.js"});
 new vm.Script(presenter,{filename:"site/presentation.js"});
 assert.ok(html.indexOf('src="./presentation.js"')<html.indexOf('src="./app.js"'));
-for(const id of ["items","detail","mode-impact","mode-benefit",
-                 "mode-new","mode-amended","mode-repealed","stat-events",
-                 "stat-agencies","stat-actions","search","backToList"]){
+for(const id of ["items","detail","kind-filter","topic-filter",
+                 "impact-filter","stat-events","stat-agencies",
+                 "stat-actions","search","backToList"]){
   assert.ok(html.includes('id="'+id+'"'),"Missing coherent event UI element "+id);
 }
 assert.ok(!html.includes("신구 확인"),"Comparison state is not a user browsing category");
@@ -103,6 +103,11 @@ const items=[
 const payload={
   schema:"policy-domino-next-v1",
   events:items,
+  quality:{analysis_status:{
+    indexed:10166,checked:101,partially_checked:40,
+    unexamined:9840,retryable:204,blocked:21,
+  }},
+  collection_run:{failed_windows:2},
   ai_progress:{
     indexed_documents:10166,verified_document_changes:101,
     verified_clauses:468,ai_analyzed_clauses:24,
@@ -120,8 +125,9 @@ function browser(isMobile=false,hash="",data=payload) {
   const ids=["layout","listPanel","detailPanel","detail","items",
     "stat-events","stat-agencies","stat-actions","list-count",
     "ai-review-progress","institution-link-progress",
+    "analysis-coverage",
     "search","source-status","updated","more","backToList",
-    "mode-all","mode-impact","mode-benefit","mode-new","mode-amended","mode-repealed"];
+    "kind-filter","topic-filter","impact-filter"];
   const elements=new Map(ids.map(id=>[id,new Element()]));
   const body=new Element("body");
   const historyCalls=[];
@@ -162,6 +168,10 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"stat-agencies").textContent,"1");
   assert.equal(node(ui,"stat-actions").textContent,"1");
   assert.ok(node(ui,"source-status").textContent.includes("10,166"));
+  assert.ok(node(ui,"analysis-coverage").textContent.includes("아직 미분석 9,840건"));
+  assert.ok(node(ui,"analysis-coverage").textContent.includes("재확인 대상 204건"));
+  assert.ok(node(ui,"analysis-coverage").textContent.includes("재시도 상한 도달 21건"));
+  assert.ok(node(ui,"analysis-coverage").textContent.includes("수집 미완료 구간 2개"));
   assert.ok(node(ui,"ai-review-progress").textContent.includes("24 / 변경 조문 468건"));
   assert.ok(node(ui,"ai-review-progress").textContent.includes("신규 결과 9건"));
   assert.ok(node(ui,"ai-review-progress").textContent.includes("오류 15건"));
@@ -169,15 +179,27 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"items").children.length,4);
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
                    ["amended","new","ordinary","repealed"]);
-  node(ui,"mode-impact").onclick();
+  const change= (id,value)=> {
+    node(ui,id).value=value;
+    node(ui,id).onchange();
+  };
+  change("impact-filter","linked");
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
-  node(ui,"mode-benefit").onclick();
+  change("impact-filter","all");
+  assert.ok(node(ui,"topic-filter").children.some(x=>x.value==="금액·수치 기준"));
+  assert.ok(!html.includes("급여·지원기준"),"No privileged subject shortcut");
+  change("topic-filter","금액·수치 기준");
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
-  node(ui,"mode-new").onclick();
+  change("topic-filter","all");
+  change("kind-filter","new");
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["new"]);
-  node(ui,"mode-repealed").onclick();
+  change("kind-filter","repealed");
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["repealed"]);
-  node(ui,"mode-all").onclick();
+  change("kind-filter","all");
+  change("impact-filter","unlinked");
+  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
+    ["new","ordinary","repealed"]);
+  change("impact-filter","all");
   node(ui,"search").oninput({target:{value:"가상 지원운영사업"}});
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
   node(ui,"search").oninput({target:{value:""}});

@@ -28,6 +28,7 @@
 </div>
 <section class="coverage-status" aria-label="공식 근거 및 AI 분석 현황">
   <div class="coverage-status-inner">
+    <p id="analysis-coverage">공식 문서의 분석 진행률을 확인하는 중입니다.</p>
     <p id="ai-review-progress">AI 분석 현황을 확인하는 중입니다.</p>
     <p id="institution-link-progress">공공기관·사업 연결 근거를 확인하는 중입니다.</p>
   </div>
@@ -39,13 +40,27 @@
         <h2>신규·개정 정책</h2>
         <span id="list-count">조회 중</span>
       </div>
-      <div class="filter-row" role="group" aria-label="정책 변경 사건 필터">
-        <button id="mode-all" type="button" class="filter active" aria-pressed="true">전체</button>
-        <button id="mode-impact" type="button" class="filter" aria-pressed="false">기관 영향</button>
-        <button id="mode-benefit" type="button" class="filter" aria-pressed="false">급여·지원기준</button>
-        <button id="mode-new" type="button" class="filter" aria-pressed="false">제정</button>
-        <button id="mode-amended" type="button" class="filter" aria-pressed="false">개정</button>
-        <button id="mode-repealed" type="button" class="filter" aria-pressed="false">폐지</button>
+      <div class="filter-grid" aria-label="정책 변경 사건 필터">
+        <label class="filter-field" for="kind-filter">변경 종류
+          <select id="kind-filter" aria-label="변경 종류">
+            <option value="all">전체</option>
+            <option value="new">제정</option>
+            <option value="amended">개정</option>
+            <option value="repealed">폐지</option>
+          </select>
+        </label>
+        <label class="filter-field" for="topic-filter">변경 항목
+          <select id="topic-filter" aria-label="변경 항목">
+            <option value="all">전체 항목</option>
+          </select>
+        </label>
+        <label class="filter-field wide" for="impact-filter">공공기관 연결
+          <select id="impact-filter" aria-label="공공기관 연결">
+            <option value="all">전체</option>
+            <option value="linked">기관별 검토사항 있음</option>
+            <option value="unlinked">연결 근거 확인 전</option>
+          </select>
+        </label>
       </div>
       <input id="search" type="search" class="search" aria-label="정책·기관·사업 검색"
         placeholder="정책명·기관명·사업명 검색" autocomplete="off">

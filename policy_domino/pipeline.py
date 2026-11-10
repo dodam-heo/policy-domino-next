@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import os
 import re
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -54,62 +55,13 @@ def ingest_window(api: LawAPI, state: dict, source: str, first: str, last: str,
 
 
 def collect(api: LawAPI, state: dict, today: dt.date):
-    recent, older = windows(today, int(state.get("cursor_days", 0)))
-    completed = True
-    state["coverage"] = []
-    for source in SOURCES:
-        for version in (("1", "2") if source != "law" else ("1",)):
-            for first, last in (recent, older):
-                try:
-                    complete = ingest_window(api, state, source, first, last, version)
-                    if not complete:
-                        completed = False
-                except Exception as exc:
-                    completed = False
-                    state["coverage"].append({
-                        "source": source, "first": first, "last": last,
-                        "version": version, "complete": False,
-                        "reported": -1, "collected": 0, "pages": 0,
-                        "error": type(exc).__name__ + ": " + str(exc)[:170]})
-    if completed:
-        state["cursor_days"] = int(state.get("cursor_days", 0)) + 7
-    return completed
+    from .coverage import collect_streams
+    return collect_streams(api, state, today, ingest_window)
 
 
 def work_queue(state: dict, today: dt.date, limit: int) -> list[dict]:
-    """Round-robin official sources, prioritizing fresh, retriable versions.
-
-    A source may have tens of thousands of changes: a hard per-run limit
-    is never interpreted as complete discovery or lack of impact.
-    """
-    pool = {source: [] for source in SOURCES}
-    attempts = state.get("attempts", {})
-    for doc in state.get("documents", {}).values():
-        if doc.get("reference_only"):
-            # Baselines fetched during comparison are not new events.
-            continue
-        key = doc["id"]
-        finding = state.get("findings", {}).get(key, {})
-        if finding.get("status") in TERMINAL:
-            continue
-        attempt = attempts.get(key, {})
-        if attempt.get("count", 0) >= MAX_ATTEMPTS:
-            continue
-        if attempt.get("last_date") == today.isoformat():
-            continue
-        pool[doc["source"]].append(doc)
-    for source in SOURCES:
-        pool[source].sort(key=lambda d: (
-            d.get("published_at", ""), -attempts.get(d["id"], {}).get("count", 0),
-            d.get("serial", "")), reverse=True)
-    picked = []
-    while len(picked) < limit and any(pool.values()):
-        for source in SOURCES:
-            if len(picked) >= limit:
-                break
-            if pool[source]:
-                picked.append(pool[source].pop(0))
-    return picked
+    from .coverage import fair_work_queue
+    return fair_work_queue(state, today, limit)
 
 
 def _prior_from_catalog(state: dict, doc: dict):
@@ -214,44 +166,95 @@ def quality(state: dict) -> dict:
             "unavailable_bodies": counts["body_unavailable"],
             "unavailable_history": counts["history_unavailable"] + counts["baseline_unavailable"],
         }
-    result["coverage_incomplete"] = sum(
-        not x.get("complete", False) for x in state.get("coverage", []))
+    from .coverage import pending_counts
+    pending = pending_counts(state)
+    result["analysis_status"] = {
+        "indexed": sum(v["indexed"] for v in pending.values()),
+        "checked": sum(v["verified"]+v["partial"] for v in pending.values()),
+        "partially_checked": sum(v["partial"] for v in pending.values()),
+        "unexamined": sum(v["unexamined"] for v in pending.values()),
+        "retryable": sum(v["retryable"] for v in pending.values()),
+        "blocked": sum(v["blocked"] for v in pending.values()),
+    }
+    run = state.get("collection_run", {})
+    result["coverage_incomplete"] = (run["failed_windows"]
+         if "failed_windows" in run else
+         sum(not x.get("complete", False) for x in state.get("coverage", [])))
+    result["official_source_streams"] = run.get("streams", 0)
+    result["backfill_window_failures"] = run.get("failed_windows", 0)
     return result
 
 
-def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24) -> dict:
-    collect(api, state, today)
-    for doc in work_queue(state, today, limit):
+def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
+             *, max_seconds: float | None = None) -> dict:
+    """Process as much verified backlog as fits; always save partial progress.
+
+    The CLI stops before the Actions timeout rather than wasting a long source
+    session. Official index refresh remains every six hours while historical
+    version comparison is independently scheduled more often.
+    """
+    started = time.monotonic()
+    since = state.get("last_collected_at", "")
+    due = True
+    if isinstance(api, LawAPI) and since:
+        try:
+            prior = dt.datetime.fromisoformat(since)
+            elapsed = dt.datetime.now(dt.timezone.utc) - prior
+            due = (elapsed.total_seconds() >= 6 * 3600 or
+                   not state.get("collection_run", {}).get("recent_complete", False))
+        except (TypeError, ValueError):
+            due = True
+    if due:
+        collect(api, state, today)
+
+    selected = work_queue(state, today, limit)
+    analyzed = 0
+    source_failures = 0
+    for doc in selected:
+        # Budget is a safety stop: source API requests have independent network
+        # timeouts. Save all results actually completed before job termination.
+        if max_seconds is not None and time.monotonic() - started > max_seconds - 70:
+            break
         attempt = state.setdefault("attempts", {}).setdefault(doc["id"], {})
         attempt["count"] = int(attempt.get("count", 0)) + 1
         attempt["last_date"] = today.isoformat()
         try:
             state["findings"][doc["id"]] = analyze_one(api, state, doc)
         except Exception as exc:
+            source_failures += 1
             state["findings"][doc["id"]] = {
                 "event_id": doc["id"], "status": "source_error",
                 "changes": [], "excluded": [], "review_candidates": [],
                 "reason": type(exc).__name__ + ": " + str(exc)[:160],
             }
-    # Search the official legal corpus beyond this week's indexed changes.
-    # Search hits become graph edges only after full-body exact article proof.
-    if hasattr(api,"request"):
+        analyzed += 1
+    # Additional official citation/program discovery is optional and may never
+    # prevent source-comparison results from being persisted.
+    remaining = (max_seconds - (time.monotonic()-started)
+                 if max_seconds is not None else None)
+    if (hasattr(api, "request") and
+            (remaining is None or remaining > 65)):
         from .discovery import discover_dependents
-        discover_dependents(api,state,limit_events=min(3,max(1,limit//8)))
-    # Separately discover official public-program evidence. Failure to parse
-    # an external source never removes previously collected legal or program data.
-    # Synthetic unit-test clients do not initiate uncontrolled network requests.
-    if isinstance(api, LawAPI):
+        discover_dependents(api, state, limit_events=min(3, max(1, analyzed // 8)))
+    remaining = (max_seconds - (time.monotonic()-started)
+                 if max_seconds is not None else None)
+    if isinstance(api, LawAPI) and (remaining is None or remaining > 55):
         from .alioplus import ALIOPlusClient
-        # Exhaust the safely linked first-page public programmes incrementally.
-        # This is still not a nationwide programme register and must not be
-        # marked complete until the official provider's pagination is verified.
-        state["program_source_audit"] = ALIOPlusClient().collect(state, max_details=15)
-    # LLM calls run in a separate bounded step against persisted source data.
-    # Collection must never burn API quota or conceal a failed analysis.
+        state["program_source_audit"] = ALIOPlusClient().collect(
+            state, max_details=15)
+    from .coverage import pending_counts
+    state["analysis_run"] = {
+        "checked_at": utc_now(),
+        "selected": len(selected),
+        "analyzed": analyzed,
+        "failed": source_failures,
+        "remaining": sum(v["unexamined"]+v["retryable"]
+                         for v in pending_counts(state).values()),
+        "budget_exhausted": analyzed < len(selected),
+        "time_seconds": round(time.monotonic()-started, 1),
+    }
     state["generated_at"] = utc_now()
     return state
-
 
 def render(state: dict, output: Path = DATA_FILE) -> dict:
     from .analysis import connect_changes
@@ -298,6 +301,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
                          "not_run_or_credential_missing",
         "coverage": state.get("coverage", []),
         "quality": quality(state),
+        "analysis_run": state.get("analysis_run", {}),
+        "collection_run": state.get("collection_run", {}),
         "documents": indexed,
         # Minimal metadata for official rules found via downstream citation
         # searches. A source-only referencing regulation is not a new change.
@@ -370,6 +375,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", choices=("run", "render", "ai", "ai-check"))
     parser.add_argument("--limit", type=int, default=24)
+    parser.add_argument("--time-budget", type=float, default=670)
     parser.add_argument("--state", type=Path, default=STATE_FILE)
     parser.add_argument("--output", type=Path, default=DATA_FILE)
     args = parser.parse_args(argv)
@@ -379,7 +385,9 @@ def main(argv=None):
         # "dori". It is an OC identifier, not a private API secret.
         # Keep the same working fallback; explicit LAW_OC may override it.
         credential = configured_law_oc()
-        run_once(state, LawAPI(credential), dt.date.today(), max(1, min(args.limit, 150)))
+        run_once(state, LawAPI(credential), dt.date.today(),
+                 max(1, min(args.limit, 150)),
+                 max_seconds=max(120, min(args.time_budget, 840)))
         write_json(args.state, state)
     if args.mode == "ai-check":
         from .ai import assess_ai_run
