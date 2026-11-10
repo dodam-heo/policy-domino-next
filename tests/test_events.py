@@ -80,6 +80,41 @@ class PolicyEventModelTests(unittest.TestCase):
         self.assertEqual(len(out), 3)
         self.assertEqual(len({event_identity(d) for d in docs}), 3)
 
+    def test_unidentified_legal_class_does_not_create_false_omnibus(self):
+        docs = [
+            doc("가상재정법", "11", "12015", law_type="법령"),
+            doc("가상산업법", "12", "12015", law_type="법령"),
+        ]
+        events = build_events(
+            {d["id"]: d for d in docs},
+            {d["id"]: changed(d) for d in docs})
+        self.assertEqual(len(events), 2)
+        self.assertTrue(all(e["source_count"] == 1 for e in events))
+        self.assertEqual(len({event_identity(d) for d in docs}), 2)
+
+    def test_invalid_promulgation_number_does_not_group(self):
+        docs = [
+            doc("가상지원법A", "11", "0"),
+            doc("가상지원법B", "12", "0"),
+        ]
+        events = build_events(
+            {d["id"]: d for d in docs},
+            {d["id"]: changed(d) for d in docs})
+        self.assertEqual(len(events), 2)
+
+    def test_event_readability_is_rebuilt_from_verified_source(self):
+        d = doc("가상지원청과 그 소속기관 직제", "11", "12015")
+        f = changed(d)
+        event = build_events({d["id"]: d}, {d["id"]: f})[0]
+        self.assertIn("1개 조문 변경", event["headline"])
+        self.assertNotIn("그 밖의 조문 변경 관련 변경", event["headline"])
+        ch = event["changes"][0]
+        self.assertTrue(ch["meaning"]["before"])
+        self.assertTrue(ch["meaning"]["after"])
+        self.assertIn("바뀌었습니다", ch["brief"])
+        self.assertEqual(event["highlights"], [
+            {"document_id": d["id"], "article": "제3조"}])
+
     def test_local_same_number_never_cross_merges(self):
         docs = [
             doc("가상A 조례", "11", "121", source="ordin"),

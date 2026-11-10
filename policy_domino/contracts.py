@@ -312,6 +312,33 @@ def validate_public(payload: dict) -> dict:
                    loc, "event changes must preserve exact official before/after and hashes")
         verify(verified_event_changes == set(by_clause), pos,
                "policy event omitted or invented a verified changed provision")
+        # Readable descriptions must come from the same exact before/after
+        # source phrases. No handcrafted summaries or broken raw character
+        # windows may be substituted into the official event feed.
+        from .meaning import explain, event_headline, highlight_changes
+        for j, change in enumerate(changes_in_event):
+            if not isinstance(change, dict):
+                continue
+            actual = by_clause.get((change.get("document_id"),
+                                    change.get("article")))
+            if not actual:
+                continue
+            expected = explain(actual["before"], actual["after"])
+            verify(change.get("meaning") == expected and
+                   change.get("brief") == expected["description"] and
+                   change.get("category") == expected["label"],
+                   pos + f".changes[{j}]",
+                   "readable summary must be regenerated from exact source text")
+        expected_highlights = [{
+            "document_id": ch["document_id"], "article": ch["article"]
+        } for ch in highlight_changes(
+            [c for c in changes_in_event if isinstance(c, dict)
+             and isinstance(c.get("meaning"), dict)])]
+        verify(event.get("highlights") == expected_highlights, pos,
+               "featured clauses must follow evidence-based relevance ranking")
+        if changes_in_event:
+            verify(event.get("headline") == event_headline(changes_in_event), pos,
+                   "headline must describe verified amendments, not raw metadata")
 
         actions = event.get("institutional_reviews", [])
         if not isinstance(actions, list):

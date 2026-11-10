@@ -4,7 +4,7 @@
   const MODES = Object.freeze([
     "all","impact","benefit","new","amended","repealed"
   ]);
-  const BENEFITS = new Set(["금액·비율","선정·자격"]);
+  const BENEFITS = new Set(["금액·수치 기준","대상·자격 기준","금액·비율","선정·자격"]);
 
   function category(event) {
     if (event.kind === "new") return "신규 제정";

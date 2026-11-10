@@ -90,12 +90,28 @@ a{color:var(--blue);text-underline-offset:3px}
 .core-summary strong{display:block;font-size:15px;line-height:1.5}
 .core-summary p{color:var(--muted);font-size:12px;margin:5px 0 10px}
 .highlights{display:grid;gap:6px;margin-top:10px}
-.highlight{padding:9px 12px;border:1px solid #dbe9ef;background:white;
-  border-radius:7px;display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap}
-.highlight-cat{font-weight:800;font-size:10px;color:#0f6f85;white-space:nowrap;
+.highlight{padding:13px 14px;border:1px solid #dbe9ef;background:white;
+  border-radius:9px;display:block;min-width:0}
+.highlight-lead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.highlight-cat{font-weight:800;font-size:10px;color:#0f6f85;
   background:#edf7f9;padding:3px 6px;border-radius:4px}
-.highlight strong{font-size:12px;font-weight:660;line-height:1.55;flex:1;min-width:140px}
-.highlight-doc{flex-basis:100%;font-size:10px;color:var(--muted)}
+.highlight-doc{font-size:11px;color:var(--muted);line-height:1.5}
+.highlight-description{display:block;font-size:13px;font-weight:760;
+  line-height:1.7;letter-spacing:-.01em}
+.highlight-comparison{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:11px}
+.highlight-old,.highlight-new{min-width:0;padding:10px 11px;border-radius:7px;
+  border:1px solid #e6e5e3;background:#faf8f6}
+.highlight-new{border-color:#d9e8dd;background:#f4faf6}
+.highlight-old small,.highlight-new small{display:block;font-size:10px;
+  font-weight:800;color:#4b687c;margin-bottom:5px}
+.highlight-old p,.highlight-new p{margin:0;font-size:12px;line-height:1.65;
+  overflow-wrap:anywhere;white-space:pre-wrap}
+.clause-description{font-size:12px;font-weight:650;color:#3a6074;line-height:1.7}
+.original-clause{margin-top:10px;border:1px solid #dae8ef;
+  padding:9px 12px;background:#f9fcfe;border-radius:7px}
+.original-clause summary{cursor:pointer;color:#235e7e;font-size:12px;font-weight:780}
+.original-clause[open] .pair{margin-top:12px}
+.full-clause-text{overflow-wrap:anywhere;white-space:pre-wrap;max-height:450px;overflow:auto}
 .highlights .section-help{margin:2px 0}
 .impact-numbers{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}
 .impact-numbers span{font-size:11px;font-weight:780;color:#275f7c;
@@ -206,6 +222,6 @@ a{color:var(--blue);text-underline-offset:3px}
   .detail{padding:19px 16px;min-height:300px}
   .detail-head h2{font-size:22px}
   .core{padding:15px}
-  .pair{grid-template-columns:1fr}
+  .pair,.highlight-comparison{grid-template-columns:1fr}
   .footer{padding:0 16px}
 }

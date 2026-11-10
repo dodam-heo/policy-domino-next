@@ -61,8 +61,14 @@ const sample=(id,{date="2026-11-09",kind="amended",impact=false,
   }:null;
   const changes=kind==="new"||kind==="repealed"?[]:[{
     document_id:"source-"+id,document_title:name,
-    article:"제3조",category:benefit?"금액·비율":"조직·정원",
-    brief:"10만원 → 12만원",before:"10만원",after:"12만원",
+    article:"제3조",category:benefit?"금액·수치 기준":"조문 내용 변경",
+    brief:"지급 기준 금액이 10만원에서 12만원으로 바뀌었습니다.",
+    meaning:{
+      label:benefit?"금액·수치 기준":"조문 내용 변경",
+      description:"지급 기준 금액이 10만원에서 12만원으로 바뀌었습니다.",
+      before:"10만원",after:"12만원",editorial:false,priority:48,edits_count:1,
+    },
+    before:"10만원",after:"12만원",
     actual_edits:[{old_excerpt:"10만원",new_excerpt:"12만원"}],
     source_url:"https://www.law.go.kr/법령/가상정책",
     evidence:{old_body_sha256:"old",new_body_sha256:"new"}
@@ -75,7 +81,9 @@ const sample=(id,{date="2026-11-09",kind="amended",impact=false,
     headline:benefit?"금액·비율 관련 변경 · 1개 조문":
       "조직·정원 관련 변경 · 1개 조문",
     members:group?[{title:name,url:"https://www.law.go.kr/법령/가상정책"}]:[],
-    changes,institutional_reviews:a?[a]:[],
+    changes,
+    highlights:changes.map(ch=>({document_id:ch.document_id,article:ch.article})),
+    institutional_reviews:a?[a]:[],
     institution_count:a?1:0,review_count:a?1:0,
     dependent_rules:[],ai_count:ai?1:0,
     ai_summaries:ai?[{
@@ -167,6 +175,13 @@ async function verifiedNavigation(){
   assert.ok(text.includes("공식 변경 전·후와 출처"));
   assert.ok(text.includes("동시 개정된 법령 17건"));
   assert.ok(text.includes("AI 보조검토"));
+  assert.ok(text.includes("지급 기준 금액이 10만원에서 12만원으로 바뀌었습니다."),
+    "Meaningful source-bound sentence must replace the fragmented raw arrow");
+  assert.ok(text.includes("변경 전") && text.includes("변경 후"));
+  assert.ok(flatten(detail).some(x=>x.className==="original-clause"),
+    "Every excerpt must offer a full official-clause comparison on demand");
+  assert.ok(!text.includes("그 밖의 조문 변경 관련 변경"),
+    "The main event title must not repeat empty machine categories");
   assert.ok(!text.includes("이미 조치 완료"),"No false completion");
   const core=flatten(detail).findIndex(x=>x.className==="detail-section core");
   const impact=flatten(detail).findIndex(x=>x.className==="detail-section" &&

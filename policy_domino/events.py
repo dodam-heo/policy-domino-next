@@ -16,6 +16,7 @@ import hashlib
 import re
 
 from .core import clean
+from .meaning import explain, event_headline, highlight_changes
 
 # A regulation that directly governs the organization named in its *title*.
 # This is a generic structural pattern, not a list of known agencies.
@@ -36,10 +37,12 @@ def event_identity(document: dict) -> str:
     source = document.get("source", "")
     date = document.get("published_at", "")
     number = clean(document.get("number", ""))
-    if source == "law" and date and number:
-        # Use the official instrument class when available to avoid collisions
-        # between, e.g., a presidential decree and a ministerial rule.
-        kind = clean(document.get("law_type") or document.get("kind") or "")
+    kind = clean(document.get("law_type", ""))
+    # A general fallback such as '법령' is not an official instrument class.
+    # Without a specific class the apparent shared promulgation number could
+    # join separate legal instruments, producing a misleading omnibus event.
+    if (source == "law" and date and number.isdecimal() and
+            int(number) > 0 and kind and kind != "법령"):
         return "promulgation|law|" + kind + "|" + date + "|" + number
     return "document|" + str(document["id"])
 
@@ -57,22 +60,25 @@ def _review_task(kind: str, place: str) -> str:
         "서식·증빙": "신청 서식과 제출·증빙 항목",
         "허가·감독": "심사·허가·검사 기준",
         "조직·정원": "조직별 역할·정원·업무분장 기준",
+        "금액·수치 기준": "금액·비율·수치 적용 기준",
+        "인원·기간·수치 기준": "인원·기간 등 적용 수치",
+        "대상·자격 기준": "대상자 선정·자격 심사 조건",
+        "공고·공표 방식": "공고·공표 매체와 안내 방식",
+        "신청·처리 절차": "접수·신청·처리 절차",
+        "조직·직무 기준": "조직별 담당 업무·정원 기준",
+        "서식·증빙 기준": "신청서·증빙 서류 기준",
+        "인허가·감독 기준": "인허가·감독 처리 기준",
+        "인용 법령·조문": "업무 기준에서 인용하는 법령·조문",
+        "띄어쓰기·표기 정비": "관련 규정 안내 문구",
     }
-    work = actions.get(kind, "담당 업무의 적용 기준")
-    last = ord(work[-1]) - 0xAC00
-    particle = "을" if 0 <= last <= 11171 and last % 28 else "를"
-    return place + "에서 " + work + particle + " 변경 조문과 대조"
+    work = actions.get(kind, "해당 조문의 업무 적용 기준")
+    return place + "의 " + work + " 변경 여부를 신구 조문과 대조"
 
 
 def _change_brief(change: dict) -> str:
-    edits = change.get("actual_edits") or []
-    if edits:
-        first = edits[0]
-        before = clean(first.get("old_excerpt", ""))
-        after = clean(first.get("new_excerpt", ""))
-        if before and after and before != after:
-            return (before[:105] + " → " + after[:105])
-    return (clean(change.get("category")) or "조문") + " 변경"
+    """An evidence-derived *description*, never a broken character window."""
+    meaning = explain(change.get("before", ""), change.get("after", ""))
+    return meaning["description"]
 
 
 def _main_title(rows: list[dict]) -> str:
@@ -97,6 +103,11 @@ def _review_row(document: dict, change: dict, institution: str, *,
                 linking_regulation: str = "", ai: dict | None = None) -> dict:
     article = change["article"]
     place = (program + " 운영 기준") if program else (institution + " 담당 업무")
+    source_category = change.get("category", "")
+    category = source_category if source_category in {
+        "금액·비율", "선정·자격", "기한·절차", "서식·증빙",
+        "허가·감독", "조직·정원",
+    } else explain(change.get("before", ""), change.get("after", ""))["label"]
     result = {
         "id": _id("|".join([document["id"], article, institution,
                             program_id, tier])),
@@ -106,9 +117,9 @@ def _review_row(document: dict, change: dict, institution: str, *,
         "program": program,
         "program_id": program_id,
         "article": article,
-        "category": change.get("category", "기타"),
+        "category": category,
         "change": _change_brief(change),
-        "task": _review_task(change.get("category", ""), place),
+        "task": _review_task(category, place),
         "basis_tier": tier,
         "basis_quote": source_quote[:450],
         "source_url": change.get("source_url", document.get("url", "")),
@@ -188,12 +199,14 @@ def build_events(documents: dict, findings: dict, *,
                 if not ch.get("article") or ch.get("before") == ch.get("after"):
                     continue
                 article = ch["article"]
+                meaning = explain(ch["before"], ch["after"])
                 entries.append({
                     "document_id": doc_id,
                     "document_title": doc["title"],
                     "article": article,
-                    "category": ch.get("category", "기타"),
-                    "brief": _change_brief(ch),
+                    "category": meaning["label"],
+                    "brief": meaning["description"],
+                    "meaning": meaning,
                     "before": ch["before"],
                     "after": ch["after"],
                     "actual_edits": ch.get("actual_edits", []),
@@ -295,9 +308,7 @@ def build_events(documents: dict, findings: dict, *,
                          for m in members) else "repealed")
         title = _main_title(members)
         agencies = sorted({x["institution"] for x in tasks})
-        categories = Counter(x["category"] for x in entries)
-        headline = (categories.most_common(1)[0][0] + " 관련 변경 · " +
-                    str(len(entries)) + "개 조문") if entries else (
+        headline = event_headline(entries) if entries else (
                     "신규 제정 확인" if kind == "new" else "공식 폐지 확인")
         # Distinguish verified scope from a claim of completed business change.
         status = ("partial" if any(
@@ -326,6 +337,10 @@ def build_events(documents: dict, findings: dict, *,
             "headline": headline,
             "changes": sorted(entries, key=lambda x: (
                 x["document_title"], x["article"])),
+            "highlights": [{
+                "document_id": ch["document_id"],
+                "article": ch["article"],
+            } for ch in highlight_changes(entries)],
             "institutional_reviews": sorted(tasks, key=lambda x: (
                 x["institution"], x["program"], x["document_title"], x["article"])),
             "institution_count": len(agencies),

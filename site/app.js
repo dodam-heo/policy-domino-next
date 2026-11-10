@@ -111,61 +111,88 @@
       if (event.institution_count) append(tags,pill("검토 기관 "+num(event.institution_count)+"곳","impact"));
       if (event.review_count) append(tags,pill("업무 "+num(event.review_count)+"건"));
       if (event.ai_count) append(tags,pill("AI 보조검토","ai"));
-      const brief=event.changes?.[0]?.brief;
+      const highlighted=(event.highlights||[])[0];
+      const important=highlighted && (event.changes||[]).find(ch=>
+        ch.document_id===highlighted.document_id && ch.article===highlighted.article);
+      const brief=important?.brief||event.changes?.[0]?.brief;
       append(item,header,create("h3","",event.title),
-        create("p","item-brief",compact(brief||event.headline,95)),tags);
+        create("p","item-brief",brief||event.headline),tags);
       item.onclick=()=>select(event.id);
       append(root,item);
     }
     $("more").hidden=events.length<=state.visible;
   }
-  function sourcePair(change, index) {
+  function sourcePair(change) {
     const wrap=create("div","clause");
-    const name=(change.document_title||"공식 규정")+" · "+change.article;
-    append(wrap,create("div","clause-name",name));
-    const edits=(change.actual_edits||[]).filter(x=>
-      String(x.old_excerpt||"")!==String(x.new_excerpt||""));
-    const pairs=edits.length ? edits.slice(0,3) : [{
-      old_excerpt:compact(change.before,190),
-      new_excerpt:compact(change.after,190),
-    }];
-    for (const pair of pairs) {
-      const values=create("div","pair");
-      const before=create("div","before");
-      const after=create("div","after");
-      append(before,create("small","value-label","변경 전"),
-        create("p","",pair.old_excerpt||"해당 문구 없음"));
-      append(after,create("small","value-label","변경 후"),
-        create("p","",pair.new_excerpt||"해당 문구 삭제"));
-      append(values,before,after);
-      append(wrap,values);
-    }
-    append(wrap,link(change.source_url,"공식 변경 조문"));
+    const label=change.meaning?.label||"조문 내용 변경";
+    append(wrap,create("div","clause-name",
+      change.document_title+" · "+change.article+" · "+label));
+    if(change.brief)append(wrap,create("p","clause-description",change.brief));
+    const preview=create("div","pair");
+    const before=create("div","before");
+    const after=create("div","after");
+    append(before,create("small","value-label","변경 전 문구"),
+      create("p","",change.meaning?.before||"원문에서 확인"));
+    append(after,create("small","value-label","변경 후 문구"),
+      create("p","",change.meaning?.after||"원문에서 확인"));
+    append(preview,before,after);
+    append(wrap,preview);
+    const full=create("details","original-clause");
+    append(full,create("summary","","변경 전·후 조문 전체 보기"));
+    const complete=create("div","pair");
+    const oldBox=create("div","before");
+    const newBox=create("div","after");
+    append(oldBox,create("small","value-label","종전 조문 전문"),
+      create("p","full-clause-text",change.before||"미확인"));
+    append(newBox,create("small","value-label","현행 조문 전문"),
+      create("p","full-clause-text",change.after||"미확인"));
+    append(complete,oldBox,newBox);
+    append(full,complete);
+    append(wrap,full,link(change.source_url,"공식 법령 원문"));
     return wrap;
   }
   function renderCore(event) {
-    const section=heading("이번 정책의 핵심 변경");
+    const section=heading("이번 개정에서 달라진 내용");
     section.className="detail-section core";
     const summary=create("div","core-summary");
     append(summary,create("strong","",event.headline),
       create("p","",event.source_count>1 ?
-        "공식 공포번호·공포일이 같은 "+num(event.source_count)+
-        "개 법령을 하나의 변경 사건으로 묶었습니다." :
-        "공식 자료에서 확인된 제·개정 내용을 표시합니다."));
+        "같은 공식 공포 식별자로 함께 개정된 "+num(event.source_count)+
+        "개 규정의 변경사항입니다. 아래에는 그중 주요 차이를 먼저 보여줍니다." :
+        "공식 자료에서 확인된 개정 내용을 요약했습니다."));
     append(section,summary);
     if (event.changes?.length) {
       const highlights=create("div","highlights");
-      for (const change of event.changes.slice(0,3)) {
+      const featured=(event.highlights||[]).map(key=>
+        (event.changes||[]).find(ch=>ch.document_id===key.document_id &&
+          ch.article===key.article)).filter(Boolean);
+      const shown=featured.length?featured:event.changes.slice(0,3);
+      for (const change of shown) {
         const row=create("div","highlight");
-        append(row,create("span","highlight-cat",change.category||"조문"),
-          create("strong","",change.article+" · "+compact(change.brief,145)));
-        if (event.source_count>1)
-          append(row,create("span","highlight-doc",change.document_title));
+        const lead=create("div","highlight-lead");
+        append(lead,create("span","highlight-cat",
+            change.meaning?.label||"조문 내용 변경"),
+          create("span","highlight-doc",
+            change.document_title+" · "+change.article));
+        append(row,lead,create("strong","highlight-description",
+          change.brief||"변경 전후의 문구를 비교해 확인하세요."));
+        if(change.meaning?.before || change.meaning?.after){
+          const excerpts=create("div","highlight-comparison");
+          const oldBox=create("div","highlight-old");
+          const newBox=create("div","highlight-new");
+          append(oldBox,create("small","","변경 전"),
+            create("p","",change.meaning?.before||"없음"));
+          append(newBox,create("small","","변경 후"),
+            create("p","",change.meaning?.after||"없음"));
+          append(excerpts,oldBox,newBox);
+          append(row,excerpts);
+        }
         append(highlights,row);
       }
-      if (event.changes.length>3)
+      if (event.changes.length>shown.length)
         append(highlights,create("p","section-help",
-          "나머지 "+num(event.changes.length-3)+"개 변경 조문은 아래 공식 대조에서 확인"));
+          "나머지 "+num(event.changes.length-shown.length)+
+          "개 변경 조문은 아래 '공식 변경 전·후와 출처'에서 확인할 수 있습니다."));
       append(section,highlights);
     }
     const stats=create("div","impact-numbers");
