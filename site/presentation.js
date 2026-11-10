@@ -1,9 +1,7 @@
-/* Source-driven navigation; separate amendment type, changed item and impacts.
-   No policy topic gets a privileged, hard-coded pill. */
+/* One policy list, five evidence-based navigation choices. */
 (function (global) {
   "use strict";
-  const KINDS=Object.freeze(["all","new","amended","repealed"]);
-  const IMPACTS=Object.freeze(["all","linked","unlinked"]);
+  const MODES=Object.freeze(["all","new","amended","repealed","impact"]);
   function category(event) {
     if(event.kind==="new")return "신규 제정";
     if(event.kind==="repealed")return "폐지";
@@ -13,29 +11,29 @@
     return Array.isArray(event.institutional_reviews) &&
       event.institutional_reviews.length>0;
   }
-  function eventTopics(event) {
-    return [...new Set((event.changes||[])
-      .map(x=>String(x.meaning?.label||x.category||"").trim())
-      .filter(Boolean))];
+  function highImpactScope(event) {
+    // This pill measures only the *verified breadth of public-institution
+    // review targets*, NOT a predicted socioeconomic impact score.
+    const institutions=new Set((event.institutional_reviews||[])
+      .map(review=>String(review.institution||"").trim())
+      .filter(Boolean));
+    return institutions.size>=2;
   }
-  function topicOptions(events) {
-    return [...new Set(events.flatMap(eventTopics))].sort((a,b)=>
-      a.localeCompare(b,"ko-KR"));
-  }
-  function filterEvents(events, {kind="all",topic="all",impact="all",query=""}={}) {
-    if (!KINDS.includes(kind))throw Error("Unsupported change kind");
-    if (!IMPACTS.includes(impact))throw Error("Unsupported institution-connection state");
+  function filterEvents(events,{mode="all",query=""}={}) {
+    if(!MODES.includes(mode))throw Error("Unsupported event filter");
     const term=String(query).trim().toLocaleLowerCase("ko-KR");
     return [...events].filter(event=>{
-      if (kind!=="all"&&event.kind!==kind)return false;
-      if (topic!=="all"&&!eventTopics(event).includes(topic))return false;
-      if (impact==="linked"&&!hasInstitutionalReview(event))return false;
-      if (impact==="unlinked"&&hasInstitutionalReview(event))return false;
+      if(mode==="impact"&&!highImpactScope(event))return false;
+      if(mode!=="all"&&mode!=="impact"&&event.kind!==mode)return false;
       const searchable=[
         event.title,event.headline,event.ministry,
         ...(event.members||[]).map(x=>x.title),
-        ...(event.changes||[]).map(x=>x.meaning?.label||x.category||""),
-        ...(event.institutional_reviews||[]).flatMap(x=>[x.institution,x.program])
+        ...(event.changes||[]).flatMap(x=>[
+          x.document_title,x.article,x.meaning?.label||x.category||"",
+        ]),
+        ...(event.institutional_reviews||[]).flatMap(x=>[
+          x.institution,x.program,x.task
+        ])
       ].join(" ").toLocaleLowerCase("ko-KR");
       return searchable.includes(term);
     }).sort((a,b)=>
@@ -65,7 +63,7 @@
     };
   }
   global.PolicyDominoView=Object.freeze({
-    KINDS,IMPACTS,category,hasInstitutionalReview,eventTopics,topicOptions,
+    MODES,category,hasInstitutionalReview,highImpactScope,
     filterEvents,impactGroups,overview
   });
 })(window);

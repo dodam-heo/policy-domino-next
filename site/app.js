@@ -3,9 +3,8 @@
   const $ = name => document.getElementById(name);
   const view = window.PolicyDominoView;
   const state = {
-    data: null, events: [], selected: null, kind: "all",
-    topic: "all", impact: "all", query: "", visible: 60,
-    institutionFilter: "all"
+    data: null, events: [], selected: null, mode: "all",
+    query: "", visible: 60, institutionFilter: "all"
   };
   const mobile = () => window.matchMedia("(max-width:850px)").matches;
   const num = n => Number(n || 0).toLocaleString("ko-KR");
@@ -79,22 +78,13 @@
     }
   }
   function renderFilters() {
-    $("kind-filter").value=state.kind;
-    $("topic-filter").value=state.topic;
-    $("impact-filter").value=state.impact;
-  }
-  function setFacetOptions(){
-    const select=$("topic-filter");
-    select.replaceChildren();
-    const all=create("option","","전체 항목");
-    all.value="all";
-    append(select,all);
-    for (const topic of view.topicOptions(state.events)) {
-      const option=create("option","",topic);
-      option.value=topic;
-      append(select,option);
+    for (const mode of view.MODES) {
+      const button=$("mode-"+mode);
+      const active=state.mode===mode;
+      if(active)button.classList.add("active");
+      else button.classList.remove("active");
+      button.setAttribute("aria-pressed",String(active));
     }
-    renderFilters();
   }
   function filtered() {
     return view.filterEvents(state.events,state);
@@ -103,7 +93,9 @@
     renderFilters();
     const events=filtered();
     const root=$("items");root.replaceChildren();
-    $("list-count").textContent=num(events.length)+"건";
+    $("list-count").textContent=
+      "전체 "+num(state.events.length)+"건 · 표시 "+
+      num(Math.min(events.length,state.visible))+"건";
     if (!events.length) {
       append(root,create("p","empty",
         "조건에 맞는 검증된 정책 변경 사건이 없습니다. 다른 조건으로 확인하세요."));
@@ -447,11 +439,8 @@
         !Array.isArray(data.events)) throw Error("정책 변경 사건 데이터가 없습니다.");
     state.data=data;
     state.events=data.events;
-    state.kind="all";
-    state.topic="all";
-    state.impact="all";
+    state.mode="all";
     state.institutionFilter="all";
-    setFacetOptions();
     const stats=view.overview(data.events,data.ai_progress||{});
     const progress=data.ai_progress||{};
     const run=data.ai_run||{};
@@ -481,9 +470,7 @@
     $("stat-events").textContent=num(stats.events);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);
-    $("source-status").textContent=
-      "공식 수집 문서 "+num(stats.sources)+"건 중 "+
-      "변경을 확인해 구성한 사건 "+num(stats.events)+"건";
+
     $("updated").textContent=data.generated_at ?
       " · 자료 갱신 "+String(data.generated_at).replace("T"," ").slice(0,16)+" UTC":"";
     const linked=eventHash();
@@ -493,22 +480,21 @@
     if (linked && mobile()) select(linked,false);
     else if (mobile()) back(false);
   }
-  function updateFacet(key,value) {
-    state[key]=value;
-    state.visible=60;
-    renderList();
-    if (!mobile()) {
-      const shown=filtered();
-      if (shown.length&&!shown.some(ev=>ev.id===state.selected))
-        select(shown[0].id,false);
-      else if (!shown.length) {
-        state.selected=null;
-        renderDetail();
+  for (const mode of view.MODES) {
+    $("mode-"+mode).onclick=()=>{
+      state.mode=mode;
+      state.visible=60;
+      renderList();
+      if(!mobile()){
+        const shown=filtered();
+        if(shown.length&&!shown.some(event=>event.id===state.selected)){
+          select(shown[0].id,false);
+        } else if(!shown.length) {
+          state.selected=null;
+          renderDetail();
+        }
       }
-    }
-  }
-  for (const key of ["kind","topic","impact"]) {
-    $(key+"-filter").onchange=()=>updateFacet(key,$(key+"-filter").value);
+    };
   }
   $("search").oninput=ev=>{
     state.query=String(ev.target.value||"").trim();

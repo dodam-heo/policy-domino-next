@@ -45,12 +45,16 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("def build_events(", events)
         self.assertIn("python -m policy_domino render", workflow)
         self.assertIn("python -m policy_domino ai --limit 24", workflow)
-        for key in ("kind-filter", "topic-filter", "impact-filter",
-                    "stat-events", "stat-agencies", "analysis-coverage"):
+        for key in ("mode-all", "mode-new", "mode-amended",
+                    "mode-repealed", "mode-impact", "stat-events",
+                    "stat-agencies", "analysis-coverage"):
             self.assertIn('id="' + key + '"', index)
-        self.assertNotIn('id="mode-benefit"', index)
+        for obsolete in ("kind-filter", "topic-filter", "impact-filter", "mode-benefit"):
+            self.assertNotIn('id="' + obsolete + '"', index)
         self.assertNotIn("급여·지원기준", index)
-        self.assertIn("topicOptions", (ROOT / "site/presentation.js").read_text(encoding="utf-8"))
+        self.assertIn("영향도 큼", index)
+        self.assertIn("highImpactScope",
+                      (ROOT / "site/presentation.js").read_text(encoding="utf-8"))
         self.assertNotIn('agencyFilter', frontend)
         self.assertNotIn("legacy_source.json", events)
         self.assertNotIn("policy_domino.engine", events)

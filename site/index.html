@@ -38,35 +38,20 @@
 <main id="layout" class="layout">
   <aside class="panel list-panel" id="listPanel" aria-label="정책 변경 사건 목록">
     <div class="list-heading">
-      <div class="panel-title">
-        <h2>신규·개정 정책</h2>
-        <span id="list-count">조회 중</span>
+      <div class="panel-title"><h2>정책 변경 목록</h2></div>
+      <p class="list-subtitle">공포·발령일 최신순</p>
+      <div class="quick-filters" role="group" aria-label="정책 변경 목록 필터">
+        <button id="mode-all" type="button" class="quick-filter active" aria-pressed="true">전체</button>
+        <button id="mode-new" type="button" class="quick-filter" aria-pressed="false">신규</button>
+        <button id="mode-amended" type="button" class="quick-filter" aria-pressed="false">개정</button>
+        <button id="mode-repealed" type="button" class="quick-filter" aria-pressed="false">폐지</button>
+        <button id="mode-impact" type="button" class="quick-filter" aria-pressed="false"
+          title="공식 변경 근거로 검토 대상 공공기관이 2곳 이상 확인된 변경입니다. 사회경제적 영향도 확정 평가는 아닙니다."
+          aria-label="영향도 큼: 근거 확인 공공기관 2곳 이상">영향도 큼</button>
       </div>
-      <div class="filter-grid" aria-label="정책 변경 사건 필터">
-        <label class="filter-field" for="kind-filter">변경 종류
-          <select id="kind-filter" aria-label="변경 종류">
-            <option value="all">전체</option>
-            <option value="new">제정</option>
-            <option value="amended">개정</option>
-            <option value="repealed">폐지</option>
-          </select>
-        </label>
-        <label class="filter-field" for="topic-filter">변경 항목
-          <select id="topic-filter" aria-label="변경 항목">
-            <option value="all">전체 항목</option>
-          </select>
-        </label>
-        <label class="filter-field wide" for="impact-filter">공공기관 연결
-          <select id="impact-filter" aria-label="공공기관 연결">
-            <option value="all">전체</option>
-            <option value="linked">기관별 검토사항 있음</option>
-            <option value="unlinked">연결 근거 확인 전</option>
-          </select>
-        </label>
-      </div>
-      <input id="search" type="search" class="search" aria-label="정책·기관·사업 검색"
-        placeholder="정책명·기관명·사업명 검색" autocomplete="off">
-      <div class="source-status" id="source-status" aria-live="polite">공식 근거 데이터 확인 중</div>
+      <input id="search" type="search" class="search" aria-label="법령명·정책명·소관기관 검색"
+        placeholder="법령명·정책명·소관기관 검색" autocomplete="off">
+      <div id="list-count" class="list-count" aria-live="polite">조회 중</div>
     </div>
     <div id="items" class="items"><p class="empty">변경 사건을 불러오는 중입니다.</p></div>
     <button id="more" class="more" type="button" hidden>변경 사건 더 보기</button>

@@ -11,9 +11,10 @@ const style=fs.readFileSync("site/styles.css","utf8");
 new vm.Script(app,{filename:"site/app.js"});
 new vm.Script(presenter,{filename:"site/presentation.js"});
 assert.ok(html.indexOf('src="./presentation.js"')<html.indexOf('src="./app.js"'));
-for(const id of ["items","detail","kind-filter","topic-filter",
-                 "impact-filter","stat-events","stat-agencies",
-                 "stat-actions","search","backToList"]){
+for(const id of ["items","detail","mode-all","mode-new",
+                 "mode-amended","mode-repealed","mode-impact",
+                 "stat-events","stat-agencies","stat-actions",
+                 "list-count","search","backToList"]){
   assert.ok(html.includes('id="'+id+'"'),"Missing coherent event UI element "+id);
 }
 assert.ok(!html.includes("신구 확인"),"Comparison state is not a user browsing category");
@@ -126,8 +127,8 @@ function browser(isMobile=false,hash="",data=payload) {
     "stat-events","stat-agencies","stat-actions","list-count",
     "ai-review-progress","institution-link-progress",
     "analysis-coverage",
-    "search","source-status","updated","more","backToList",
-    "kind-filter","topic-filter","impact-filter"];
+    "search","updated","more","backToList",
+    "mode-all","mode-new","mode-amended","mode-repealed","mode-impact"];
   const elements=new Map(ids.map(id=>[id,new Element()]));
   const body=new Element("body");
   const historyCalls=[];
@@ -167,7 +168,12 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"stat-events").textContent,"4");
   assert.equal(node(ui,"stat-agencies").textContent,"1");
   assert.equal(node(ui,"stat-actions").textContent,"1");
-  assert.ok(node(ui,"source-status").textContent.includes("10,166"));
+  assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 4건");
+  assert.ok(html.includes("정책 변경 목록"));
+  assert.ok(html.includes("공포·발령일 최신순"));
+  assert.ok(!html.includes("급여·지원기준"));
+  assert.ok(!html.includes("filter-grid"));
+  assert.ok(html.includes("법령명·정책명·소관기관 검색"));
   assert.ok(node(ui,"analysis-coverage").textContent.includes("아직 미분석 9,840건"));
   assert.ok(node(ui,"analysis-coverage").textContent.includes("재확인 대상 204건"));
   assert.ok(node(ui,"analysis-coverage").textContent.includes("재확인 유예 21건"));
@@ -179,27 +185,21 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"items").children.length,4);
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
                    ["amended","new","ordinary","repealed"]);
-  const change= (id,value)=> {
-    node(ui,id).value=value;
-    node(ui,id).onchange();
-  };
-  change("impact-filter","linked");
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
-  change("impact-filter","all");
-  assert.ok(node(ui,"topic-filter").children.some(x=>x.value==="금액·수치 기준"));
-  assert.ok(!html.includes("급여·지원기준"),"No privileged subject shortcut");
-  change("topic-filter","금액·수치 기준");
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
-  change("topic-filter","all");
-  change("kind-filter","new");
+  node(ui,"mode-impact").onclick();
+  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),[],
+    "A single verified agency must not be mislabeled as high impact");
+  assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 0건");
+  node(ui,"mode-new").onclick();
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["new"]);
-  change("kind-filter","repealed");
+  node(ui,"mode-repealed").onclick();
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["repealed"]);
-  change("kind-filter","all");
-  change("impact-filter","unlinked");
+  node(ui,"mode-amended").onclick();
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
-    ["new","ordinary","repealed"]);
-  change("impact-filter","all");
+    ["amended","ordinary"]);
+  node(ui,"mode-all").onclick();
+  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
+    ["amended","new","ordinary","repealed"]);
+  assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 4건");
   node(ui,"search").oninput({target:{value:"가상 지원운영사업"}});
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["amended"]);
   node(ui,"search").oninput({target:{value:""}});
@@ -325,6 +325,28 @@ async function institutionFilterNavigation(){
   console.log("PASS: detail institution filter, search, reset, and mobile select");
 }
 
+async function largeScopeFiltering(){
+  const event=sample("many",{date:"2026-11-12",impact:true,group:true});
+  const verified=event.institutional_reviews[0];
+  event.institutional_reviews=[
+    {...verified,id:"multi-1",institution:"가상시청"},
+    {...verified,id:"multi-2",institution:"가상교육청"},
+  ];
+  event.institution_count=2;
+  event.review_count=2;
+  const data={schema:"policy-domino-next-v1",
+    events:[event,sample("solo",{date:"2026-11-11",impact:true})],
+    ai_progress:{indexed_documents:200},generated_at:""};
+  const ui=browser(false,"",data);
+  await flush();
+  node(ui,"mode-impact").onclick();
+  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),["many"]);
+  assert.equal(node(ui,"list-count").textContent,"전체 2건 · 표시 1건");
+  assert.equal(node(ui,"mode-impact").getAttribute("aria-pressed"),"true");
+  node(ui,"mode-all").onclick();
+  assert.equal(node(ui,"list-count").textContent,"전체 2건 · 표시 2건");
+  console.log("PASS: compact quick filters and evidence-based high-impact scope");
+}
 async function noFabricatedImpact(){
   const only=sample("nothing",{impact:false,benefit:true});
   const ui=browser(false,"",{
@@ -334,12 +356,11 @@ async function noFabricatedImpact(){
   await flush();
   assert.equal(node(ui,"stat-agencies").textContent,"0");
   assert.ok(textOf(node(ui,"detail")).includes("연결 근거는 아직 확인되지 않았습니다"));
-  node(ui,"impact-filter").value="linked";
-  node(ui,"impact-filter").onchange();
+  node(ui,"mode-impact").onclick();
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,0);
   console.log("PASS: no invented institutions or operational actions");
 }
 Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
-  institutionFilterNavigation()
+  institutionFilterNavigation(),largeScopeFiltering()
 ]).catch(error=>{console.error(error);process.exitCode=1});
