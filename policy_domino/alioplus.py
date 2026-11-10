@@ -210,7 +210,7 @@ class ALIOPlusClient:
             display_names = listing_business_titles(raw)
             # Provider totals are *reported* counts, not verified collected rows.
             match = re.search(
-                r'class="total"[^>]*>\\s*전체\\s*<strong>([\\d,]+)</strong>',
+                r'class="total"[^>]*>\s*전체\s*<strong>([\d,]+)</strong>',
                 raw, re.DOTALL)
             if match:
                 audit["reported_total"] = int(match.group(1).replace(",", ""))
