@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -288,10 +289,40 @@ def validate_draft(packet: dict, proposed: dict) -> dict:
     return {"change_reviews": check_items, "program_reviews": program_items}
 
 
+TRANSIENT_API_ERRORS = frozenset({
+    "http_500_server_error", "http_503_overloaded", "network_error",
+})
+SUCCESS_STATES = frozenset({"generated", "cached", "no_eligible_changes"})
+
+
+def assess_ai_run(report: dict) -> str:
+    """Classify operational health without conflating partial results with errors.
+
+    'warning' is deliberately visible in Actions. Only transient upstream
+    failures can be tolerated when the batch yielded no new review.
+    Permanent configuration, schema and grounding failures remain errors.
+    """
+    status = report.get("status")
+    if status in SUCCESS_STATES:
+        return "success"
+    if status == "partial_generated" and report.get("generated", 0) > 0:
+        return "warning"
+    codes = report.get("error_codes") or {}
+    if (status == "failed" and report.get("errors", 0) > 0 and codes
+            and set(codes).issubset(TRANSIENT_API_ERRORS)):
+        return "warning"
+    return "error"
+
+
 def analyze_batch(state: dict, dependencies: list[dict], *, limit: int = 2,
                   model: str | None = None, key: str | None = None,
                   transport=None) -> dict:
-    """Review verified changes. Budget actual requests, not successful results."""
+    """Analyze verified official changes with a hard cap on *actual* API calls.
+
+    A transient outage is retried at most once for the same event, using
+    a short backoff. Every retry consumes the shared request budget.
+    Successful drafts accumulate and remain anchored to the input SHA.
+    """
     key = (os.getenv("GEMINI_API_KEY", "") if key is None else key).strip()
     model = model or os.getenv("GEMINI_MODEL", DEFAULT_MODEL)
     results = state.setdefault("ai_reviews", {})
@@ -299,19 +330,22 @@ def analyze_batch(state: dict, dependencies: list[dict], *, limit: int = 2,
     report = {
         "status": "not_configured", "model": model, "attempted": 0,
         "generated": 0, "cached": 0, "eligible": 0, "errors": 0,
-        "error_codes": {}, "checked_at": utc_now(),
+        "retries": 0, "retry_error_codes": {}, "error_codes": {},
+        "checked_at": utc_now(),
     }
     if not key:
         state["ai_status"] = report["status"]
         state["ai_run"] = report
         return report
+
     selected = sorted(
         (d for d in state.get("documents", {}).values()
          if not d.get("reference_only")),
         key=lambda d: d.get("published_at", ""), reverse=True)
     budget = max(0, min(limit, 5))
+    blocked = False
     for document in selected:
-        if report["attempted"] >= budget:
+        if report["attempted"] >= budget or blocked:
             break
         event_id = document["id"]
         packet = source_packet(state, event_id, dependencies)
@@ -324,28 +358,43 @@ def analyze_batch(state: dict, dependencies: list[dict], *, limit: int = 2,
                 and cached.get("status") == "generated"):
             report["cached"] += 1
             continue
-        report["attempted"] += 1
-        try:
-            draft = validate_draft(
-                packet, call_model(packet, key=key, model=model, transport=transport))
-        except (AIAnalysisError, ValueError, KeyError, TypeError) as exc:
-            report["errors"] += 1
-            code = exc.code if isinstance(exc, AIRequestError) else (
-                "invalid_evidence" if "quote" in str(exc).lower() or
-                "citation" in str(exc).lower() else "invalid_model_output")
-            errors_by_event[event_id] = code
-            report["error_codes"][code] = report["error_codes"].get(code, 0) + 1
-            if isinstance(exc, AIRequestError) and exc.blocking:
+
+        retried = False
+        while report["attempted"] < budget:
+            report["attempted"] += 1
+            try:
+                draft = validate_draft(
+                    packet, call_model(packet, key=key, model=model,
+                                       transport=transport))
+            except (AIAnalysisError, ValueError, KeyError, TypeError) as exc:
+                code = exc.code if isinstance(exc, AIRequestError) else (
+                    "invalid_evidence" if "quote" in str(exc).lower() or
+                    "citation" in str(exc).lower() else "invalid_model_output")
+                transient = code in TRANSIENT_API_ERRORS
+                if transient and not retried and report["attempted"] < budget:
+                    retried = True
+                    report["retries"] += 1
+                    retry_errors = report["retry_error_codes"]
+                    retry_errors[code] = retry_errors.get(code, 0) + 1
+                    if transport is None:
+                        time.sleep(2)
+                    continue
+
+                report["errors"] += 1
+                errors_by_event[event_id] = code
+                report["error_codes"][code] = report["error_codes"].get(code, 0) + 1
+                blocked = isinstance(exc, AIRequestError) and exc.blocking
                 break
-            continue
-        results[event_id] = {
-            "status": "generated", "source_sha256": digest,
-            "model": model, "generated_at": utc_now(),
-            "required_action_verified": False,
-            **draft,
-        }
-        errors_by_event.pop(event_id, None)
-        report["generated"] += 1
+
+            results[event_id] = {
+                "status": "generated", "source_sha256": digest,
+                "model": model, "generated_at": utc_now(),
+                "required_action_verified": False, **draft,
+            }
+            errors_by_event.pop(event_id, None)
+            report["generated"] += 1
+            break
+
     if report["errors"]:
         report["status"] = "partial_generated" if report["generated"] else "failed"
     elif report["generated"]:

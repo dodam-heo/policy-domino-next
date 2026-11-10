@@ -324,10 +324,22 @@ def main(argv=None):
         run_once(state, LawAPI(credential), dt.date.today(), max(1, min(args.limit, 150)))
         write_json(args.state, state)
     if args.mode == "ai-check":
+        from .ai import assess_ai_run
         report = state.get("ai_run", {})
         print("Policy Domino AI verification:", json.dumps(report, ensure_ascii=False))
-        if report.get("status") not in ("generated", "cached", "no_eligible_changes"):
-            raise SystemExit(1)
+        health = assess_ai_run(report)
+        if health != "success":
+            codes = ",".join(sorted(report.get("error_codes") or {})) or "none"
+            detail = ("status=" + str(report.get("status", "missing")) +
+                      "; requested=" + str(report.get("attempted", 0)) +
+                      "; generated=" + str(report.get("generated", 0)) +
+                      "; failures=" + str(report.get("errors", 0)) +
+                      "; error_codes=" + codes)
+            if health == "warning":
+                print("::warning title=Gemini analysis partially available::" + detail)
+            else:
+                print("::error title=Gemini analysis unavailable::" + detail)
+                raise SystemExit(1)
         return
     if args.mode == "ai":
         from .analysis import connect_changes

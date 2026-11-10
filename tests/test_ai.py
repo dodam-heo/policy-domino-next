@@ -241,5 +241,78 @@ class AIIntegrationTests(unittest.TestCase):
 
 
 
+    def test_transient_503_retries_once_inside_shared_api_budget(self):
+        from policy_domino.ai import AIRequestError
+        state, links = state_and_links()
+        packet = source_packet(state, "e1", links)
+        calls = []
+        def transport(body):
+            calls.append(body)
+            if len(calls) == 1:
+                raise AIRequestError("http_503_overloaded")
+            return fake_api_return(proposal(packet))
+        report = analyze_batch(state, links, key="TEST", limit=2, transport=transport)
+        self.assertEqual(report["attempted"], 2)
+        self.assertEqual(report["retries"], 1)
+        self.assertEqual(report["retry_error_codes"], {"http_503_overloaded": 1})
+        self.assertEqual(report["errors"], 0)
+        self.assertEqual(report["generated"], 1)
+        self.assertEqual(report["status"], "generated")
+        self.assertEqual(len(calls), 2)
+        self.assertIsNotNone(publishable_draft(state, "e1", links))
+
+    def test_partial_generation_is_not_misclassified_as_total_failure(self):
+        from policy_domino.ai import AIRequestError, assess_ai_run
+        state, links = state_and_links()
+        state["documents"]["e2"] = dict(state["documents"]["e1"], id="e2")
+        state["findings"]["e2"] = state["findings"]["e1"]
+        packet = source_packet(state, "e1", links)
+        calls = []
+        def transport(body):
+            calls.append(body)
+            if len(calls) == 2:
+                raise AIRequestError("http_503_overloaded")
+            return fake_api_return(proposal(packet))
+        report = analyze_batch(state, links, key="TEST", limit=2, transport=transport)
+        self.assertEqual(report["attempted"], 2)
+        self.assertEqual(report["generated"], 1)
+        self.assertEqual(report["errors"], 1)
+        self.assertEqual(report["status"], "partial_generated")
+        self.assertEqual(report["error_codes"], {"http_503_overloaded": 1})
+        self.assertEqual(assess_ai_run(report), "warning")
+        self.assertIsNotNone(publishable_draft(state, "e1", links))
+
+    def test_only_transient_full_failures_are_operational_warnings(self):
+        from policy_domino.ai import assess_ai_run
+        transient = {"status": "failed", "generated": 0, "errors": 1,
+                     "error_codes": {"http_503_overloaded": 1}}
+        self.assertEqual(assess_ai_run(transient), "warning")
+        transient["error_codes"] = {"invalid_model_output": 1}
+        self.assertEqual(assess_ai_run(transient), "error")
+        transient["error_codes"] = {"http_403_forbidden": 1}
+        self.assertEqual(assess_ai_run(transient), "error")
+        transient["status"] = "not_configured"
+        self.assertEqual(assess_ai_run(transient), "error")
+
+    def test_verified_events_accumulate_across_runs_without_example_shortcuts(self):
+        state, links = state_and_links(with_program=False)
+        for event_id in ("e2", "e3"):
+            state["documents"][event_id] = dict(state["documents"]["e1"], id=event_id)
+            state["findings"][event_id] = state["findings"]["e1"]
+        calls = []
+        def transport(body):
+            calls.append(body)
+            return fake_api_return(proposal(source_packet(state, "e1", links)))
+        for step in range(3):
+            report = analyze_batch(state, links, key="TEST", limit=1, transport=transport)
+            self.assertEqual(report["generated"], 1)
+            self.assertEqual(len(state["ai_reviews"]), step + 1)
+        self.assertEqual(len(calls), 3)
+        report = analyze_batch(state, links, key="TEST", limit=1, transport=transport)
+        self.assertEqual(report["status"], "cached")
+        self.assertEqual(report["attempted"], 0)
+
+
+
 if __name__ == "__main__":
     unittest.main()

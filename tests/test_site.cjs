@@ -287,7 +287,7 @@ async function verifyAIProgramEvidence(){
     program_url:"https://www.alioplus.go.kr/business/bsnDetail.do?bsnSeq=814&bsnTyp=DET"
   };
   document.analysis.ai={
-    status:"generated",source_sha256:"f".repeat(64),model:"gpt-4.1-mini",
+    status:"generated",source_sha256:"f".repeat(64),model:"gemini-3.1-flash-lite",
     generated_at:"2026-11-10T03:00:00Z",required_action_verified:false,
     change_reviews:[{
       article:"제3조",summary:"지급액이 달라짐",
@@ -329,6 +329,18 @@ async function verifyAIProgramEvidence(){
   assert.ok(texts.includes("AI 분석 미실행"));
   assert.ok(!texts.includes("③ AI 변경 영향 분석"),
     "Missing credentials must not produce synthetic AI inference");
+  const partial=setupBrowser(true,"",{
+    documents:[sample("pending","일부개정","compared","2026-11-10","금액·비율")],
+    ai_status:"partial_generated"
+  });
+  await flush();
+  partial.dom.get("items").children[0].onclick();
+  const partialText=flattened(partial.dom.get("detail"))
+    .map(x=>x.textContent).join(" ");
+  assert.ok(partialText.includes("AI 검토 일부 생성됨"),
+    "Partial model output must not be labeled as a total pipeline failure");
+  assert.ok(!partialText.includes("검증 실패"),
+    "A transient overload does not imply the quoted evidence failed");
   console.log("PASS: official program links and clearly labeled AI proposals");
 }
 Promise.all([verifyNavigation(),verifyRealFilters(),verifyAIProgramEvidence()]).catch(error=>{

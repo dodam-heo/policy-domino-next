@@ -62,6 +62,41 @@ class PipelineTests(unittest.TestCase):
                 main(["ai-check", "--state", str(state_path)])
             self.assertEqual(ctx.exception.code, 1)
 
+    def test_ai_check_warns_for_partial_or_transient_but_fails_auth(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from policy_domino.core import write_json
+        from policy_domino.pipeline import main
+        with tempfile.TemporaryDirectory() as tmp:
+            state_path = Path(tmp) / "state.json"
+            state = new_state()
+            state["ai_run"] = {
+                "status": "partial_generated", "attempted": 2,
+                "generated": 1, "errors": 1,
+                "error_codes": {"http_503_overloaded": 1},
+            }
+            write_json(state_path, state)
+            output = StringIO()
+            with redirect_stdout(output):
+                main(["ai-check", "--state", str(state_path)])
+            self.assertIn("::warning", output.getvalue())
+            self.assertIn("generated=1", output.getvalue())
+
+            state["ai_run"].update(status="failed", generated=0)
+            write_json(state_path, state)
+            output = StringIO()
+            with redirect_stdout(output):
+                main(["ai-check", "--state", str(state_path)])
+            self.assertIn("::warning", output.getvalue())
+
+            state["ai_run"]["error_codes"] = {"http_403_forbidden": 1}
+            write_json(state_path, state)
+            output = StringIO()
+            with redirect_stdout(output), self.assertRaises(SystemExit) as ctx:
+                main(["ai-check", "--state", str(state_path)])
+            self.assertEqual(ctx.exception.code, 1)
+            self.assertIn("::error", output.getvalue())
+
     def test_public_oc_fallback_preserves_prior_working_configuration(self):
         from unittest.mock import patch
         from policy_domino.pipeline import configured_law_oc
