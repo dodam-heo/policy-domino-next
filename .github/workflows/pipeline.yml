@@ -38,9 +38,9 @@ jobs:
           from policy_domino.alioplus import ALIOPlusClient
           import re
           from policy_domino.alioplus import INDEX
-          content = ALIOPlusClient(delay_seconds=0).fetch(INDEX + "?typ=sct")
+          content = ALIOPlusClient(delay_seconds=0).fetch(INDEX)
           print("Index payload size:", len(content), "first characters:", repr(content[:180]))
-          for word in ("bsnSeq", "bsnDetail", "bsnBySctList", "schSvcCate", "onclick", "사업정보"):
+          for word in ("bsnSeq", "bsnDetail", "fnDetail", "schSvcCate", "onclick", "사업정보"):
               hit = re.search(word, content, re.IGNORECASE)
               print("MARKER", word, "present:", bool(hit),
                     "sample:", repr(content[max(0, hit.start()-90):hit.end()+180]) if hit else "")
