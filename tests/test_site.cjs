@@ -334,7 +334,8 @@ async function noFabricatedImpact(){
   await flush();
   assert.equal(node(ui,"stat-agencies").textContent,"0");
   assert.ok(textOf(node(ui,"detail")).includes("연결 근거는 아직 확인되지 않았습니다"));
-  node(ui,"mode-impact").onclick();
+  node(ui,"impact-filter").value="linked";
+  node(ui,"impact-filter").onchange();
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,0);
   console.log("PASS: no invented institutions or operational actions");
 }
