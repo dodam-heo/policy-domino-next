@@ -24,6 +24,7 @@ class MeaningTests(unittest.TestCase):
         self.assertEqual(result["label"], "금액·수치 기준")
         self.assertIn("10만원", result["description"])
         self.assertIn("12만원", result["description"])
+        self.assertIn("12만원으로", result["description"])
         self.assertNotIn("관련 변경 관련 변경", result["description"])
         self.assertIn("10만원", result["before"])
         self.assertIn("12만원", result["after"])

@@ -151,6 +151,16 @@ def _literal_reference_update(before: str, after: str) -> tuple[str, str] | None
     return differing[0]
 
 
+def _to_particle(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return "로"
+    final = ord(value[-1])-0xAC00
+    if 0 <= final <= 11171 and final % 28 not in (0, 8):
+        return "으로"
+    return "로"
+
+
 def _changed_numeric(before: str, after: str) -> tuple[str, str] | None:
     old = set(NUMERIC.findall(before))
     new = set(NUMERIC.findall(after))
@@ -232,7 +242,7 @@ def explain(before: str, after: str) -> dict:
         kind, label, score = "citation", "인용 조문 변경", 18
         old_quote, new_quote = citation
         description = (f"이 조문에서 인용하는 조문이 {old_quote}에서 "
-                       f"{new_quote}으로 바뀌었습니다.")
+                       f"{new_quote}{_to_particle(new_quote)} 바뀌었습니다.")
     else:
         numeric = _changed_numeric(before, after)
         area = _subject_area(before, after, old_quote, new_quote)
@@ -250,13 +260,18 @@ def explain(before: str, after: str) -> dict:
             label = ("금액·수치 기준" if re.search(
                 r"원|%|지급|소득|금액", old_quote+new_quote+area)
                 else "인원·기간·수치 기준")
-            description = f"{label}이 {old_quote}에서 {new_quote}로 변경됐습니다."
+            description = (f"{label}이 {old_quote}에서 "
+                           f"{new_quote}{_to_particle(new_quote)} 바뀌었습니다.")
             score = 105
         elif broad:
             kind, label, score = "rewrite", (
                 area if area != "조문 내용 변경" else "조문 내용 재구성"), 86
-            description = ("여러 문구가 함께 바뀌어, 특정 단어 하나만으로 "
-                           "개정 내용을 설명할 수 없습니다.")
+            if len(edits) == 1 and max(len(before), len(after)) <= 130:
+                description = ("종전과 현행의 문구가 크게 달라, "
+                               "동일 제도나 기관의 단순 명칭 변경으로 단정할 수 없습니다.")
+            else:
+                description = ("여러 문구가 함께 바뀌어, 특정 단어 하나만으로 "
+                               "개정 내용을 설명할 수 없습니다.")
             old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
         elif len(edits) == 1 and (not old_quote or not new_quote):
             kind = "addition" if not old_quote else "removal"
