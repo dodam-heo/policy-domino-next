@@ -137,20 +137,26 @@
         before:String(x.old_excerpt||""),after:String(x.new_excerpt||"")})):
       [{before:String(change.before||""),after:String(change.after||"")}])
       .filter(x=>x.before!==x.after);
-    for(const [index,edit] of edits.slice(0,3).entries()){
+    const diffRow=(edit,index)=>{
       const block=create("div","diff-row");
-      if(edits.length>1)append(block,create("div","diff-caption","차이 "+(index+1)+
-        " / "+edits.length));
+      if(edits.length>1)append(block,create("div","diff-caption",
+        "차이 "+(index+1)+" / "+edits.length));
       const columns=create("div","two");
       const before=create("div","before"),after=create("div","after");
       append(before,create("span","value-label","변경 전"));
       append(after,create("span","value-label","변경 후"));
       renderShortDelta(before,edit.before,edit.after,"before");
       renderShortDelta(after,edit.before,edit.after,"after");
-      append(columns,before,after);append(block,columns);append(article,block);
+      append(columns,before,after);append(block,columns);
+      return block;
+    };
+    edits.slice(0,3).forEach((edit,index)=>append(article,diffRow(edit,index)));
+    if(edits.length>3){
+      const more=create("details","evidence-drawer");
+      append(more,create("summary","","추가 변경 부분 "+num(edits.length-3)+"곳 보기"));
+      edits.slice(3).forEach((edit,index)=>append(more,diffRow(edit,index+3)));
+      append(article,more);
     }
-    if(edits.length>3)append(article,create("p","help",
-      "추가 차이 "+(edits.length-3)+"곳은 아래 원문에서 확인할 수 있습니다."));
     const drawer=create("details","original-drawer");
     const summary=create("summary","","종전·현행 조문 전체 펼쳐 보기");
     const columns=create("div","two");
@@ -318,7 +324,7 @@
     state.mode="all";
     const linked=fragmentId();
     const hasLinked=linked && data.documents.some(doc=>doc.id===linked);
-    state.selected=hasLinked?linked:(mobile()?null:(data.documents[0]?.id||null));
+    state.selected=hasLinked?linked:(mobile()?null:(view.filterDocuments(data.documents)[0]?.id||null));
     $("updated").textContent=data.generated_at?"마지막 분석 "+data.generated_at:
       "공식 원천 갱신 대기";
     renderList();renderDetail();
@@ -336,7 +342,7 @@
       $("layout").classList.remove("detail-open");
       document.body.classList.remove("detail-active");
       if(!state.selected && state.data?.documents.length){
-        state.selected=state.data.documents[0].id;renderList();renderDetail();
+        state.selected=view.filterDocuments(state.data.documents)[0].id;renderList();renderDetail();
       }
     }else if(!fragmentId()){
       showList(false);
