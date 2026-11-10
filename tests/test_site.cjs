@@ -225,7 +225,7 @@ async function verifiedNavigation(){
   assert.ok(!text.includes("이미 조치 완료"),"No false completion");
   const core=flatten(detail).findIndex(x=>x.className==="detail-section core");
   const impact=flatten(detail).findIndex(x=>x.className==="detail-section" &&
-      x.children.some(y=>y.textContent==="기관별 변경 검토사항"));
+      x.children.some(y=>y.textContent==="기관별 변경·사업 검토사항"));
   const legal=flatten(detail).findIndex(x=>x.className==="detail-section" &&
       x.children.some(y=>y.textContent==="공식 변경 전·후와 출처"));
   assert.ok(core>=0 && impact>core && legal>impact,
