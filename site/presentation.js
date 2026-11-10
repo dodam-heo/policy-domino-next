@@ -41,10 +41,25 @@
     return groups;
   }
 
-  function impactView(doc, relationships, crossDocumentCandidates) {
+  function impactView(doc, relationships = [], crossDocumentCandidates = [], programDependencies = []) {
     const edges = relationships.filter(edge => edge.source_event_id === doc.id);
     const actions = [];
     const namedActors = [];
+    const programs = [];
+    for (const dep of programDependencies) {
+      if (dep.source_event_id !== doc.id ||
+          dep.verification !== "verified_program_citation" ||
+          dep.operational_program_verified !== true ||
+          dep.required_action_verified !== false ||
+          !dep.agency || !dep.program || !dep.program_url || !dep.citation_quote) continue;
+      programs.push({
+        agency: dep.agency, program: dep.program, programId: dep.program_id,
+        article: dep.changed_article, path: dep.path,
+        review: dep.review || "사업에 변경된 정책 기준이 적용되는지 확인",
+        citation: dep.citation_quote, url: dep.program_url,
+        location: dep.referenced_article || "", evidence: "verified_citation"
+      });
+    }
 
     for (const edge of edges) {
       // An exact legal citation is never an independently established program duty.
@@ -84,6 +99,7 @@
     }
     return {
       actions: groupByAgency(actions),
+      programs: groupByAgency(programs),
       namedActors: groupByAgency(namedActors),
       citations: edges,
     };
