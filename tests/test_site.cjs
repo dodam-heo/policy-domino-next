@@ -485,7 +485,7 @@ async function indexedNoticesAreSearchableWithoutFakingImpact(){
   assert.ok(text.includes("정책 변경으로 확정하거나 기관별 업무 변경으로 표시하지 않습니다"));
   assert.equal(flatten(items).filter(x=>x.dataset.eventId==="official-queued-01").length,0);
   assert.ok(flatten(items).some(x=>x.tag==="a" &&
-    x.href==="https://www.law.go.kr/행정규칙/가상지원기준"));
+    decodeURI(x.href||"")==="https://www.law.go.kr/행정규칙/가상지원기준"));
   node(ui,"search").oninput({target:{value:"2027년도 존재하지않음"}});
   assert.ok(textOf(node(ui,"items")).includes(
     "현재 색인에 일치하는 공식자료가 없습니다"));
