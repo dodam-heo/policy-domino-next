@@ -46,28 +46,53 @@ def changed(document, *, article="제3조", category="조직·정원"):
 
 
 class PolicyEventModelTests(unittest.TestCase):
-    def test_same_official_promulgation_is_one_event_not_many_rows(self):
+    def test_same_promulgation_number_never_mixes_unrelated_laws(self):
+        # Regression for the reported composite display: a martial-law
+        # decree must not show lighthouse amendments or KDIC reviews.
         docs = [
-            doc("가상지원청과 그 소속기관 직제", "11", "12015"),
-            doc("가상산업청과 그 소속기관 직제", "21", "12015"),
-            doc("가상인력특례", "31", "12015"),
+            doc("계엄법 시행령", "11", "12015", date="2026-11-10"),
+            doc("등대유산 보존 및 활용에 관한 법률 시행령",
+                "21", "12015", date="2026-11-10"),
+            doc("상호저축은행법 시행령", "31", "12015",
+                date="2026-11-10"),
         ]
-        results = {d["id"]: changed(d) for d in docs}
-        events = build_events({d["id"]: d for d in docs}, results)
-        self.assertEqual(len(events), 1)
-        event = events[0]
-        self.assertEqual(event["source_count"], 3)
-        self.assertEqual(len(event["changes"]), 3)
-        self.assertEqual(event["institution_count"], 2)
-        self.assertEqual(event["review_count"], 2)
-        self.assertIn("3건 동시 개정", event["title"])
-        self.assertEqual(
-            {x["institution"] for x in event["institutional_reviews"]},
-            {"가상지원청", "가상산업청"})
-        self.assertTrue(all(x["implementation_status"] == "not_verified"
-                            for x in event["institutional_reviews"]))
-        self.assertTrue(all(x["basis_tier"] == "direct_regulated_institution"
-                            for x in event["institutional_reviews"]))
+        findings = {d["id"]: changed(d) for d in docs}
+        findings[docs[2]["id"]]["direct_actor_reviews"] = [{
+            "actor": "예금보험공사", "article": "제3조",
+            "evidence_level": "changed_clause_explicit_actor",
+            "operational_program_verified": False,
+            "required_action_verified": False,
+        }]
+        events = build_events({d["id"]: d for d in docs}, findings)
+        self.assertEqual(len(events), 3)
+        self.assertEqual({e["title"] for e in events},
+                         {d["title"] for d in docs})
+        self.assertTrue(all(e["source_count"] == 1 for e in events))
+        self.assertTrue(all(len(e["source_documents"]) == 1 for e in events))
+        self.assertEqual(len({event_identity(d) for d in docs}), 3)
+        martial = next(e for e in events if e["title"] == "계엄법 시행령")
+        self.assertEqual(martial["institution_count"], 0)
+        self.assertEqual(martial["review_count"], 0)
+        self.assertTrue(all(c["document_title"] == "계엄법 시행령"
+                            for c in martial["changes"]))
+        self.assertNotIn("등대유산", str(martial))
+        self.assertNotIn("예금보험공사", str(martial))
+        banking = next(e for e in events
+                       if e["title"] == "상호저축은행법 시행령")
+        self.assertEqual(banking["institution_count"], 1)
+        self.assertEqual(banking["institutional_reviews"][0]["institution"],
+                         "예금보험공사")
+
+    def test_same_issue_can_link_through_real_evidence_not_event_merge(self):
+        a = doc("가상A지원법 시행령", "11", "12015")
+        b = doc("가상B지원법 시행령", "21", "12015")
+        out = build_events(
+            {d["id"]: d for d in [a,b]},
+            {a["id"]: changed(a), b["id"]: changed(b)})
+        self.assertEqual(len(out), 2)
+        self.assertFalse(any("동시 개정" in e["title"] for e in out))
+        self.assertTrue(all(e["members"][0]["title"] == e["title"]
+                            for e in out))
 
     def test_same_day_not_same_number_or_type_remains_separate(self):
         docs = [

@@ -284,8 +284,12 @@ def validate_public(payload: dict) -> dict:
         source_docs = [docs[x] for x in source_ids if x in docs]
         verify(len(source_docs) == len(source_ids), pos,
                "event points to missing source document")
+        verify(len(source_ids) == 1, pos,
+               "one policy change event cannot mix unrelated legal instruments")
         if not source_docs:
             continue
+        verify(event.get("title") == source_docs[0].get("title"), pos,
+               "event title must be the exact official amended instrument")
         group_keys = {event_identity(d) for d in source_docs}
         verify(len(group_keys) == 1 and
                event.get("identity") in group_keys and
@@ -381,6 +385,8 @@ def validate_public(payload: dict) -> dict:
             institution = action.get("institution")
             source = docs.get(doc_id, {})
             change = by_clause.get((doc_id, article))
+            verify(doc_id == source_ids[0], loc,
+                   "institutional review cannot come from another amended law")
             verify(bool(source) and bool(change) and bool(institution), loc,
                    "review requires an actual changed clause and target institution")
             if not change:

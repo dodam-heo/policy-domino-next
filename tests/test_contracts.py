@@ -145,6 +145,12 @@ class EvidenceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "citing-rule issuer"):
             validate_public(forged)
 
+    def test_representative_title_cannot_hide_merged_regulations(self):
+        x = example()
+        x["events"][0]["title"] = "다른 법령 시행령"
+        with self.assertRaisesRegex(ContractError, "exact official amended"):
+            validate_public(x)
+
     def test_forged_omnibus_merge_fails_contract(self):
         x = example()
         doc = copy.deepcopy(x["documents"][0])
@@ -155,7 +161,8 @@ class EvidenceContractTests(unittest.TestCase):
         x["events"][0]["source_count"] = 2
         x["events"][0]["members"].append(
             {"id": doc["id"], "title": doc["title"]})
-        with self.assertRaisesRegex(ContractError, "identical official promulgation"):
+        with self.assertRaisesRegex(
+                ContractError, "one policy change event cannot mix"):
             validate_public(x)
 
 

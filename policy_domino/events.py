@@ -5,9 +5,11 @@ auditable policy *events* from the current official findings. It never loads
 legacy outputs, registers specific government bodies, or infers a program from
 a coincidentally similar title.
 
-Shared official promulgation identity is the ONLY automatic cross-law merge.
-Legal citations and public program evidence then form downstream links, with
-their evidence levels kept distinct from actual implementation status.
+Every public change event is scoped to ONE amended legal instrument.
+A shared promulgation number may identify an omnibus issuing event but never
+licenses cross-law mixing of changed clauses, actors, or public-service effects.
+Legal citations and official program evidence form downstream links only from
+the exact changed source document and its own amended article.
 """
 from __future__ import annotations
 
@@ -28,24 +30,14 @@ VERIFIED_LIFECYCLE = {"enactment", "repeal"}
 
 
 def event_identity(document: dict) -> str:
-    """A joint promulgation needs exact official identity, never text similarity.
+    """One change event per official amended document, never per proclamation.
 
-    Only central legislation may be grouped across distinct law identifiers.
-    For local rules / ministry notices the issuing authority and ID matter.
-    An absent number means no grouping, not a guessed common policy.
+    A number shared by different decrees is provenance metadata, not a
+    legal basis for mixing their changed articles or responsible institutions.
+    Keep stable source/version identity so separately amended instruments
+    remain distinct even under an official omnibus amendment.
     """
-    source = document.get("source", "")
-    date = document.get("published_at", "")
-    number = clean(document.get("number", ""))
-    kind = clean(document.get("law_type", ""))
-    # A general fallback such as '법령' is not an official instrument class.
-    # Without a specific class the apparent shared promulgation number could
-    # join separate legal instruments, producing a misleading omnibus event.
-    if (source == "law" and date and number.isdecimal() and
-            int(number) > 0 and kind and kind != "법령"):
-        return "promulgation|law|" + kind + "|" + date + "|" + number
     return "document|" + str(document["id"])
-
 
 def _id(key: str) -> str:
     return "event-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
@@ -82,15 +74,10 @@ def _change_brief(change: dict) -> str:
 
 
 def _main_title(rows: list[dict]) -> str:
-    if len(rows) == 1:
-        return rows[0]["title"]
-    # Prefer a standalone central instrument to subsidiary organization rules.
-    # This is a *presentation choice*, never a source of policy grouping.
-    others = [r for r in rows if not ORGANIZATION_RULE.fullmatch(clean(r["title"]))]
-    representative = sorted(others or rows,
-                            key=lambda r: (len(r["title"]), r["title"]))[0]
-    return representative["title"] + " · 관련 법령 " + str(len(rows)) + "건 동시 개정"
-
+    """Exact official document title; never a representative of other laws."""
+    if len(rows) != 1:
+        raise ValueError("Policy events must contain exactly one changed document")
+    return rows[0]["title"]
 
 def _direct_subject(document: dict) -> str:
     matched = ORGANIZATION_RULE.fullmatch(clean(document.get("title", "")))
@@ -186,6 +173,8 @@ def build_events(documents: dict, findings: dict, *,
     events = []
     for key, members in groups.items():
         members = sorted(members, key=lambda x: x["id"])
+        if len(members) != 1:
+            raise ValueError("Cross-document change-event grouping is forbidden")
         entries = []
         tasks = []
         ai_summaries = []
