@@ -52,7 +52,7 @@
     try{
       const u = new URL(link);
       if(u.protocol !== "https:")return null;
-      if(u.hostname !== "www.law.go.kr" && u.hostname !== "law.go.kr")return null;
+      if(!["www.law.go.kr","law.go.kr","www.alioplus.go.kr","alioplus.go.kr"].includes(u.hostname))return null;
       return u.href;
     }catch{return null;}
   };
@@ -200,33 +200,36 @@
 
     // Agency actions require independently verified public program evidence.
     // Merely naming an official in a law is a discovery lead, not an action.
-    const evidence=view.impactView(doc,state.data.relationships,
-      state.data.cross_document_review_candidates);
+    const evidence=view.impactView(doc,state.data.relationships||[],
+      state.data.cross_document_review_candidates||[],
+      state.data.program_dependencies||[]);
     const impacts=heading("② 기관별 변경 검토사항");
-    if(!evidence.actions.size){
+    const agencies=Array.from(new Set([
+      ...evidence.actions.keys(), ...evidence.programs.keys()
+    ])).sort((a,b)=>a.localeCompare(b,"ko-KR"));
+    if(!agencies.length){
       append(impacts,create("div","agency-empty",
-        "공식 사업자료로 검증된 기관별 변경 검토사항은 아직 없습니다. 조문에 등장한 수행주체나 단순 인용만으로 기관의 실제 수정 업무를 확정하지 않습니다."));
+        "공식 사업자료와 변경 조문 사이의 적용 관계가 아직 확인되지 않았습니다. 인용·기관명만으로 수정 의무를 추정하지 않습니다."));
     }else{
-      if(!evidence.actions.has(state.agencyFilter))state.agencyFilter="all";
+      if(state.agencyFilter!=="all" && !agencies.includes(state.agencyFilter))
+        state.agencyFilter="all";
       const filters=create("div","review-filters");
       filters.setAttribute("role","group");
       filters.setAttribute("aria-label","기관 이름별 검토 필터");
-      const entries=[["all","전체 기관"],
-        ...Array.from(evidence.actions.keys()).map(name=>[name,name])];
-      for(const [key,name] of entries){
-        const active=state.agencyFilter===key;
-        const btn=create("button","review-chip"+(active?" active":""),name);
-        btn.type="button";btn.dataset.agencyFilter=key;
-        btn.setAttribute("aria-pressed",String(active));
-        btn.onclick=()=>{state.agencyFilter=key;renderDetail();};
+      for(const name of ["all",...agencies]){
+        const btn=create("button","review-chip"+
+          (state.agencyFilter===name?" active":""),name==="all"?"전체 기관":name);
+        btn.type="button";btn.dataset.agencyFilter=name;
+        btn.setAttribute("aria-pressed",String(state.agencyFilter===name));
+        btn.onclick=()=>{state.agencyFilter=name;renderDetail();};
         append(filters,btn);
       }
       append(impacts,filters);
-      for(const [agency,rows] of evidence.actions){
+      for(const agency of agencies){
         if(state.agencyFilter!=="all" && state.agencyFilter!==agency)continue;
         const group=create("div","agency-group");
         append(group,create("h4","agency-group-head",agency));
-        for(const row of rows){
+        for(const row of evidence.actions.get(agency)||[]){
           const card=create("div","agency-card");
           append(card,create("strong","",row.program),
             row.location?create("div","micro",row.location):null,
@@ -235,10 +238,45 @@
             external(row.url,"사업 적용 근거"));
           append(group,card);
         }
+        for(const row of evidence.programs.get(agency)||[]){
+          const card=create("div","agency-card");
+          append(card,create("strong","",row.program),
+            create("div","micro","공식 사업자료에서 "+row.article+" 인용 확인 · 수정 의무 미확정"),
+            create("p","",row.review),
+            create("div","evidence-quote",row.citation),
+            external(row.url,"공식 공공사업 원문"));
+          const aiReview=(analysis.ai?.program_reviews||[]).find(x=>
+            x.program_id===row.programId && x.article===row.article);
+          if(aiReview){
+            append(card,create("div","ai-review-label","AI 업무 검토 초안 · 조치 확정 아님"),
+              create("p","",aiReview.reason),
+              create("p","ai-review-question",aiReview.review_question));
+          }
+          append(group,card);
+        }
         append(impacts,group);
       }
     }
     append(root,impacts);
+
+    if(analysis.ai?.status==="generated"){
+      const ai=heading("③ AI 변경 영향 분석",
+        "공식 변경 원문과 연결 근거를 바탕으로 작성한 AI 검토 초안입니다. 기관의 수정 의무를 확정하지 않습니다.");
+      append(ai,create("div","micro","실행 모델: "+analysis.ai.model+
+        " · 분석시점: "+(analysis.ai.generated_at||"")));
+      for(const item of analysis.ai.change_reviews||[]){
+        const card=create("div","agency-card ai-card");
+        append(card,create("strong","",item.article+" · "+item.summary),
+          create("p","ai-review-question",item.review_question),
+          create("div","micro","공식 원문 발췌: "+item.before_quote+
+            " → "+item.after_quote));
+        append(ai,card);
+      }
+      append(root,ai);
+    }else if(state.data.ai_status==="not_configured" && diffs.length){
+      append(root,create("div","state-note",
+        "AI 분석 미실행 · 모델 인증키 미설정. 공식 신구 비교 결과는 별도로 제공됩니다."));
+    }
 
     // Keep investigative traces available without presenting them as duties.
     if(evidence.citations.length || evidence.namedActors.size){
