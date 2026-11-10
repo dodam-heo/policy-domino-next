@@ -1,5 +1,7 @@
 name: Policy Domino NEXT - Single Production Pipeline
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     paths-ignore:
@@ -9,14 +11,34 @@ on:
   schedule:
     - cron: '17 */6 * * *'
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 concurrency:
-  group: policy-domino-next-publish-first-v2
+  group: policy-domino-next-${{ github.event_name == 'pull_request' && github.head_ref || 'publish' }}
   cancel-in-progress: true
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source code and UI behavior
+        run: |
+          python -m compileall -q policy_domino tests
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          node tests/test_site.cjs
+      - name: Check official evidence contracts
+        run: python -m policy_domino.contracts site/data.json
+
   publish:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 8
     environment:
@@ -27,13 +49,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify code before publishing
-        run: |
-          python -m compileall -q policy_domino tests
-          python -m unittest discover -s tests -p 'test_*.py' -v
-          node tests/test_site.cjs
-      - name: Validate previously published official dataset before deploying
-        run: python -m policy_domino.contracts site/data.json
       - name: Configure actual GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload initial verified site without waiting for network collection
@@ -46,6 +61,10 @@ jobs:
         uses: actions/deploy-pages@v4
 
   collect_and_refresh:
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     runs-on: ubuntu-latest
     needs: publish
     timeout-minutes: 22
