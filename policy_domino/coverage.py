@@ -73,8 +73,26 @@ def collect_streams(api, state, today: dt.date, ingest_window) -> bool:
     return all(row["complete"] for row in results)
 
 
-def pending_counts(state) -> dict:
-    """Differentiate indexed, analyzed, not attempted, and retry exhausted."""
+def retry_due(attempt: dict, today: dt.date) -> bool:
+    """Past the initial retry threshold, retry after bounded cool-down.
+
+    Source data may become available later. Never make four failures a
+    permanent terminal state; avoid hammering the public API on each run.
+    """
+    count = int(attempt.get("count", 0))
+    if count < MAX_ATTEMPTS:
+        return True
+    try:
+        previous = dt.date.fromisoformat(attempt.get("last_date", ""))
+    except (ValueError, TypeError):
+        return False
+    interval = min(30, 2 ** min(5, count - MAX_ATTEMPTS + 1))
+    return (today - previous).days >= interval
+
+
+def pending_counts(state, today: dt.date | None = None) -> dict:
+    """Separate analyzed, untouched, active retries and cooled-off retries."""
+    today = today or dt.date.today()
     data = {}
     for source in SOURCES:
         docs = [x for x in state.get("documents", {}).values()
@@ -90,7 +108,7 @@ def pending_counts(state) -> dict:
                     stats["partial"] += 1
                 if not state.get("attempts", {}).get(doc["id"], {}).get("count", 0):
                     stats["unexamined"] += 1
-                elif state["attempts"][doc["id"]].get("count", 0) >= MAX_ATTEMPTS:
+                elif not retry_due(state["attempts"][doc["id"]], today):
                     stats["blocked"] += 1
                 else:
                     stats["retryable"] += 1
@@ -110,7 +128,7 @@ def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
         if state.get("findings", {}).get(key, {}).get("status") in DONE:
             continue
         attempt = attempts.get(key, {})
-        if attempt.get("count", 0) >= MAX_ATTEMPTS:
+        if not retry_due(attempt, today):
             continue
         if attempt.get("last_date") == today.isoformat():
             continue

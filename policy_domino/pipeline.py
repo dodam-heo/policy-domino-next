@@ -20,10 +20,6 @@ DATA_FILE = ROOT / "site" / "data.json"
 
 YEAR_TITLE = re.compile(r"(19|20)\d{2}\s*년(?:도)?")
 TERMINAL = {"compared", "no_text_change", "enactment", "repeal"}
-RETRYABLE = {"queued", "body_unavailable", "history_unavailable",
-             "baseline_unavailable", "partial_compared", "partial_unresolved",
-             "source_error"}
-MAX_ATTEMPTS = 4
 
 
 def windows(today: dt.date, cursor_days: int = 0):

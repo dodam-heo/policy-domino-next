@@ -34,8 +34,12 @@ a{color:var(--blue);text-underline-offset:3px}
 .summary strong{display:block;line-height:1.25;margin-top:5px;color:#12577a;
   font-size:25px;font-weight:850;font-variant-numeric:tabular-nums}
 .coverage-status{max-width:1390px;margin:-2px auto 16px;padding:0 24px}
-.coverage-status-inner{display:grid;gap:5px;padding:12px 16px;
+.coverage-status-inner{display:block;padding:12px 16px;
   border:1px solid #cbdde7;border-radius:9px;background:#eff6fa}
+.coverage-status-inner>summary{cursor:pointer;color:#2e5e77;font-size:12px;
+  font-weight:780;line-height:1.6}
+.coverage-expanded{display:grid;gap:5px;margin-top:9px;padding-top:9px;
+  border-top:1px solid #d4e2eb}
 .coverage-status p{margin:0;color:#346075;font-size:12px;line-height:1.7;
   overflow-wrap:anywhere}
 @media(max-width:850px){

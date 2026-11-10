@@ -464,7 +464,7 @@
       " 신구·제정·폐지 확인 "+num(audit.checked??progress.verified_document_changes)+"건"+
       " · 아직 미분석 "+num(audit.unexamined)+"건"+
       " · 재확인 대상 "+num(audit.retryable)+"건"+
-      " · 재시도 상한 도달 "+num(audit.blocked)+"건"+
+      " · 재확인 유예 "+num(audit.blocked)+"건"+
       (count?" · 원천 수집 미완료 구간 "+num(count)+"개":"");
     const checked=run.checked_at?String(run.checked_at).replace("T"," ").slice(0,16)+" UTC":"미실행";
     $("ai-review-progress").textContent=

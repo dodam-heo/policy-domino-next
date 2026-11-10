@@ -170,7 +170,7 @@ async function verifiedNavigation(){
   assert.ok(node(ui,"source-status").textContent.includes("10,166"));
   assert.ok(node(ui,"analysis-coverage").textContent.includes("아직 미분석 9,840건"));
   assert.ok(node(ui,"analysis-coverage").textContent.includes("재확인 대상 204건"));
-  assert.ok(node(ui,"analysis-coverage").textContent.includes("재시도 상한 도달 21건"));
+  assert.ok(node(ui,"analysis-coverage").textContent.includes("재확인 유예 21건"));
   assert.ok(node(ui,"analysis-coverage").textContent.includes("수집 미완료 구간 2개"));
   assert.ok(node(ui,"ai-review-progress").textContent.includes("24 / 변경 조문 468건"));
   assert.ok(node(ui,"ai-review-progress").textContent.includes("신규 결과 9건"));

@@ -61,6 +61,20 @@ class CoverageTests(unittest.TestCase):
         self.assertTrue(any(d["published_at"]=="2026-11-09" for d in queue))
         self.assertEqual(len(set(d["id"] for d in queue)),len(queue))
 
+    def test_retry_threshold_is_not_permanent_exclusion(self):
+        from policy_domino.coverage import retry_due
+        previous={"count":4,"last_date":"2026-11-08"}
+        self.assertFalse(retry_due(previous,dt.date(2026,11,9)))
+        self.assertTrue(retry_due(previous,dt.date(2026,11,10)))
+        state=new_state()
+        item=document("law","old","2026-06-01")
+        state["documents"][item["id"]]=item
+        state["attempts"][item["id"]]=previous
+        queue=fair_work_queue(state,dt.date(2026,11,10),5)
+        self.assertEqual([d["id"] for d in queue],[item["id"]])
+        self.assertEqual(pending_counts(state,dt.date(2026,11,10))
+                         ["law"]["retryable"],1)
+
     def test_verified_partial_unattempted_retry_and_blocked_are_distinct(self):
         state=new_state()
         for n in range(5):
