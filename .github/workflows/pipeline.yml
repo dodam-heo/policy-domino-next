@@ -29,54 +29,36 @@ jobs:
           python -m compileall -q policy_domino tests
           python -m unittest discover -s tests -p 'test_*.py' -v
           node tests/test_site.cjs
-      - name: Audit real ALIOPLUS program responses (nonblocking)
+      - name: Audit real ALIOPLUS and investigate page form (nonblocking)
         if: github.event_name == 'pull_request'
         continue-on-error: true
         timeout-minutes: 2
         run: |
           python - <<'PY'
-          from policy_domino.alioplus import ALIOPlusClient
-          import re
-          from policy_domino.alioplus import INDEX
-          content = ALIOPlusClient(delay_seconds=0).fetch(INDEX)
-          print("Index payload size:", len(content), "first characters:", repr(content[:180]))
-          for word in ("bsnSeq", "bsnDetail", "fnDetail", "schSvcCate", "onclick", "사업정보"):
-              hit = re.search(word, content, re.IGNORECASE)
-              print("MARKER", word, "present:", bool(hit),
-                    "sample:", repr(content[max(0, hit.start()-90):hit.end()+180]) if hit else "")
-          anchors = re.findall(r"<a\\b[^>]{0,1000}>", content, re.IGNORECASE | re.DOTALL)
-          print("BUSINESS ANCHORS:", [a[:250] for a in anchors
-                if "bsn" in a.lower() or "business" in a.lower()][:12])
+          import urllib.request
+          import urllib.parse
+          from policy_domino.alioplus import ALIOPlusClient, INDEX, listing_detail_urls
+          client = ALIOPlusClient(delay_seconds=0)
           state = {}
-          report = ALIOPlusClient(delay_seconds=0).collect(state, max_details=2)
-          print("Live program source audit:", report)
-          print("Verified record count:", len(state.get("official_programs", {})))
-          for item in list(state.get("official_programs", {}).values())[:2]:
-              print("REAL RECORD:", item["name"], "/", item["agency"],
-                    "/ text:", item["description"][:90], "/ url:", item["url"])
-          from policy_domino.alioplus import listing_detail_urls
-          paging = re.search(r'<div class="paging">', content, re.IGNORECASE)
-          print("PAGE CONTROL HTML:", repr(content[paging.start():paging.start()+1500]) if paging else "none")
-          page2 = ALIOPlusClient(delay_seconds=0).fetch(INDEX + "?pageNo=2")
-          page_def_pos = content.find("function fnSetPage")
-          print("PAGING FUNCTION:", repr(content[page_def_pos:page_def_pos+1100]) if page_def_pos>=0 else "not found")
-          for tag in ("검색 결과", "전체", "검색 결과가 존재하지", "fnSetPage", "paging"):
-              match = re.search(tag, page2)
-              print("PAGE2 MARKER", tag, repr(page2[max(0, match.start()-120):match.end()+180]) if match else "none")
-          form_pos = content.find('id="listFrm"')
-          print("LIST FORM HTML:", repr(content[max(0, form_pos-120):form_pos+2200]) if form_pos>=0 else "not found")
-          pag2_pos = page2.find('class="paging"')
-          print("PAGE2 PAGING:", repr(page2[max(0,pag2_pos-50):pag2_pos+650]) if pag2_pos>=0 else "not found")
-          print("PAGE2 comparison:", len(page2),
-                "page1 ids:", listing_detail_urls(content)[:6],
-                "page2 ids:", listing_detail_urls(page2)[:6])
-          for word in ("fnPage", "pageIndex", "pageNo", "currentPage",
-                       "pageNum", "paging", "firstPage"):
-              match = re.search(word, content, re.IGNORECASE)
-              print("PAGE MARKER", word, ":", repr(content[max(0, match.start()-110):
-                    match.end()+240]) if match else "none")
-          if report["accepted"] == 0:
-              raise SystemExit("No verified program: public source compatibility is unproven")
+          report = client.collect(state, max_details=2)
+          print("FIRST PAGE:", report)
+          params = {"pageNo": "2", "typ": "life", "schFstCateCd": "",
+                    "schScdCateCd": "", "schTrdCateCd": "", "schLifeCycle": "",
+                    "schSvcCate": "", "schApbaId": "", "schBsnNa": ""}
+          url = INDEX + "?" + urllib.parse.urlencode(params)
+          for method in ("GET", "POST"):
+              try:
+                  request = urllib.request.Request(url, 
+                      data=urllib.parse.urlencode(params).encode() if method=="POST" else None,
+                      headers={"User-Agent": "PolicyDominoNext/0.2 (public research)",
+                               "Content-Type": "application/x-www-form-urlencoded"})
+                  with urllib.request.urlopen(request, timeout=15) as response:
+                      raw = response.read(1200000).decode("utf-8","replace")
+                  ids = listing_detail_urls(raw)
+                  print("PAGING", method, "length",len(raw),"ids",ids[:8],
+                        "has current page 2:", "<strong>2</strong>" in raw)
+              except Exception as exc:
+                  print("PAGING",method,"failed:",repr(exc))
           PY
       - name: Validate existing official publication evidence
         run: python -m policy_domino.contracts site/data.json
