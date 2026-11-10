@@ -64,6 +64,7 @@ def new_state() -> dict:
         "schema": SCHEMA, "documents": {}, "versions": {},
         "findings": {}, "coverage": [], "attempts": {}, "cursor_days": 0,
         "dependency_discovery": {}, "discovery_metrics": {},
+        "official_programs": {}, "program_source_audit": {},
         "errors": [], "generated_at": "",
     }
 
