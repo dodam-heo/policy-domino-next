@@ -16,7 +16,7 @@ from urllib.parse import urlencode, urlparse
 from .programs import canonical_url, ingest_programs
 
 ORIGIN = "https://www.alioplus.go.kr"
-INDEX = ORIGIN + "/business/bsnBySctList.do"
+INDEX = ORIGIN + "/business/bsnByLifeList.do"
 DETAIL = ORIGIN + "/business/bsnDetail.do"
 MAX_BYTES = 1_500_000
 FIELDS = ("기관명", "사업소개", "사업 기간", "사업기간", "이용대상",
@@ -109,7 +109,7 @@ def listing_detail_urls(content: str) -> list[str]:
         r"bsnDetail\.do[^\"'<>]*?bsnSeq=(\d{1,12})",
         r"(?:data-bsn-seq|data-bsnseq)\s*=\s*[\"'](\d{1,12})[\"']",
         r"bsnSeq\s*[:=]\s*[\"']?(\d{1,12})",
-        r"(?:fn|go|view)[\w_]*(?:Bsn|Business)[\w_]*\s*\(\s*[\"'](\d{1,12})[\"']",
+        r"fnDetail\s*\(\s*[\"']?(\d{1,12})[\"']?\s*,\s*[\"']?(?:DET|SCT)[\"']?",
     )
     for pattern in patterns:
         for match in re.finditer(pattern, plain, re.IGNORECASE):
@@ -132,7 +132,7 @@ class ALIOPlusClient:
     def fetch(self, url: str) -> str:
         p = urlparse(url)
         if (p.scheme != "https" or p.hostname != "www.alioplus.go.kr" or
-            p.path not in ("/business/bsnBySctList.do", "/business/bsnDetail.do")):
+            p.path not in ("/business/bsnByLifeList.do", "/business/bsnDetail.do")):
             raise ProgramSourceError("Unapproved official portal endpoint")
         if self.transport:
             return self.transport(url)
@@ -157,7 +157,7 @@ class ALIOPlusClient:
                  "pages_checked": 0, "accepted": 0, "rejected": 0,
                  "complete": False, "error": ""}
         try:
-            raw = self.fetch(INDEX + "?typ=sct")
+            raw = self.fetch(INDEX)
             urls = listing_detail_urls(raw)
             audit["ids_discovered"] = len(urls)
             if not urls:
