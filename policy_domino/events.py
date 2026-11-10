@@ -100,7 +100,8 @@ def _direct_subject(document: dict) -> str:
 def _review_row(document: dict, change: dict, institution: str, *,
                 tier: str, source_quote: str, program: str = "",
                 program_id: str = "", program_url: str = "",
-                linking_regulation: str = "", ai: dict | None = None) -> dict:
+                linking_regulation: str = "", ai: dict | None = None,
+                related_rule_url: str = "", related_rule_article: str = "") -> dict:
     article = change["article"]
     place = (program + " 운영 기준") if program else (institution + " 담당 업무")
     source_category = change.get("category", "")
@@ -108,9 +109,11 @@ def _review_row(document: dict, change: dict, institution: str, *,
         "금액·비율", "선정·자격", "기한·절차", "서식·증빙",
         "허가·감독", "조직·정원",
     } else explain(change.get("before", ""), change.get("after", ""))["label"]
+    identity = [document["id"], article, institution, program_id, tier]
+    if tier == "verified_official_rule_citation":
+        identity += [linking_regulation, related_rule_article, related_rule_url]
     result = {
-        "id": _id("|".join([document["id"], article, institution,
-                            program_id, tier])),
+        "id": _id("|".join(identity)),
         "document_id": document["id"],
         "document_title": document["title"],
         "institution": institution,
@@ -125,6 +128,8 @@ def _review_row(document: dict, change: dict, institution: str, *,
         "source_url": change.get("source_url", document.get("url", "")),
         "program_url": program_url,
         "linking_regulation": linking_regulation,
+        "related_rule_url": related_rule_url,
+        "related_rule_article": related_rule_article,
         # Source text establishes a review target, NOT a changed internal system.
         "implementation_status": "not_verified",
     }
@@ -259,6 +264,32 @@ def build_events(documents: dict, findings: dict, *,
                     ))
 
                 for edge in citing[(doc_id, article)]:
+                    # Exact changed-article citation in an OFFICIAL regulation
+                    # makes its issuing public institution a traceable *review
+                    # lead*, not a presumed implementation duty. Both the
+                    # changed clause and citing clause must have legal evidence.
+                    issuer_id = edge.get("referencing_document_id", "")
+                    issuer_doc = documents.get(issuer_id, {})
+                    issuer = issuer_doc.get("ministry", "")
+                    if (issuer_doc.get("source") in ("law", "admrul", "ordin")
+                            and issuer and issuer == edge.get("publishing_agency")
+                            and edge.get("referencing_source_url")
+                            and edge.get("reference_quote")
+                            and edge.get("referencing_article")):
+                        review = _review_row(
+                            doc, ch, issuer,
+                            tier="verified_official_rule_citation",
+                            source_quote=edge["reference_quote"],
+                            linking_regulation=edge["referencing_title"],
+                            related_rule_url=edge["referencing_source_url"],
+                            related_rule_article=edge["referencing_article"],
+                        )
+                        review["task"] = (
+                            edge["referencing_title"] + " " +
+                            edge["referencing_article"] +
+                            "에서 인용하는 " + doc["title"] + " " +
+                            article + "의 변경 적용 여부 검토")
+                        candidates.append(review)
                     linked.append({
                         "document_id": doc_id, "changed_article": article,
                         "title": edge.get("referencing_title", ""),

@@ -243,7 +243,10 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24) -> dict:
     # Synthetic unit-test clients do not initiate uncontrolled network requests.
     if isinstance(api, LawAPI):
         from .alioplus import ALIOPlusClient
-        state["program_source_audit"] = ALIOPlusClient().collect(state, max_details=6)
+        # Exhaust the safely linked first-page public programmes incrementally.
+        # This is still not a nationwide programme register and must not be
+        # marked complete until the official provider's pagination is verified.
+        state["program_source_audit"] = ALIOPlusClient().collect(state, max_details=15)
     # LLM calls run in a separate bounded step against persisted source data.
     # Collection must never burn API quota or conceal a failed analysis.
     state["generated_at"] = utc_now()
@@ -271,7 +274,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         row["analysis"] = findings.get(row["id"], {
             "status": "queued", "changes": [], "review_candidates": [],
             "reason": "공식 목록 수집 · 이전·현재 본문 분석 대기"}).copy()
-        generated = publishable_draft(state, row["id"], program_links)
+        generated = publishable_draft(
+            state, row["id"], program_links, relationships=edges)
         if row["analysis"].get("changes"):
             verified_count += 1
         if generated is not None:
@@ -295,6 +299,14 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "coverage": state.get("coverage", []),
         "quality": quality(state),
         "documents": indexed,
+        # Minimal metadata for official rules found via downstream citation
+        # searches. A source-only referencing regulation is not a new change.
+        "reference_documents": sorted(({
+            "id": item["id"], "source": item["source"],
+            "title": item["title"], "ministry": item.get("ministry", ""),
+            "url": item["url"],
+        } for item in docs.values() if item.get("reference_only")),
+            key=lambda x: x["id"]),
         "events": events,
         "relationships": edges,
         "cross_document_review_candidates": work_reviews,
@@ -307,6 +319,17 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
             "pending_events": sum(not e["ai_count"] for e in events),
             "analyzed_documents": ai_review_count,
             "verified_document_changes": verified_count,
+            "verified_clauses": sum(len(event["changes"]) for event in events),
+            "ai_analyzed_clauses": sum(
+                len({x.get("document_id", ""), x.get("article", "")}
+                    for x in event["ai_summaries"])
+                for event in events),
+            "official_program_records": len(state.get("official_programs", {})),
+            "verified_program_links": len(program_links),
+            "referencing_public_rule_reviews": sum(
+                1 for event in events
+                for review in event["institutional_reviews"]
+                if review["basis_tier"] == "verified_official_rule_citation"),
             "institutional_reviews": sum(e["review_count"] for e in events),
             "affected_institutions": len({
                 a["institution"]
@@ -382,7 +405,9 @@ def main(argv=None):
         from .ai import analyze_batch
         edges = connect_changes(state["findings"], state["versions"], state["documents"])
         links = discover_program_links(state, edges)
-        report = analyze_batch(state, links, limit=max(1, min(args.limit, 60)))
+        report = analyze_batch(
+            state, links, limit=max(1, min(args.limit, 60)),
+            relationships=edges)
         write_json(args.state, state)
         print("Policy Domino AI:", json.dumps(report, ensure_ascii=False))
     result = render(state, args.output)

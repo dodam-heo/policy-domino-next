@@ -85,6 +85,45 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(packet["programs"][0]["article"], "제3조")
         self.assertIsNone(source_packet(state, "unknown", links))
 
+    def test_citing_public_rule_issuer_is_available_for_ai_work_review(self):
+        state, links = state_and_links(with_program=False)
+        state["documents"]["r1"] = {
+            "id": "r1", "source": "ordin", "reference_only": True,
+            "title": "가상 복지심사 운영조례",
+            "ministry": "가상시청",
+            "url": "https://www.law.go.kr/자치법규/가상복지심사운영조례",
+        }
+        edge = {
+            "source_event_id": "e1", "changed_article": "제3조",
+            "referencing_document_id": "r1",
+            "referencing_title": "가상 복지심사 운영조례",
+            "referencing_article": "제7조",
+            "reference_quote": "「가상 학비지원법」 제3조를 적용한다.",
+            "referencing_source_url":
+                "https://www.law.go.kr/자치법규/가상복지심사운영조례",
+            "publishing_agency": "가상시청",
+            "relationship": "verified_exact_article_citation",
+        }
+        packet=source_packet(state,"e1",links,relationships=[edge])
+        reviews=packet.get("institutions",[])
+        self.assertEqual(len(reviews),1)
+        self.assertEqual(reviews[0]["agency"],"가상시청")
+        self.assertEqual(reviews[0]["tier"],"verified_official_rule_citation")
+        base=proposal(packet)
+        base["institution_reviews"]=[{
+            "review_id":reviews[0]["review_id"],
+            "article":"제3조", "agency":"가상시청",
+            "basis_quote":reviews[0]["basis_quote"],
+            "work_impact":"공식 심사 운영조례의 조문 인용 기준을 점검합니다.",
+            "review_question":"기존 제7조 업무 기준을 조정할 필요가 있는가?",
+        }]
+        result=analyze_batch(state,links,key="TEST",limit=1,
+            relationships=[edge],transport=lambda _:fake_api_return(base))
+        self.assertEqual(result["generated"],1)
+        output=publishable_draft(state,"e1",links,relationships=[edge])
+        self.assertEqual(output["institution_reviews"][0]["agency"],"가상시청")
+        self.assertFalse(output["required_action_verified"])
+
     def test_source_verified_institution_review_is_model_bound(self):
         state, links = state_and_links()
         packet = source_packet(state, "e1", links)
@@ -347,6 +386,104 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(report["attempted"], 0)
 
 
+
+    def test_valid_article_is_kept_when_sibling_quote_is_fabricated(self):
+        state, links = state_and_links(with_program=False)
+        first = state["findings"]["e1"]["changes"][0]
+        state["findings"]["e1"]["changes"].append({
+            **first, "article": "제4조",
+            "before": "제4조 지급액은 30만원으로 한다.",
+            "after": "제4조 지급액은 40만원으로 한다."})
+        def transport(body):
+            return fake_api_return({
+                "change_reviews": [
+                    {"article": "제3조",
+                     "summary": "지급액 기준 변경을 검토합니다.",
+                     "before_quote": "30만원", "after_quote": "40만원",
+                     "review_question": "기존 지원 기준을 대조해야 하는가?"},
+                    {"article": "제4조",
+                     "summary": "지급액 기준 변경을 검토합니다.",
+                     "before_quote": "출처에 없는 금액",
+                     "after_quote": "40만원",
+                     "review_question": "기존 지원 기준을 대조해야 하는가?"},
+                ], "program_reviews": [],
+                "institution_reviews": [],
+            })
+        report = analyze_batch(state, links, key="TEST", limit=1, transport=transport)
+        self.assertEqual(report["generated"], 1)
+        self.assertEqual(report["salvaged_batches"], 1)
+        self.assertEqual(report["discarded_model_rows"], 1)
+        review = publishable_draft(state, "e1", links)
+        self.assertEqual(review["reviewed_articles"], 1)
+        self.assertEqual(review["verified_articles"], 2)
+        self.assertEqual(review["coverage"], "partial")
+        self.assertEqual(review["change_reviews"][0]["article"], "제3조")
+
+    def test_salvage_never_accepts_a_forged_institution(self):
+        state, links = state_and_links(with_program=True)
+        packet = source_packet(state, "e1", links)
+        bad = proposal(packet)
+        bad["institution_reviews"] = [{
+            "review_id": "invented", "article": "제3조",
+            "agency": "임의 기관", "basis_quote": "근거가 없는 말",
+            "work_impact": "임의 기준을 변경해야 합니다.",
+            "review_question": "임의 시스템을 바꿔야 하는가?",
+        }]
+        report = analyze_batch(state, links, key="TEST",
+                               transport=lambda _: fake_api_return(bad))
+        self.assertEqual(report["generated"], 1)
+        self.assertEqual(report["discarded_model_rows"], 1)
+        result = publishable_draft(state, "e1", links)
+        self.assertEqual(result["institution_reviews"], [])
+        self.assertEqual(result["change_reviews"][0]["article"], "제3조")
+
+    def test_each_changed_clause_is_reviewed_in_three_article_batches(self):
+        state, links = state_and_links(with_program=False)
+        first = state["findings"]["e1"]["changes"][0]
+        state["findings"]["e1"]["changes"] = [
+            {**first, "article": f"제{i}조",
+             "before": f"제{i}조 지급액은 30만원으로 한다.",
+             "after": f"제{i}조 지급액은 40만원으로 한다."}
+            for i in range(1, 8)
+        ]
+        seen = []
+        def transport(body):
+            request = json.loads(body)
+            packet = json.loads(request["contents"][0]["parts"][0]["text"].split("\n",1)[1])
+            seen.extend(x["article"] for x in packet["changes"])
+            return fake_api_return({
+                "change_reviews": [{
+                    "article": change["article"],
+                    "summary": "지급액이 30만원에서 40만원으로 변경됐습니다.",
+                    "before_quote": "30만원", "after_quote": "40만원",
+                    "review_question": "실제 급여 산정 기준을 점검해야 하는가?"
+                } for change in packet["changes"]],
+                "program_reviews": [],
+                "institution_reviews": [],
+            })
+        first_run = analyze_batch(state, links, key="TEST", limit=1,
+                                  transport=transport)
+        self.assertEqual(first_run["eligible_total"], 3)
+        self.assertEqual(first_run["generated"], 1)
+        partial = publishable_draft(state, "e1", links)
+        self.assertEqual(partial["coverage"], "partial")
+        self.assertEqual(partial["reviewed_articles"], 3)
+        self.assertEqual(partial["verified_articles"], 7)
+        second_run = analyze_batch(state, links, key="TEST", limit=1,
+                                   transport=transport)
+        self.assertEqual(second_run["generated"], 1)
+        third_run = analyze_batch(state, links, key="TEST", limit=1,
+                                  transport=transport)
+        self.assertEqual(third_run["generated"], 1)
+        completed = publishable_draft(state, "e1", links)
+        self.assertEqual(completed["coverage"], "complete")
+        self.assertEqual(completed["reviewed_articles"], 7)
+        self.assertEqual(len(completed["change_reviews"]), 7)
+        self.assertEqual(len(set(seen)), 7)
+        fourth_run = analyze_batch(state, links, key="TEST", limit=1,
+                                   transport=transport)
+        self.assertEqual(fourth_run["attempted"], 0)
+        self.assertEqual(fourth_run["cached"], 3)
 
     def test_default_budget_analyzes_entire_verified_queue_incrementally(self):
         from policy_domino.ai import DEFAULT_REQUEST_BUDGET

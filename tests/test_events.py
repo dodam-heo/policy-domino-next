@@ -152,6 +152,55 @@ class PolicyEventModelTests(unittest.TestCase):
         self.assertEqual(a["basis_tier"], "explicit_changed_clause")
         self.assertEqual(a["implementation_status"], "not_verified")
 
+    def test_exact_downstream_public_rule_citation_creates_issuer_review(self):
+        source = doc("가상 지원기준법", "11", "19821")
+        downstream = doc("가상 복지업무 시행규칙", "22", "5412", source="admrul")
+        downstream["ministry"] = "가상지방정부"
+        downstream["reference_only"] = True
+        documents = {d["id"]: d for d in (source, downstream)}
+        ref = {
+            "source_event_id": source["id"],
+            "changed_article": "제3조",
+            "referencing_document_id": downstream["id"],
+            "referencing_title": downstream["title"],
+            "referencing_article": "제7조",
+            "reference_quote": "「가상 지원기준법」 제3조에 따라 심사한다.",
+            "referencing_source_url": downstream["url"],
+            "publishing_agency": "가상지방정부",
+            "relationship": "verified_exact_article_citation",
+        }
+        events = build_events(documents, {source["id"]: changed(source)},
+                              relationships=[ref])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["review_count"], 1)
+        review = events[0]["institutional_reviews"][0]
+        self.assertEqual(review["institution"], "가상지방정부")
+        self.assertEqual(review["basis_tier"], "verified_official_rule_citation")
+        self.assertEqual(review["linking_regulation"], downstream["title"])
+        self.assertEqual(review["related_rule_url"], downstream["url"])
+        self.assertIn("제7조", review["task"])
+        self.assertEqual(review["implementation_status"], "not_verified")
+
+    def test_unverified_or_missing_rule_issuer_does_not_create_impact(self):
+        source = doc("가상 지원기준법", "11", "19821")
+        downstream = doc("가상 시행규칙", "22", "5412", source="admrul")
+        downstream["reference_only"] = True
+        downstream["ministry"] = ""
+        edge = {
+            "source_event_id": source["id"], "changed_article": "제3조",
+            "referencing_document_id": downstream["id"],
+            "referencing_title": downstream["title"], "referencing_article": "제7조",
+            "reference_quote": "「가상 지원기준법」 제3조",
+            "referencing_source_url": downstream["url"],
+            "publishing_agency": "출처에 없는 기관",
+            "relationship": "verified_exact_article_citation",
+        }
+        result = build_events({x["id"]: x for x in (source, downstream)},
+                              {source["id"]: changed(source)},
+                              relationships=[edge])
+        self.assertEqual(result[0]["institution_count"], 0)
+        self.assertEqual(result[0]["review_count"], 0)
+
     def test_verified_public_program_citation_is_separate_evidence_tier(self):
         d = doc("가상복지법", "11", "998")
         f = changed(d, category="금액·비율")

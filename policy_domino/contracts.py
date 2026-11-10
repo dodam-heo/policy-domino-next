@@ -53,6 +53,21 @@ def validate_public(payload: dict) -> dict:
     if errors:
         raise ContractError("\n".join(errors))
     docs: dict[str, dict] = {}
+    references: dict[str, dict] = {}
+    for i, document in enumerate(payload.get("reference_documents", [])):
+        loc = f"reference_documents[{i}]"
+        if not isinstance(document, dict):
+            verify(False, loc, "reference metadata must be object")
+            continue
+        identifier = document.get("id")
+        verify(bool(identifier) and identifier not in references, loc,
+               "duplicate or missing official referencing-document ID")
+        if identifier:
+            references[identifier] = document
+        verify(document.get("source") in SOURCES and
+               official_url(document.get("url")) and
+               bool(document.get("title")), loc,
+               "official referencing regulation needs source, title and URL")
     changes_count = 0
     for i, document in enumerate(payload["documents"]):
         loc = f"documents[{i}]"
@@ -392,6 +407,31 @@ def validate_public(payload: dict) -> dict:
                        "direct actor is not verified in the changed source clause")
                 verify(not action.get("program"), loc,
                        "actor mention alone cannot prove a public program")
+            elif tier == "verified_official_rule_citation":
+                source_edges = [
+                    edge for edge in payload.get("relationships", [])
+                    if edge.get("source_event_id") == doc_id and
+                    edge.get("changed_article") == article and
+                    edge.get("relationship") == "verified_exact_article_citation" and
+                    edge.get("publishing_agency") == institution and
+                    edge.get("referencing_title") == action.get("linking_regulation") and
+                    edge.get("referencing_source_url") == action.get("related_rule_url") and
+                    edge.get("referencing_article") == action.get("related_rule_article") and
+                    edge.get("reference_quote") == action.get("basis_quote")
+                ]
+                verify(bool(source_edges), loc,
+                       "official-rule review requires an exact citing-clause proof")
+                referring = (docs.get(source_edges[0].get("referencing_document_id"), {})
+                             or references.get(source_edges[0].get("referencing_document_id"), {})
+                             ) if source_edges else {}
+                verify(bool(referring) and
+                       referring.get("source") in ("law", "admrul", "ordin") and
+                       referring.get("ministry") == institution and
+                       referring.get("title") == action.get("linking_regulation") and
+                       referring.get("url") == action.get("related_rule_url"),
+                       loc, "citing-rule issuer must be the exact official public institution")
+                verify(not action.get("program") and not action.get("program_id"),
+                       loc, "a legal citation cannot create a public program")
             elif tier == "verified_program_citation":
                 evidence = next((
                     dep for dep in payload.get("program_dependencies", [])

@@ -95,7 +95,9 @@ class AIAnalysisError(ValueError):
     """Model response is missing, incomplete or unsupported by literal evidence."""
 
 
-def source_packet(state: dict, event_id: str, dependencies: list[dict]) -> dict | None:
+def source_packet(state: dict, event_id: str, dependencies: list[dict],
+                  *, article_ids: set[str] | None = None,
+                  relationships: list[dict] | None = None) -> dict | None:
     """Build small reproducible input from *verified* changes and dependencies."""
     doc = state.get("documents", {}).get(event_id)
     finding = state.get("findings", {}).get(event_id, {})
@@ -103,7 +105,11 @@ def source_packet(state: dict, event_id: str, dependencies: list[dict]) -> dict 
         return None
     changes = []
     articles = set()
-    for change in finding.get("changes", [])[:3]:
+    candidates = finding.get("changes", [])
+    selected = ([change for change in candidates
+                 if change.get("article") in article_ids]
+                if article_ids is not None else candidates[:3])
+    for change in selected:
         if not change.get("article") or change.get("before") == change.get("after"):
             continue
         article = change["article"]
@@ -147,7 +153,16 @@ def source_packet(state: dict, event_id: str, dependencies: list[dict]) -> dict 
     # The institution candidates are constructed by the SAME official-source
     # event engine used for publication, not invented in the model prompt.
     from .events import build_events
-    scoped = build_events({event_id: doc}, {event_id: finding},
+    linked_rules = [edge for edge in (relationships or [])
+                    if edge.get("source_event_id") == event_id]
+    source_documents = {event_id: doc}
+    for edge in linked_rules:
+        ref_id = edge.get("referencing_document_id")
+        ref_doc = state.get("documents", {}).get(ref_id)
+        if ref_doc and ref_doc.get("reference_only"):
+            source_documents[ref_id] = ref_doc
+    scoped = build_events(source_documents, {event_id: finding},
+                          relationships=linked_rules,
                           program_dependencies=dependencies)
     if scoped:
         institutions = [{
@@ -162,6 +177,49 @@ def source_packet(state: dict, event_id: str, dependencies: list[dict]) -> dict 
         if institutions:
             packet["institutions"] = institutions
     return packet
+
+
+def _document_packets(state: dict, doc: dict,
+                      dependencies: list[dict],
+                      relationships: list[dict] | None = None) -> list[tuple[str, dict]]:
+    """Bounded *all-clause* review plan, not only the first three provisions.
+
+    The first packet keeps the historical document cache key when there are
+    at most three provisions. Additional packets have source-derived IDs.
+    Every chunk has its own independent official SHA fingerprint.
+    """
+    from .meaning import explain
+    changes = state.get("findings", {}).get(doc["id"], {}).get("changes", [])
+    eligible = [change for change in changes if change.get("article") and
+                change.get("before") != change.get("after")]
+    if not eligible:
+        return []
+    linked = {dep.get("changed_article") for dep in dependencies
+              if dep.get("source_event_id") == doc["id"] and
+              dep.get("verification") == "verified_program_citation"}
+    # Evidence-backed agency/program changes first; other actual changes
+    # continue through subsequent passes, including typography-only items.
+    eligible.sort(key=lambda ch: (
+        ch["article"] not in linked,
+        -explain(ch["before"], ch["after"])["priority"],
+        ch["article"],
+    ))
+    chunks = []
+    for start in range(0, len(eligible), 3):
+        chosen = eligible[start:start+3]
+        article_ids = {ch["article"] for ch in chosen}
+        packet = source_packet(state, doc["id"], dependencies,
+                               article_ids=article_ids,
+                               relationships=relationships)
+        if not packet:
+            continue
+        # First chunk of a 1-3 clause event remains backward compatible
+        # with legacy verified records. Other chunks carry stable keys.
+        key = doc["id"] if len(eligible) <= 3 else (
+            doc["id"] + "::" + hashlib.sha256(
+                "|".join(sorted(article_ids)).encode("utf-8")).hexdigest()[:16])
+        chunks.append((key, packet))
+    return chunks
 
 
 def source_fingerprint(packet: dict) -> str:
@@ -363,6 +421,62 @@ def validate_draft(packet: dict, proposed: dict) -> dict:
             "institution_reviews": institution_items}
 
 
+def validated_subset(packet: dict, proposed: dict) -> tuple[dict, int]:
+    """Keep independently valid rows when one bad model item spoils a batch.
+
+    No quote is repaired, altered or invented. Every retained item is checked
+    by the strict contract. If zero changed-clause rows survive, the entire
+    model response is invalid and the call counts as a failure.
+    """
+    if not isinstance(proposed, dict):
+        raise AIAnalysisError("invalid_structured_output")
+    reviews = proposed.get("change_reviews")
+    if not isinstance(reviews, list):
+        raise AIAnalysisError("invalid_change_reviews")
+    kept, programs, institutions = [], [], []
+    rejected = 0
+    seen = set()
+    for review in reviews:
+        try:
+            check = validate_draft(packet, {
+                "change_reviews": [review], "program_reviews": [],
+                "institution_reviews": [],
+            })
+            article = check["change_reviews"][0]["article"]
+            if article in seen:
+                raise AIAnalysisError("duplicate_article")
+            seen.add(article)
+            kept.append(check["change_reviews"][0])
+        except (AIAnalysisError, KeyError, TypeError, ValueError):
+            rejected += 1
+    if not kept:
+        raise AIAnalysisError("no_valid_source_bound_change_reviews")
+    for kind, target, other in (
+            ("program_reviews", programs, "program_reviews"),
+            ("institution_reviews", institutions, "institution_reviews")):
+        rows = proposed.get(kind, [])
+        if not isinstance(rows, list):
+            rejected += 1
+            continue
+        for row in rows:
+            try:
+                single = {
+                    "change_reviews": kept[:1], "program_reviews": [],
+                    "institution_reviews": [],
+                }
+                single[kind] = [row]
+                valid = validate_draft(packet, single)
+                target.append(valid[other][0])
+            except (AIAnalysisError, KeyError, TypeError, ValueError):
+                rejected += 1
+    candidate = {
+        "change_reviews": kept, "program_reviews": programs,
+        "institution_reviews": institutions,
+    }
+    # Final full-batch validation detects any duplicates across valid rows.
+    return validate_draft(packet, candidate), rejected
+
+
 TRANSIENT_API_ERRORS = frozenset({
     "http_500_server_error", "http_503_overloaded", "network_error",
 })
@@ -394,7 +508,8 @@ def assess_ai_run(report: dict) -> str:
 def analyze_batch(state: dict, dependencies: list[dict], *,
                   limit: int = DEFAULT_REQUEST_BUDGET,
                   model: str | None = None, key: str | None = None,
-                  transport=None) -> dict:
+                  transport=None,
+                  relationships: list[dict] | None = None) -> dict:
     """Incrementally review *all* eligible change events over repeated runs.
 
     No selected exemplar or manually enumerated policies. Previously reviewed
@@ -412,6 +527,7 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
         "attempted": 0, "generated": 0, "cached": 0,
         "eligible": 0, "eligible_total": 0, "analyzed_total": 0,
         "pending_total": 0, "errors": 0, "retries": 0,
+        "salvaged_batches": 0, "discarded_model_rows": 0,
         "retry_error_codes": {}, "error_codes": {},
         "stopped_reason": "", "checked_at": utc_now(),
     }
@@ -422,22 +538,23 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
             (doc for doc in state.get("documents", {}).values()
              if not doc.get("reference_only")),
             key=lambda d: d.get("published_at", ""), reverse=True):
-        packet = source_packet(state, document["id"], dependencies)
-        if packet is None:
-            continue
-        report["eligible_total"] += 1
-        digest = source_fingerprint(packet)
-        cached = results.get(document["id"], {})
-        if (cached.get("source_sha256") == digest
-                and cached.get("model") == model
-                and cached.get("status") == "generated"):
-            report["cached"] += 1
-        else:
-            candidates.append((document, packet, digest))
+        for packet_id, packet in _document_packets(
+                state, document, dependencies, relationships):
+            report["eligible_total"] += 1
+            digest = source_fingerprint(packet)
+            cached = results.get(packet_id, {})
+            # Old verified 1-3 clause records remain unchanged.
+            if (cached.get("source_sha256") == digest
+                    and cached.get("model") == model
+                    and cached.get("status") == "generated"):
+                report["cached"] += 1
+            else:
+                candidates.append((document, packet_id, packet, digest))
 
     # Stronger verified operational evidence is prioritized within the
     # pending queue; the remainder preserves newest-first source ordering.
-    candidates.sort(key=lambda entry: bool(entry[1]["programs"]), reverse=True)
+    candidates.sort(key=lambda entry: (
+        bool(entry[2]["programs"]), bool(entry[2].get("institutions"))), reverse=True)
     report["eligible"] = len(candidates)
     if not key:
         report["analyzed_total"] = report["cached"]
@@ -449,7 +566,7 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
     started = time.monotonic()
     consecutive_transient = 0
     previous_request_at = None
-    for document, packet, digest in candidates:
+    for document, packet_id, packet, digest in candidates:
         if report["attempted"] >= budget:
             report["stopped_reason"] = "request_budget"
             break
@@ -468,9 +585,15 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
             report["attempted"] += 1
             previous_request_at = time.monotonic()
             try:
-                draft = validate_draft(
-                    packet, call_model(packet, key=key, model=model,
-                                       transport=transport))
+                proposed = call_model(packet, key=key, model=model,
+                                      transport=transport)
+                try:
+                    draft = validate_draft(packet, proposed)
+                except (AIAnalysisError, ValueError, KeyError, TypeError):
+                    draft, dropped = validated_subset(packet, proposed)
+                    if dropped:
+                        report["salvaged_batches"] += 1
+                        report["discarded_model_rows"] += dropped
             except (AIAnalysisError, ValueError, KeyError, TypeError) as exc:
                 code = exc.code if isinstance(exc, AIRequestError) else (
                     "invalid_evidence" if "quote" in str(exc).lower() or
@@ -485,7 +608,7 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
                         time.sleep(2)
                     continue
                 report["errors"] += 1
-                errors_by_event[document["id"]] = code
+                errors_by_event[packet_id] = code
                 bucket = report["error_codes"]
                 bucket[code] = bucket.get(code, 0) + 1
                 consecutive_transient = consecutive_transient + 1 if transient else 0
@@ -496,12 +619,12 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
                 elif consecutive_transient >= MAX_CONSECUTIVE_TRANSIENT_ERRORS:
                     report["stopped_reason"] = "upstream_unavailable"
                 break
-            results[document["id"]] = {
+            results[packet_id] = {
                 "status": "generated", "source_sha256": digest,
                 "model": model, "generated_at": utc_now(),
                 "required_action_verified": False, **draft,
             }
-            errors_by_event.pop(document["id"], None)
+            errors_by_event.pop(packet_id, None)
             report["generated"] += 1
             consecutive_transient = 0
             break
@@ -525,18 +648,90 @@ def analyze_batch(state: dict, dependencies: list[dict], *,
     return report
 
 
-def publishable_draft(state: dict, event_id: str, dependencies: list[dict]) -> dict | None:
-    record = state.get("ai_reviews", {}).get(event_id)
-    packet = source_packet(state, event_id, dependencies)
-    if not record or not packet:
+def publishable_draft(state: dict, event_id: str, dependencies: list[dict],
+                      *, relationships: list[dict] | None = None) -> dict | None:
+    """Join independently verified clause batches into one document review.
+
+    A partial review is published only for actual completed clauses, never as
+    if all articles in an omnibus act had been analyzed.
+    """
+    document = state.get("documents", {}).get(event_id)
+    if not document:
         return None
-    if record.get("status") != "generated" or record.get("source_sha256") != source_fingerprint(packet):
+    records = []
+    for packet_id, packet in _document_packets(
+            state, document, dependencies, relationships):
+        record = state.get("ai_reviews", {}).get(packet_id)
+        if not record or record.get("status") != "generated":
+            continue
+        if record.get("source_sha256") != source_fingerprint(packet):
+            continue
+        try:
+            validate_draft(packet, {k: record[k] for k in
+                                   ("change_reviews", "program_reviews",
+                                    "institution_reviews") if k in record})
+        except (AIAnalysisError, KeyError, TypeError):
+            continue
+        records.append(record)
+    # Preserve previously verified three-clause drafts when an older
+    # document gains additional chunk IDs. The legacy draft must still match
+    # the exact original source packet and pass the full evidence contract.
+    prior = state.get("ai_reviews", {}).get(event_id)
+    if prior and prior.get("status") == "generated":
+        old_packet = source_packet(state, event_id, dependencies)
+        if (old_packet and
+                prior.get("source_sha256") == source_fingerprint(old_packet)):
+            try:
+                validate_draft(old_packet, {k: prior[k] for k in
+                    ("change_reviews", "program_reviews", "institution_reviews")
+                    if k in prior})
+                if not any(r.get("source_sha256") ==
+                           prior.get("source_sha256") for r in records):
+                    records.append(prior)
+            except (AIAnalysisError, ValueError, TypeError, KeyError):
+                pass
+    if not records:
         return None
-    # Check every generated quote again on each publish; source drift invalidates it.
-    try:
-        validate_draft(packet, {k: record[k] for k in
-                               ("change_reviews", "program_reviews",
-                                "institution_reviews") if k in record})
-    except (AIAnalysisError, KeyError, TypeError):
-        return None
-    return dict(record)
+    if len(records) == 1:
+        result = dict(records[0])
+    else:
+        result = {
+            **{k: records[0].get(k) for k in (
+                "status", "model", "generated_at", "required_action_verified")},
+            "change_reviews": [], "program_reviews": [], "institution_reviews": [],
+            "source_sha256": hashlib.sha256(
+                "|".join(sorted(r["source_sha256"] for r in records))
+                .encode("utf-8")).hexdigest(),
+        }
+        used = {
+            "change_reviews": set(),
+            "program_reviews": set(),
+            "institution_reviews": set(),
+        }
+        for rec in records:
+            for row in rec.get("change_reviews", []):
+                key = row["article"]
+                if key not in used["change_reviews"]:
+                    used["change_reviews"].add(key)
+                    result["change_reviews"].append(row)
+            for row in rec.get("program_reviews", []):
+                key = (row["program_id"], row["article"])
+                if key not in used["program_reviews"]:
+                    used["program_reviews"].add(key)
+                    result["program_reviews"].append(row)
+            for row in rec.get("institution_reviews", []):
+                key = row["review_id"]
+                if key not in used["institution_reviews"]:
+                    used["institution_reviews"].add(key)
+                    result["institution_reviews"].append(row)
+    result["reviewed_articles"] = len({
+        x["article"] for x in result.get("change_reviews", [])
+    })
+    result["verified_articles"] = len({
+        x["article"] for x in state.get("findings", {}).get(event_id, {}).get("changes", [])
+        if x.get("article")
+    })
+    result["coverage"] = ("complete" if
+                          result["reviewed_articles"] >= result["verified_articles"]
+                          else "partial")
+    return result

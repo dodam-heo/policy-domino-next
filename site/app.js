@@ -208,6 +208,7 @@
     const type={
       direct_regulated_institution:"직접 규율기관",
       explicit_changed_clause:"변경 조문에 명시",
+      verified_official_rule_citation:"관련 공식 규정 인용",
       verified_program_citation:"공식 사업 인용"
     }[review.basis_tier]||"공식 근거";
     append(card,create("div","review-meta",
@@ -228,6 +229,7 @@
     append(proof,create("summary","","변경 근거 확인"),
       create("p","",compact(review.basis_quote,420)),
       link(review.source_url,"변경 조문"),
+      link(review.related_rule_url,"관련 공식 규정"),
       link(review.program_url,"공식 사업자료"));
     append(card,proof);
     return card;
@@ -439,6 +441,22 @@
     state.mode="all";
     state.institutionFilter="all";
     const stats=view.overview(data.events,data.ai_progress||{});
+    const progress=data.ai_progress||{};
+    const run=data.ai_run||{};
+    const total=progress.verified_clauses ?? 0;
+    const analyzed=progress.ai_analyzed_clauses ?? 0;
+    const checked=run.checked_at?String(run.checked_at).replace("T"," ").slice(0,16)+" UTC":"미실행";
+    $("ai-review-progress").textContent=
+      "AI 검토 완료 "+num(analyzed)+" / 변경 조문 "+num(total)+"건"+
+      " · 최근 실행 "+checked+
+      " · 요청 "+num(run.attempted)+"회, 신규 결과 "+num(run.generated)+"건"+
+      (run.errors?" · 검증/호출 오류 "+num(run.errors)+"건":"")+
+      (run.stopped_reason?" · 중단 사유: "+run.stopped_reason:"");
+    $("institution-link-progress").textContent=
+      "기관별 검토사항 "+num(progress.institutional_reviews)+"건"+
+      " · 공공사업 인용 연결 "+num(progress.verified_program_links)+"건"+
+      " · 관련 공식 규정 소관기관 연결 "+num(progress.referencing_public_rule_reviews)+"건"+
+      " · 공공사업 원천자료 "+num(progress.official_program_records)+"건";
     $("stat-events").textContent=num(stats.events);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);

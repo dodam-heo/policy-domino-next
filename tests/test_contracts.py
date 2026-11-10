@@ -107,6 +107,44 @@ class EvidenceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "direct subject requires"):
             validate_public(x)
 
+    def test_official_referencing_rule_issuer_is_a_traceable_review(self):
+        x = example()
+        document = x["documents"][0]
+        reference = {
+            "id": "official-referencing-rule",
+            "source": "ordin", "title": "가상 지원 심사 운영조례",
+            "ministry": "가상지방자치단체",
+            "url": "https://www.law.go.kr/자치법규/가상지원심사운영조례",
+            "reference_only": True,
+        }
+        edge = {
+            "source_event_id": document["id"],
+            "changed_article": "제3조",
+            "referencing_document_id": reference["id"],
+            "referencing_title": reference["title"],
+            "referencing_article": "제7조",
+            "reference_quote": "「가상 지원기준」 제3조에 따른 심사",
+            "referencing_source_url": reference["url"],
+            "publishing_agency": reference["ministry"],
+            "relationship": "verified_exact_article_citation",
+            "operational_program_verified": False,
+            "required_action_verified": False,
+        }
+        x["relationships"] = [edge]
+        x["reference_documents"] = [{
+            key: reference[key] for key in ("id", "source", "title",
+                                            "ministry", "url")
+        }]
+        x["events"] = build_events(
+            {document["id"]: document, reference["id"]: reference},
+            {document["id"]: document["analysis"]}, relationships=[edge])
+        self.assertEqual(x["events"][0]["review_count"], 1)
+        self.assertEqual(validate_public(x)["source_bound_institutional_reviews"], 1)
+        forged = copy.deepcopy(x)
+        forged["reference_documents"][0]["ministry"] = "근거 없는 기관"
+        with self.assertRaisesRegex(ContractError, "citing-rule issuer"):
+            validate_public(forged)
+
     def test_forged_omnibus_merge_fails_contract(self):
         x = example()
         doc = copy.deepcopy(x["documents"][0])

@@ -33,6 +33,16 @@ a{color:var(--blue);text-underline-offset:3px}
 .summary small{display:block;white-space:nowrap;font-size:10px;color:var(--muted)}
 .summary strong{display:block;line-height:1.25;margin-top:5px;color:#12577a;
   font-size:25px;font-weight:850;font-variant-numeric:tabular-nums}
+.coverage-status{max-width:1390px;margin:-2px auto 16px;padding:0 24px}
+.coverage-status-inner{display:grid;gap:5px;padding:12px 16px;
+  border:1px solid #cbdde7;border-radius:9px;background:#eff6fa}
+.coverage-status p{margin:0;color:#346075;font-size:12px;line-height:1.7;
+  overflow-wrap:anywhere}
+@media(max-width:850px){
+  .coverage-status{margin:0 auto 14px;padding:0 12px}
+  .coverage-status-inner{padding:11px 12px}
+  .coverage-status p{font-size:11px}
+}
 .layout{max-width:1390px;margin:0 auto 35px;padding:0 24px;
   display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:16px;
   align-items:start}

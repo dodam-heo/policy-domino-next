@@ -103,12 +103,23 @@ const items=[
 const payload={
   schema:"policy-domino-next-v1",
   events:items,
-  ai_progress:{indexed_documents:10166,verified_document_changes:101},
+  ai_progress:{
+    indexed_documents:10166,verified_document_changes:101,
+    verified_clauses:468,ai_analyzed_clauses:24,
+    institutional_reviews:2,verified_program_links:1,
+    referencing_public_rule_reviews:1,official_program_records:15,
+  },
+  ai_run:{
+    attempted:24,generated:9,errors:15,
+    stopped_reason:"request_budget",
+    checked_at:"2026-11-10T09:33:59+00:00",
+  },
   generated_at:"2026-11-10T05:00:00+00:00",
 };
 function browser(isMobile=false,hash="",data=payload) {
   const ids=["layout","listPanel","detailPanel","detail","items",
     "stat-events","stat-agencies","stat-actions","list-count",
+    "ai-review-progress","institution-link-progress",
     "search","source-status","updated","more","backToList",
     "mode-all","mode-impact","mode-benefit","mode-new","mode-amended","mode-repealed"];
   const elements=new Map(ids.map(id=>[id,new Element()]));
@@ -151,6 +162,10 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"stat-agencies").textContent,"1");
   assert.equal(node(ui,"stat-actions").textContent,"1");
   assert.ok(node(ui,"source-status").textContent.includes("10,166"));
+  assert.ok(node(ui,"ai-review-progress").textContent.includes("24 / 변경 조문 468건"));
+  assert.ok(node(ui,"ai-review-progress").textContent.includes("신규 결과 9건"));
+  assert.ok(node(ui,"ai-review-progress").textContent.includes("오류 15건"));
+  assert.ok(node(ui,"institution-link-progress").textContent.includes("관련 공식 규정 소관기관 연결 1건"));
   assert.equal(node(ui,"items").children.length,4);
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
                    ["amended","new","ordinary","repealed"]);
