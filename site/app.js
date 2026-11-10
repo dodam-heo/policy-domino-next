@@ -209,7 +209,7 @@
     ])).sort((a,b)=>a.localeCompare(b,"ko-KR"));
     if(!agencies.length){
       append(impacts,create("div","agency-empty",
-        "공식 사업자료와 변경 조문 사이의 적용 관계가 아직 확인되지 않았습니다. 인용·기관명만으로 수정 의무를 추정하지 않습니다."));
+        "공식 사업자료로 확인된 기관별 변경 검토사항은 아직 없습니다. 법령의 인용·기관명만으로 수정 의무를 추정하지 않습니다."));
     }else{
       if(state.agencyFilter!=="all" && !agencies.includes(state.agencyFilter))
         state.agencyFilter="all";
