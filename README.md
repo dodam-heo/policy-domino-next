@@ -51,8 +51,8 @@ node tests/test_site.cjs
 # 공식 원천 수집·비교 (AI 호출 없이 실행)
 python -m policy_domino run --limit 20
 
-# 저장된 공식 변경 근거만 AI 검토 (실행당 요청 최대 2회)
-python -m policy_domino ai --limit 2
+# 저장된 모든 검증 대상 변경 사건을 차례로 누적 분석 (실행당 요청 최대 24회)
+python -m policy_domino ai --limit 24
 python -m policy_domino ai-check
 ```
 
@@ -64,16 +64,24 @@ Google Gemini `generateContent`의 **JSON 구조화 출력**을 사용합니다.
 
 ```bash
 export GEMINI_API_KEY="Google AI Studio에서 발급한 API 키"
-python -m policy_domino ai --limit 2
+python -m policy_domino ai --limit 24
 python -m policy_domino ai-check
 ```
 
 - GitHub Actions의 **Settings → Secrets and variables → Actions**에 `GEMINI_API_KEY`만 등록하면 됩니다. 모델은 워크플로에 고정되어 있으므로 Variables 설정은 필요하지 않습니다.
-- `run`은 공식자료 수집만 실행합니다. 별도 `ai` 단계가 **재시도를 포함해 API 요청 최대 2회**를 실행합니다. 일시적 Gemini 과부하(503)는 2초 간격으로 최대 한 차례만 재시도하며 이 재시도 역시 예산에 포함됩니다. 모두 실패해도 추가 호출을 반복하지 않습니다. 네트워크 타임아웃은 요청당 40초, Actions의 AI 분석 단계는 최대 4분입니다.
+- `run`은 공식자료 수집만 실행합니다. 별도 `ai` 단계가 **실행당 최대 24회 요청(503 재시도 포함)**으로 검증된 변경 사건을 차례로 처리합니다. 이미 처리한 사건은 공식 근거 SHA와 모델이 같으면 재호출하지 않아 다음 실행에서 미분석 사건을 이어서 처리합니다. 503은 최대 1회 재시도하고, 429 할당량 초과 시 즉시 중단합니다. 모델 API 요청 간 최소 2.2초 간격을 두고, 실행 시간 상한을 별도로 적용합니다.
 - 원문 발췌·기관명·사업 식별자·출처 SHA를 검증한 결과만 게시합니다. 동일 근거·동일 모델의 기존 검증 결과는 캐시로 재사용합니다.
 - `ai_run`에는 시도·생성·재사용·오류 건수와 정형화된 실패 코드만 기록합니다. 인증키와 외부 모델의 오류 메시지/응답 원문은 기록하지 않습니다.
 - `ai-check`는 `partial_generated`(일부 초안 생성)와 Gemini 500/503 등 일시적 장애를 **경고로 표시하며 전체 배포를 실패로 바꾸지 않습니다**. 키 누락, 권한 오류, 구조화 출력·근거 검증 실패는 여전히 실패 처리합니다. 검증된 AI 결과 및 실패 코드는 모두 보존됩니다. 분석 대상이 없으면 `no_eligible_changes`, 모두 캐시되었으면 `cached`를 표시합니다.
 - GitHub Pages는 API 키를 받지 않으며 정적 페이지에서 직접 AI 모델을 호출하지 않습니다. GitHub Actions #78에서는 실제 Gemini 초안 1건 생성·검증 후 공식 데이터와 함께 배포됐고, 추가 요청 1건은 서버 과부하(503)로 실패했습니다. 기존 `OPENAI_API_KEY`와 `OPENAI_MODEL` 설정은 사용하지 않습니다.
+
+## 분석된 사건 찾기
+
+사이트 첫 화면에서 **공식 수집 사건 / 신구 변경 확인 / AI 분석 완료 / AI 대기** 현황을 각각 확인할 수 있습니다. '최근 AI 분석 결과' 카드나 'AI 분석 완료' 필터를 선택하면 실제 Gemini 검토 초안이 존재하는 사건만 볼 수 있습니다. 사건 상세에서는 **AI 요약과 검토 질문 → 공식 변경 전·후 → 기관·사업 연결 근거** 순서로 확인합니다. 기관·사업의 실제 수정 의무는 공식 근거 확인 전까지 확정하지 않습니다.
+
+AI 완료 건수는 **모델이 근거 검증까지 통과한 사건 수**이지, 전체 정책 원천 검색 건수나 미검증 기관 영향 추정 건수가 아닙니다. 신구 원문을 확보하지 못한 사건은 AI 입력으로 넘기지 않고 공식 수집·비교 대기 상태를 유지합니다.
+
+처리량은 Google AI Studio 프로젝트에 주어진 실시간 RPM·TPM·RPD 제한에 따라 달라집니다. 무료 요금제의 고정 호출 수를 보장하지 않으며, [AI Studio 사용량·한도](https://aistudio.google.com/docs/rate-limits)에서 직접 확인할 수 있습니다.
 
 ## 프로젝트 설명서
 

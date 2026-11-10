@@ -2,7 +2,7 @@
 (function (global) {
   "use strict";
 
-  const TYPES = Object.freeze(["all", "new", "amended", "repealed"]);
+  const TYPES = Object.freeze(["all", "new", "amended", "repealed", "verified", "ai"]);
 
   function policyType(doc) {
     const revision = String(doc.revision || "");
@@ -13,6 +13,26 @@
     return "unknown";
   }
 
+  function aiComplete(doc) {
+    return doc?.analysis?.ai?.status === "generated" &&
+      Array.isArray(doc.analysis.ai.change_reviews) &&
+      doc.analysis.ai.change_reviews.length > 0;
+  }
+
+  function hasVerifiedDifference(doc) {
+    return ["compared", "partial_compared"].includes(doc?.analysis?.status) &&
+      Array.isArray(doc.analysis.changes) && doc.analysis.changes.length > 0;
+  }
+
+  function analysisProgress(documents) {
+    const verified = documents.filter(hasVerifiedDifference).length;
+    const analyzed = documents.filter(aiComplete).length;
+    return {
+      indexed: documents.length, verified, analyzed,
+      pending: Math.max(0, verified - analyzed),
+    };
+  }
+
   function filterDocuments(documents, { query = "", mode = "all" } = {}) {
     if (!TYPES.includes(mode)) throw new Error("Unsupported policy type");
     const phrase = String(query).toLocaleLowerCase("ko-KR");
@@ -20,6 +40,8 @@
       if (!String(doc.title + " " + (doc.ministry || "")).toLocaleLowerCase("ko-KR").includes(phrase)) {
         return false;
       }
+      if (mode === "ai") return aiComplete(doc);
+      if (mode === "verified") return hasVerifiedDifference(doc);
       return mode === "all" || policyType(doc) === mode;
     }).sort((left, right) =>
       String(right.published_at || "").localeCompare(String(left.published_at || "")) ||
@@ -106,6 +128,7 @@
   }
 
   global.PolicyDominoView = Object.freeze({
-    policyType, filterDocuments, groupByAgency, impactView
+    policyType, filterDocuments, aiComplete, hasVerifiedDifference, analysisProgress,
+    groupByAgency, impactView
   });
 })(window);

@@ -263,13 +263,18 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
                      key=lambda d: (
         d.get("published_at", ""), d.get("serial", "")), reverse=True)
     from .ai import publishable_draft
+    verified_count = 0
+    ai_review_count = 0
     for row in indexed:
         row["analysis"] = findings.get(row["id"], {
             "status": "queued", "changes": [], "review_candidates": [],
             "reason": "공식 목록 수집 · 이전·현재 본문 분석 대기"}).copy()
         generated = publishable_draft(state, row["id"], program_links)
+        if row["analysis"].get("changes"):
+            verified_count += 1
         if generated is not None:
             row["analysis"]["ai"] = generated
+            ai_review_count += 1
     data = {
         "schema": state["schema"],
         "generated_at": state.get("generated_at", ""),
@@ -281,6 +286,15 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "relationships": edges,
         "cross_document_review_candidates": work_reviews,
         "program_dependencies": program_links,
+        "ai_progress": {
+            "source_events": len(indexed),
+            "verified_events": verified_count,
+            "analyzed_events": ai_review_count,
+            "pending_events": max(0, verified_count - ai_review_count),
+            "last_checked_at": state.get("ai_run", {}).get("checked_at", ""),
+            "last_attempted": state.get("ai_run", {}).get("attempted", 0),
+            "last_generated": state.get("ai_run", {}).get("generated", 0),
+        },
         "ai_status": state.get("ai_status", "not_run"),
         "ai_run": state.get("ai_run", {}),
         "program_discovery_audit": {
@@ -347,7 +361,7 @@ def main(argv=None):
         from .ai import analyze_batch
         edges = connect_changes(state["findings"], state["versions"], state["documents"])
         links = discover_program_links(state, edges)
-        report = analyze_batch(state, links, limit=max(1, min(args.limit, 10)))
+        report = analyze_batch(state, links, limit=max(1, min(args.limit, 60)))
         write_json(args.state, state)
         print("Policy Domino AI:", json.dumps(report, ensure_ascii=False))
     result = render(state, args.output)

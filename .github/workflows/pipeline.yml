@@ -67,7 +67,7 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     needs: publish
-    timeout-minutes: 22
+    timeout-minutes: 30
     environment:
       name: github-pages
       url: ${{ steps.publish_refresh.outputs.page_url }}
@@ -83,12 +83,12 @@ jobs:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
         timeout-minutes: 16
         run: python -m policy_domino run --limit 20
-      - name: Analyze verified changes using Gemini (max 2 calls)
+      - name: Incrementally review all verified changes with Gemini
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-3.1-flash-lite
-        timeout-minutes: 4
-        run: python -m policy_domino ai --limit 2
+        timeout-minutes: 8
+        run: python -m policy_domino ai --limit 24
       - name: Enforce public source and impact evidence contract
         run: python -m policy_domino.contracts site/data.json
       - name: Persist verified collection results

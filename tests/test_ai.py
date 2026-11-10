@@ -280,6 +280,8 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(report["status"], "partial_generated")
         self.assertEqual(report["error_codes"], {"http_503_overloaded": 1})
         self.assertEqual(assess_ai_run(report), "warning")
+        report["error_codes"] = {"invalid_evidence": 1}
+        self.assertEqual(assess_ai_run(report), "error")
         self.assertIsNotNone(publishable_draft(state, "e1", links))
 
     def test_only_transient_full_failures_are_operational_warnings(self):
@@ -312,6 +314,77 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(report["status"], "cached")
         self.assertEqual(report["attempted"], 0)
 
+
+
+    def test_default_budget_analyzes_entire_verified_queue_incrementally(self):
+        from policy_domino.ai import DEFAULT_REQUEST_BUDGET
+        self.assertEqual(DEFAULT_REQUEST_BUDGET, 24)
+        state, links = state_and_links(with_program=False)
+        for i in range(2, 31):
+            event_id = f"e{i}"
+            state["documents"][event_id] = dict(
+                state["documents"]["e1"], id=event_id)
+            state["findings"][event_id] = state["findings"]["e1"]
+
+        requests = []
+        def transport(body):
+            requests.append(body)
+            return fake_api_return(proposal(source_packet(state, "e1", links)))
+
+        first = analyze_batch(state, links, key="TEST", transport=transport)
+        self.assertEqual(first["eligible_total"], 30)
+        self.assertEqual(first["request_budget"], 24)
+        self.assertEqual(first["attempted"], 24)
+        self.assertEqual(first["generated"], 24)
+        self.assertEqual(first["analyzed_total"], 24)
+        self.assertEqual(first["pending_total"], 6)
+        self.assertEqual(first["stopped_reason"], "request_budget")
+        second = analyze_batch(state, links, key="TEST", transport=transport)
+        self.assertEqual(second["generated"], 6)
+        self.assertEqual(second["cached"], 24)
+        self.assertEqual(second["analyzed_total"], 30)
+        self.assertEqual(second["pending_total"], 0)
+        third = analyze_batch(state, links, key="TEST", transport=transport)
+        self.assertEqual(third["attempted"], 0)
+        self.assertEqual(third["cached"], 30)
+        self.assertEqual(third["status"], "cached")
+        self.assertEqual(len(requests), 30)
+
+    def test_quota_pauses_pending_queue_without_erasing_completed_results(self):
+        from policy_domino.ai import AIRequestError, assess_ai_run
+        state, links = state_and_links(with_program=False)
+        state["documents"]["e2"] = dict(state["documents"]["e1"], id="e2")
+        state["findings"]["e2"] = state["findings"]["e1"]
+        first = analyze_batch(state, links, key="TEST", limit=1,
+            transport=lambda _: fake_api_return(
+                proposal(source_packet(state, "e1", links))))
+        self.assertEqual(first["generated"], 1)
+        report = analyze_batch(state, links, key="TEST", limit=24,
+            transport=lambda _: (_ for _ in ()).throw(
+                AIRequestError("http_429_rate_or_quota", blocking=True)))
+        self.assertEqual(report["attempted"], 1)
+        self.assertEqual(report["stopped_reason"], "quota_paused")
+        self.assertEqual(report["cached"], 1)
+        self.assertEqual(report["pending_total"], 1)
+        self.assertEqual(assess_ai_run(report), "warning")
+        self.assertEqual(len(state["ai_reviews"]), 1)
+
+    def test_verified_program_evidence_takes_priority_without_hardcoded_event(self):
+        state, links = state_and_links()
+        state["documents"]["older"] = dict(
+            state["documents"]["e1"], id="older", published_at="2026-11-01")
+        state["findings"]["older"] = state["findings"]["e1"]
+        moved = [dict(dep, source_event_id="older") for dep in links]
+        state["documents"]["e1"]["published_at"] = "2026-11-10"
+        done = []
+        def transport(body):
+            request = json.loads(body)
+            packet = json.loads(request["contents"][0]["parts"][0]["text"].split("\n",1)[1])
+            done.append(packet["event_id"])
+            return fake_api_return(proposal(packet))
+        report = analyze_batch(state, moved, key="TEST", limit=1, transport=transport)
+        self.assertEqual(report["generated"], 1)
+        self.assertEqual(done, ["older"])
 
 
 if __name__ == "__main__":

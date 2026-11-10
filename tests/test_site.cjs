@@ -12,7 +12,7 @@ new vm.Script(viewSource,{filename:'site/presentation.js'});
 new vm.Script(appSource,{filename:'site/app.js'});
 const source = html+'\n'+appSource;
 for(const word of [
-  "① 실제 변경 내용","② 기관별 변경 검토사항",
+  "① 실제 변경 내용","② 기관별 변경 검토사항","AI 분석 결과",
   "operational_program_verified","required_action_verified",
   'fetch("./data.json"'
 ]){
@@ -51,9 +51,9 @@ class FakeElement {
 }
 function setupBrowser(mobile=true,initialHash="",override=null){
   const ids=["layout","listPanel","detailPanel","detail","items","feed-state",
-      "indexed","compared","pending","links","updated","search","more","backToList",
-      "filter-explain","mode-all","mode-new","mode-amended",
-      "mode-repealed","mode-pending","sort-verified","sort-latest"];
+      "indexed-count","verified-count","analyzed-count","pending-count",
+      "ai-run-summary","ai-picks","show-ai","updated","search","more","backToList",
+      "mode-ai","mode-verified","mode-all","mode-new","mode-amended","mode-repealed"];
   const dom=new Map(ids.map(x=>[x,new FakeElement()]));
   const body=new FakeElement("body");
   const listeners={};
@@ -92,6 +92,7 @@ function setupBrowser(mobile=true,initialHash="",override=null){
     relationships:override?.relationships||[],quality:{},
     program_dependencies:override?.program_dependencies||[],
     ai_status:override?.ai_status||"not_run",
+    ai_run:override?.ai_run||{},
     cross_document_review_candidates:override?.cross_document_review_candidates||[],
     generated_at:"",
   })});
@@ -215,22 +216,18 @@ async function verifyRealFilters(){
   ui.dom.get("items").children[4].onclick();
 
   const nodes=()=>flattened(ui.dom.get("detail"));
-  const tabs=()=>nodes().filter(x=>x.dataset.agencyFilter!==undefined);
-  assert.deepEqual(tabs().map(x=>x.dataset.agencyFilter),
-    ["all","가상지원공사","가상행정청"],
-    "Only institutionally verified program duties qualify for action filters");
+  assert.equal(nodes().filter(x=>x.dataset.agencyFilter!==undefined).length,0,
+    "Institution details must be readable without a redundant filter");
   const section=()=>nodes().find(x=>x.tag==="section" &&
     flattened(x).some(y=>y.tag==="h3" && y.textContent.includes("② 기관별")));
   const actionText=()=>flattened(section()).filter(x=>x.className==="agency-group")
     .flatMap(flattened).map(x=>x.textContent).join(" ");
   assert.ok(actionText().includes("공식 지원업무"));
+  assert.ok(actionText().includes("가상행정청"));
+  assert.ok(actionText().includes("가상지원공사"));
   assert.ok(!actionText().includes("가상청장") &&
             !actionText().includes("가상보건청장"),
     "Statutory actor mentions must NOT be represented as verified actions");
-  tabs().find(x=>x.dataset.agencyFilter==="가상행정청").onclick();
-  assert.ok(actionText().includes("가상행정청"));
-  assert.ok(!actionText().includes("가상지원공사"),
-    "Agency-name filtering must not leak other agency's actions");
 
   const evidenceDrawer=nodes().find(x=>x.tag==="details"&&
     x.className==="evidence-drawer");
@@ -313,12 +310,29 @@ async function verifyAIProgramEvidence(){
   assert.ok(all.includes("공식 사업자료에서 제3조 인용 확인"));
   assert.ok(all.includes("AI 업무 검토 초안"));
   assert.ok(all.includes("신구 지급 기준을 사업 공고와 대조"));
-  assert.ok(all.includes("③ AI 변경 영향 분석"));
+  assert.ok(all.includes("AI 분석 결과"));
+  assert.equal(ui.dom.get("analyzed-count").textContent,"1");
+  assert.equal(ui.dom.get("verified-count").textContent,"1");
+  assert.equal(ui.dom.get("pending-count").textContent,"0");
+  assert.equal(ui.dom.get("ai-picks").children.length,1);
+  assert.ok(flattened(ui.dom.get("items")).some(x=>
+    String(x.textContent).includes("AI 분석 완료")));
+  ui.dom.get("mode-ai").onclick();
+  assert.deepEqual(cardIds(ui),["ai1"]);
+  ui.dom.get("mode-verified").onclick();
+  assert.deepEqual(cardIds(ui),["ai1"]);
+  ui.dom.get("mode-all").onclick();
+  const order=flattened(ui.dom.get("detail"));
+  const aiPos=order.findIndex(x=>x.className==="analysis-lead");
+  const sourcePos=order.findIndex(x=>x.tag==="h3" &&
+    x.textContent.includes("① 실제 변경 내용"));
+  assert.ok(aiPos>=0 && sourcePos>aiPos,
+    "Analyzed policies must show the AI summary before full legal comparisons");
   assert.ok(all.includes("지급액 변경을 사업 기준에 적용할지"));
   assert.ok(nodes.some(x=>x.tag==="a"&&x.href===official.program_url),
     "Official program URLs should be reachable");
-  assert.deepEqual(nodes.filter(x=>x.dataset.agencyFilter!==undefined)
-    .map(x=>x.dataset.agencyFilter),["all","가상장학공사"]);
+  assert.equal(nodes.filter(x=>x.dataset.agencyFilter!==undefined).length,0,
+    "Agency review must be readable without extra filters");
   const noAI=setupBrowser(true,"",{
     documents:[sample("plain","일부개정","compared","2026-11-10","금액·비율")],
     ai_status:"not_configured"
@@ -326,7 +340,7 @@ async function verifyAIProgramEvidence(){
   await flush();
   noAI.dom.get("items").children[0].onclick();
   const texts=flattened(noAI.dom.get("detail")).map(x=>x.textContent).join(" ");
-  assert.ok(texts.includes("AI 분석 미실행"));
+  assert.ok(texts.includes("AI 분석 대기"));
   assert.ok(!texts.includes("③ AI 변경 영향 분석"),
     "Missing credentials must not produce synthetic AI inference");
   const partial=setupBrowser(true,"",{
@@ -337,11 +351,11 @@ async function verifyAIProgramEvidence(){
   partial.dom.get("items").children[0].onclick();
   const partialText=flattened(partial.dom.get("detail"))
     .map(x=>x.textContent).join(" ");
-  assert.ok(partialText.includes("AI 검토 일부 생성됨"),
+  assert.ok(partialText.includes("AI 분석 대기"),
     "Partial model output must not be labeled as a total pipeline failure");
   assert.ok(!partialText.includes("검증 실패"),
     "A transient overload does not imply the quoted evidence failed");
-  console.log("PASS: official program links and clearly labeled AI proposals");
+  console.log("PASS: AI overview, filter, detail-first summary and verified institutional evidence");
 }
 Promise.all([verifyNavigation(),verifyRealFilters(),verifyAIProgramEvidence()]).catch(error=>{
   console.error(error);process.exitCode=1;

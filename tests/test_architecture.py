@@ -33,6 +33,20 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("validate_public(data)", pipeline)
         self.assertIn("python -m policy_domino.contracts site/data.json", workflow)
 
+    def test_ai_coverage_is_exposed_and_not_limited_to_two_calls(self):
+        workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(encoding="utf-8")
+        ai = (ROOT / "policy_domino/ai.py").read_text(encoding="utf-8")
+        app = (ROOT / "site/app.js").read_text(encoding="utf-8")
+        index = (ROOT / "site/index.html").read_text(encoding="utf-8")
+        self.assertIn("python -m policy_domino ai --limit 24", workflow)
+        self.assertIn("DEFAULT_REQUEST_BUDGET = 24", ai)
+        self.assertIn("MAX_REQUEST_BUDGET = 60", ai)
+        self.assertIn("pending_total", ai)
+        self.assertIn("ai-picks", app)
+        for marker in ("analyzed-count", "pending-count", "mode-ai", "mode-verified"):
+            self.assertIn('id="' + marker + '"', index)
+        self.assertNotIn("agencyFilter", app)
+
     def test_code_quality_spec_does_not_pretend_all_impact_is_implemented(self):
         standard = (ROOT / "docs/ENGINEERING_STANDARD.md").read_text(encoding="utf-8")
         self.assertIn("아직 미완성", standard)

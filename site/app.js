@@ -1,10 +1,10 @@
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  const FILTER_MODES=["all","new","amended","repealed"];
+  const FILTER_MODES=["all","new","amended","repealed","verified","ai"];
   const view = window.PolicyDominoView;
   const state = {data: null, selected: null, query: "", visible: 80,
-                 mode:"all", agencyFilter:"all"};
+                 mode:"all"};
   // Mobile navigation follows the original policy-domino list→detail UX.
   // The detail is a distinct view, never an extra page section below the list.
   const mobile = () => window.matchMedia("(max-width:850px)").matches;
@@ -26,15 +26,14 @@
   function selectDoc(id,updateUrl=true){
     if(!state.data || !state.data.documents.some(d=>d.id===id))return;
     state.selected=id;
-    state.agencyFilter="all";
     renderList();
     renderDetail();
+    if(updateUrl){
+      try{history.pushState({policyId:id},"","#change="+encodeURIComponent(id));}catch(e){}
+    }
     if(mobile()){
       $("layout").classList.add("detail-open");
       document.body.classList.add("detail-active");
-      if(updateUrl){
-        try{history.pushState({policyId:id},"","#change="+encodeURIComponent(id));}catch(e){}
-      }
       scrollTop();
     }
   }
@@ -169,6 +168,93 @@
     append(article,drawer,external(change.source_url,"변경 조문 공식 출처"));
     return article;
   }
+  function aiLead(doc){
+    const analysis=doc.analysis||{};
+    if(view.aiComplete(doc)){
+      const ai=analysis.ai;
+      const section=heading("AI 분석 결과",
+        "공식 신구 원문으로 검증한 검토 초안입니다. 기관의 수정 의무를 확정한 결과는 아닙니다.");
+      section.className="analysis-lead";
+      append(section,create("div","analysis-byline",
+        "분석 완료 · "+ai.model+" · "+(ai.generated_at||"시각 미확인")));
+      for(const item of ai.change_reviews||[]){
+        const card=create("div","ai-finding");
+        append(card,create("div","ai-article",item.article||"검토 조문"),
+          create("h4","",item.summary),
+          create("p","ai-question",item.review_question),
+          create("div","ai-evidence", "원문 대조 · "+item.before_quote+
+            "  →  "+item.after_quote));
+        append(section,card);
+      }
+      if(ai.program_reviews?.length){
+        const programs=create("div","ai-programs");
+        append(programs,create("h4","", "관련 공공사업 검토 · "+
+          num(ai.program_reviews.length)+"건"));
+        for(const item of ai.program_reviews){
+          const row=create("div","ai-program-row");
+          append(row,create("strong","",item.agency+" · "+item.article),
+            create("p","",item.review_question),
+            create("div","micro","사업 근거 원문 인용 · "+item.program_quote));
+          append(programs,row);
+        }
+        append(section,programs);
+      }else{
+        append(section,create("p","help",
+          "연결된 공공사업의 수정 의무는 확인되지 않았습니다. 변경 조문에 대한 검토만 제공합니다."));
+      }
+      return section;
+    }
+    if(view.hasVerifiedDifference(doc)){
+      const section=create("section","analysis-await");
+      append(section,create("div","status-heading","AI 분석 대기"),
+        create("p","",
+          "이 사건은 공식 신구 변경이 확인됐지만 AI 검토 초안은 아직 생성되지 않았습니다."+
+          " 아래에서 원문 비교를 확인할 수 있습니다."));
+      return section;
+    }
+    return null;
+  }
+  function renderOverview(){
+    const docs=state.data?.documents||[];
+    const progress=view.analysisProgress(docs);
+    $("indexed-count").textContent=num(progress.indexed);
+    $("verified-count").textContent=num(progress.verified);
+    $("analyzed-count").textContent=num(progress.analyzed);
+    $("pending-count").textContent=num(progress.pending);
+    const run=state.data?.ai_run||{};
+    if(!run.checked_at){
+      $("ai-run-summary").textContent=
+        "AI 분석 실행 기록 없음 · 공식 신구 비교와 AI 분석은 별도 단계입니다.";
+    }else{
+      const when=String(run.checked_at).replace("T"," ").slice(0,16)+" UTC";
+      const detail="최근 AI 실행 "+when+" · 요청 "+num(run.attempted)+
+        "건 · 신규 생성 "+num(run.generated)+"건";
+      const extra=run.error_codes && Object.keys(run.error_codes).length ?
+        " · 보류/오류 "+num(run.errors)+"건" : "";
+      $("ai-run-summary").textContent=detail+extra+
+        " · 분석은 검증된 사건별로 누적됩니다.";
+    }
+    const panel=$("ai-picks");panel.replaceChildren();
+    const reviewed=view.filterDocuments(docs,{mode:"ai"}).slice(0,4);
+    if(!reviewed.length){
+      append(panel,create("div","ai-empty",
+        "아직 공개된 AI 분석 초안이 없습니다. 공식 신구 변경 결과는 목록에서 확인할 수 있습니다."));
+    }
+    for(const doc of reviewed){
+      const card=create("button","ai-pick");card.type="button";
+      card.dataset.id=doc.id;
+      const item=doc.analysis.ai.change_reviews[0];
+      append(card,create("div","ai-pick-top","AI 분석 완료 · "+doc.published_at),
+        create("strong","",doc.title),
+        create("p","",item?.summary||"공식 조문 변경 검토"),
+        create("span","ai-pick-link","분석 내용 보기 ›"));
+      card.onclick=()=>selectDoc(doc.id);
+      append(panel,card);
+    }
+    $("show-ai").hidden=!progress.analyzed;
+    $("show-ai").textContent="분석 완료 "+num(progress.analyzed)+"건 전체 보기";
+  }
+
   function renderDetail(){
     const doc=state.data.documents.find(d=>d.id===state.selected);
     const root=$("detail");root.replaceChildren();
@@ -177,13 +263,18 @@
     const top=create("header","detail-head");
     append(top,create("div","eyebrow",(doc.kind||"공식 규정")+" · "+(doc.published_at||"")),
       create("h2","",doc.title),
-      create("div","sub","소관 · 발령기관: "+formatAgencyNames(doc.ministry)),
-      badge(analysisLabel(analysis)[0],analysisLabel(analysis)[1]),
-      external(doc.url,"공식 원문 확인"));
+      create("div","sub","소관 · 발령기관: "+formatAgencyNames(doc.ministry)));
+    const states=create("div","detail-statuses");
+    append(states,badge(analysisLabel(analysis)[0],analysisLabel(analysis)[1]));
+    if(view.aiComplete(doc))append(states,badge("AI 분석 완료","ai-done"));
+    append(top,states,external(doc.url,"공식 원문 확인"));
     append(root,top);
+    const lead=aiLead(doc);
+    if(lead)append(root,lead);
 
     const diffs=analysis.changes||[];
-    const changes=heading("① 실제 변경 내용");
+    const changes=heading("① 실제 변경 내용",
+      "공식 종전·현행 조문을 대조한 내용입니다. 전체 원문은 각 조문에서 펼쳐 볼 수 있습니다.");
     if(!diffs.length){
       append(changes,create("div","muted-box",analysis.reason ||
         "공식 신구 원문 비교가 완료되지 않았습니다. 변경 내용을 임의로 작성하지 않습니다."));
@@ -209,24 +300,10 @@
     ])).sort((a,b)=>a.localeCompare(b,"ko-KR"));
     if(!agencies.length){
       append(impacts,create("div","agency-empty",
-        "공식 사업자료로 확인된 기관별 변경 검토사항은 아직 없습니다. 법령의 인용·기관명만으로 수정 의무를 추정하지 않습니다."));
+        "변경 조문과 직접 연결되는 공공기관 사업·업무 근거가 아직 확인되지 않았습니다."+
+        " 기관명이 법령에 등장했다는 이유만으로 영향이 확정되지는 않습니다."));
     }else{
-      if(state.agencyFilter!=="all" && !agencies.includes(state.agencyFilter))
-        state.agencyFilter="all";
-      const filters=create("div","review-filters");
-      filters.setAttribute("role","group");
-      filters.setAttribute("aria-label","기관 이름별 검토 필터");
-      for(const name of ["all",...agencies]){
-        const btn=create("button","review-chip"+
-          (state.agencyFilter===name?" active":""),name==="all"?"전체 기관":name);
-        btn.type="button";btn.dataset.agencyFilter=name;
-        btn.setAttribute("aria-pressed",String(state.agencyFilter===name));
-        btn.onclick=()=>{state.agencyFilter=name;renderDetail();};
-        append(filters,btn);
-      }
-      append(impacts,filters);
       for(const agency of agencies){
-        if(state.agencyFilter!=="all" && state.agencyFilter!==agency)continue;
         const group=create("div","agency-group");
         append(group,create("h4","agency-group-head",agency));
         for(const row of evidence.actions.get(agency)||[]){
@@ -258,32 +335,6 @@
       }
     }
     append(root,impacts);
-
-    if(analysis.ai?.status==="generated"){
-      const ai=heading("③ AI 변경 영향 분석",
-        "공식 변경 원문과 연결 근거를 바탕으로 작성한 AI 검토 초안입니다. 기관의 수정 의무를 확정하지 않습니다.");
-      append(ai,create("div","micro","실행 모델: "+analysis.ai.model+
-        " · 분석시점: "+(analysis.ai.generated_at||"")));
-      for(const item of analysis.ai.change_reviews||[]){
-        const card=create("div","agency-card ai-card");
-        append(card,create("strong","",item.article+" · "+item.summary),
-          create("p","ai-review-question",item.review_question),
-          create("div","micro","공식 원문 발췌: "+item.before_quote+
-            " → "+item.after_quote));
-        append(ai,card);
-      }
-      append(root,ai);
-    }else if(state.data.ai_status==="partial_generated" && diffs.length){
-      append(root,create("div","state-note",
-        "AI 검토 일부 생성됨 · 이 문서의 AI 검토 초안은 아직 없습니다."));
-    }else if(state.data.ai_status==="failed" && diffs.length){
-      append(root,create("div","state-note",
-        "이번 AI 분석 요청에서 결과를 생성하지 못했습니다."+
-        " 공식 변경 근거는 별도로 확인할 수 있습니다."));
-    }else if(state.data.ai_status==="not_configured" && diffs.length){
-      append(root,create("div","state-note",
-        "AI 분석 미실행 · 모델 인증키 미설정. 공식 신구 비교 결과는 별도로 제공됩니다."));
-    }
 
     // Keep investigative traces available without presenting them as duties.
     if(evidence.citations.length || evidence.namedActors.size){
@@ -347,8 +398,10 @@
     updateModeControls();
     const list=$("items");list.replaceChildren();
     const all=filtered();
-    $("feed-state").textContent=num(state.data?.documents.length||0)+
-       "개 공식 변경 사건 중 "+num(all.length)+"개 표시";
+    const labels={ai:"AI 분석 완료",verified:"신구 비교 확인",
+      all:"전체",new:"제정",amended:"개정",repealed:"폐지"};
+    $("feed-state").textContent=(labels[state.mode]||"전체")+" · "+
+      num(all.length)+"건 / 총 "+num(state.data?.documents.length||0)+"건";
     if(!all.length)append(list,create("div","empty",
       "이 조건에 해당하는 공식 변경 항목이 없습니다. 전체 공식자료에서 다른 항목을 확인할 수 있습니다."));
     for(const doc of all.slice(0,state.visible)){
@@ -365,7 +418,12 @@
       append(tags,badge(analysisLabel(doc.analysis)[0],analysisLabel(doc.analysis)[1]));
       const changes=doc.analysis?.changes?.length||0;
       if(changes)append(tags,badge("변경 조문 "+changes+"개"));
+      if(view.aiComplete(doc))append(tags,badge("AI 분석 완료","ai-done"));
       append(row,tags);
+      if(view.aiComplete(doc)){
+        append(row,create("p","item-ai-summary",
+          doc.analysis.ai.change_reviews[0]?.summary||"분석 완료"));
+      }
       row.onclick=()=>selectDoc(doc.id);
       append(list,row);
     }
@@ -379,9 +437,13 @@
     state.mode="all";
     const linked=fragmentId();
     const hasLinked=linked && data.documents.some(doc=>doc.id===linked);
-    state.selected=hasLinked?linked:(mobile()?null:(view.filterDocuments(data.documents)[0]?.id||null));
-    $("updated").textContent=data.generated_at?"마지막 분석 "+data.generated_at:
+    const firstReviewed=view.filterDocuments(data.documents,{mode:"ai"})[0];
+    state.selected=hasLinked?linked:(mobile()?null:
+      (firstReviewed?.id||view.filterDocuments(data.documents)[0]?.id||null));
+    $("updated").textContent=data.generated_at?
+      "공식자료 갱신 "+String(data.generated_at).replace("T"," ").slice(0,16)+" UTC":
       "공식 원천 갱신 대기";
+    renderOverview();
     renderList();renderDetail();
     if(hasLinked && mobile())selectDoc(linked,false);
     else if(mobile())showList(false);
@@ -406,6 +468,19 @@
   for(const mode of FILTER_MODES){
     $("mode-"+mode).onclick=()=>{state.mode=mode;state.visible=80;renderList();};
   }
+  $("show-ai").onclick=()=>{
+    state.mode="ai";
+    state.visible=80;
+    state.query="";
+    $("search").value="";
+    renderList();
+    const first=filtered()[0];
+    if(first&&!mobile())selectDoc(first.id);
+    if(mobile()){
+      try{$("layout").scrollIntoView({behavior:"smooth",block:"start"});}
+      catch(e){}
+    }
+  };
   $("search").oninput=ev=>{state.query=normalize(ev.target.value);state.visible=80;renderList();};
   $("more").onclick=()=>{state.visible+=80;renderList();};
   fetch("./data.json",{cache:"no-store"}).then(res=>{

@@ -134,6 +134,12 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(report["schema"],"policy-domino-next-v1")
             self.assertTrue(output.exists())
             self.assertEqual(report["quality"]["law"]["verified_changes"],1)
+            self.assertEqual(report["ai_progress"]["analyzed_events"], 0)
+            self.assertGreaterEqual(report["ai_progress"]["verified_events"], 1)
+            self.assertEqual(report["ai_progress"]["pending_events"],
+                             report["ai_progress"]["verified_events"])
+            self.assertEqual(report["ai_progress"]["source_events"],
+                             len(report["documents"]))
             self.assertTrue(all(not x.get("reference_only")
                                 for x in report["documents"]))
 
