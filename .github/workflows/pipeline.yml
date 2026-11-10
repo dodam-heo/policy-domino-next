@@ -54,6 +54,13 @@ jobs:
           for item in list(state.get("official_programs", {}).values())[:2]:
               print("REAL RECORD:", item["name"], "/", item["agency"],
                     "/ text:", item["description"][:90], "/ url:", item["url"])
+          from policy_domino.alioplus import listing_detail_urls
+          paging = re.search(r'<div class="paging">', content, re.IGNORECASE)
+          print("PAGE CONTROL HTML:", repr(content[paging.start():paging.start()+1500]) if paging else "none")
+          page2 = ALIOPlusClient(delay_seconds=0).fetch(INDEX + "?pageNo=2")
+          print("PAGE2 comparison:", len(page2),
+                "page1 ids:", listing_detail_urls(content)[:6],
+                "page2 ids:", listing_detail_urls(page2)[:6])
           for word in ("fnPage", "pageIndex", "pageNo", "currentPage",
                        "pageNum", "paging", "firstPage"):
               match = re.search(word, content, re.IGNORECASE)
