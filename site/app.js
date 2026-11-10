@@ -128,21 +128,54 @@
     }
     $("more").hidden=events.length<=state.visible;
   }
+  function sourceDiffPreview(change, beforeLabel="변경 전", afterLabel="변경 후") {
+    const meaning=change.meaning||{};
+    const focus=Array.isArray(meaning.focus)?meaning.focus:[];
+    const wrapper=create("div","source-diff-preview");
+    if(!focus.length) {
+      const pair=create("div","highlight-comparison");
+      const a=create("div","highlight-old"),b=create("div","highlight-new");
+      append(a,create("small","",beforeLabel),
+        create("p","",meaning.before||"확인된 변경 부분 없음"));
+      append(b,create("small","",afterLabel),
+        create("p","",meaning.after||"확인된 변경 부분 없음"));
+      append(pair,a,b);
+      append(wrapper,pair);
+      return wrapper;
+    }
+    for(const [index,part] of focus.entries()){
+      const pair=create("div","highlight-comparison");
+      if(focus.length>1)
+        append(wrapper,create("p","diff-window-label",
+          "실제 변경 위치 "+num(index+1)+" / "+num(focus.length)));
+      for(const [side,label,className] of [
+        ["before",beforeLabel,"highlight-old"],
+        ["after",afterLabel,"highlight-new"]
+      ]) {
+        const block=create("div",className);
+        append(block,create("small","",label));
+        const p=create("p","diff-preview-text");
+        const snippet=part[side]||{};
+        if(snippet.prefix)append(p,create("span","diff-context",snippet.prefix));
+        if(snippet.changed)append(p,create("mark","diff-changed",snippet.changed));
+        else append(p,create("span","diff-absent",
+          side==="before"?"[추가된 부분]":"[삭제된 부분]"));
+        if(snippet.suffix)append(p,create("span","diff-context",snippet.suffix));
+        append(block,p);
+        append(pair,block);
+      }
+      append(wrapper,pair);
+    }
+    return wrapper;
+  }
+
   function sourcePair(change) {
     const wrap=create("div","clause");
     const label=change.meaning?.label||"조문 내용 변경";
     append(wrap,create("div","clause-name",
       change.document_title+" · "+change.article+" · "+label));
     if(change.brief)append(wrap,create("p","clause-description",change.brief));
-    const preview=create("div","pair");
-    const before=create("div","before");
-    const after=create("div","after");
-    append(before,create("small","value-label","변경 전 문구"),
-      create("p","",change.meaning?.before||"원문에서 확인"));
-    append(after,create("small","value-label","변경 후 문구"),
-      create("p","",change.meaning?.after||"원문에서 확인"));
-    append(preview,before,after);
-    append(wrap,preview);
+    append(wrap,sourceDiffPreview(change,"변경 전","변경 후"));
     const full=create("details","original-clause");
     append(full,create("summary","","변경 전·후 조문 전체 보기"));
     const complete=create("div","pair");
@@ -207,23 +240,12 @@
               "수집된 종전·현행 본문만으로는 실제 개정 내용을 단정할 수 없어 이 조문은 재확인 대상입니다."));
           }
         }
-        if(meaning.before || meaning.after) {
+        if(meaning.before || meaning.after || meaning.focus?.length) {
           const toggle=create("details","highlight-detail");
-          append(toggle,create("summary","",
-            "신구 변경 부분 펼쳐 보기"));
-          const excerpts=create("div","highlight-comparison");
-          const oldBox=create("div","highlight-old");
-          const newBox=create("div","highlight-new");
-          const oldLabel=meaning.change_kind==="citation"?"종전 인용 조문":
-            meaning.source_check_required?"확보된 종전 본문":"변경 전";
-          const newLabel=meaning.change_kind==="citation"?"현행 인용 조문":
-            meaning.source_check_required?"확보된 현행 본문":"변경 후";
-          append(oldBox,create("small","",oldLabel),
-            create("p","",meaning.before||"일치하는 발췌 없음"));
-          append(newBox,create("small","",newLabel),
-            create("p","",meaning.after||"일치하는 발췌 없음"));
-          append(excerpts,oldBox,newBox);
-          append(toggle,excerpts);
+          append(toggle,create("summary","","실제 달라진 부분 보기"));
+          append(toggle,sourceDiffPreview(change,
+            meaning.change_kind==="citation"?"종전 인용 조문":"변경 전",
+            meaning.change_kind==="citation"?"현행 인용 조문":"변경 후"));
           append(row,toggle);
         }
         append(highlights,row);
@@ -553,9 +575,13 @@
       (run.stopped_reason?" · 중단 사유: "+run.stopped_reason:"");
     const rules=(data.quality||{}).rule_categories||{};
     const notices=rules["고시"];
+    const unclassified=rules["미분류"];
+    const noticeEnd=(data.collection_run?.backfill_end_dates||{})["admrul|2|3"];
     $("institution-link-progress").textContent=
       (notices?"고시 "+num(notices.indexed)+"건 색인 · 변경 확인 "+
         num(notices.changed)+"건 · 분석 대기 "+num(notices.pending)+"건 · ":"")+
+      (unclassified?.indexed?"행정규칙 종류 미확인 "+num(unclassified.indexed)+"건 · ":"")+
+      (noticeEnd?"고시 연혁 과거 수집 기준일 "+noticeEnd+" · ":"")+
       "기관별 검토사항 "+num(progress.institutional_reviews)+"건"+
       " · 공공사업 인용 연결 "+num(progress.verified_program_links)+"건"+
       " · 관련 공식 규정 소관기관 연결 "+num(progress.referencing_public_rule_reviews)+"건"+

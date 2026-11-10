@@ -194,6 +194,73 @@ def _changed_fragments(before: str, after: str) -> list[dict]:
     return sorted(ranked, key=lambda row: (-row["score"], row["offset"]))
 
 
+def focused_differences(before: str, after: str, limit: int = 3) -> list[dict]:
+    """Source-exact windows surrounding the actual edits, never clause starts.
+
+    Original text stays available in its entirety on demand. Parts are kept
+    separate so the frontend can emphasize changed tokens without raw HTML.
+    """
+    before, after = str(before or ""), str(after or "")
+    if before == after:
+        return []
+    small = len(before) + len(after) <= 8000
+    windows = []
+    if small:
+        a, b = _tokens(before), _tokens(after)
+        ai, bi = [0], [0]
+        for token in a:
+            ai.append(ai[-1] + len(token))
+        for token in b:
+            bi.append(bi[-1] + len(token))
+        opcodes = difflib.SequenceMatcher(
+            None, a, b, autojunk=(len(a)+len(b) > 350)).get_opcodes()
+        for tag, i, j, k, m in opcodes:
+            if tag == "equal":
+                continue
+            old_start,old_end,new_start,new_end=ai[i],ai[j],bi[k],bi[m]
+            windows.append((old_start,old_end,new_start,new_end))
+    else:
+        # Linear-time common-prefix/suffix diff for large annexes and tables.
+        common = 0
+        m = min(len(before), len(after))
+        while common < m and before[common] == after[common]:
+            common += 1
+        tail = 0
+        while (tail < m-common and
+               before[-tail-1] == after[-tail-1]):
+            tail += 1
+        windows=[(common,len(before)-tail,common,len(after)-tail)]
+    if not windows:
+        # Defensive fallback for unusual difflib behavior.
+        windows=[(0,len(before),0,len(after))]
+
+    def parts(text: str, start: int, end: int) -> dict:
+        context = 55
+        left=max(0,start-context)
+        right=min(len(text),end+context)
+        prefix = ("…" if left else "") + text[left:start]
+        changed = text[start:end]
+        suffix = text[end:right] + ("…" if right<len(text) else "")
+        # Never disguise a giant replacement as an identical unchanging
+        # prefix. Display at least the beginning of the changed source span.
+        if len(changed)>190:
+            changed=changed[:180]+"…"
+        return {"prefix":prefix,"changed":changed,"suffix":suffix}
+
+    ranked=[]
+    for i,j,k,m in windows:
+        old,new=parts(before,i,j),parts(after,k,m)
+        weight=_score_fragment(before[i:j][:160],after[k:m][:160])
+        if not old["changed"] and not new["changed"]:
+            continue
+        ranked.append((weight,i,{
+            "before":old,"after":new,
+            "type":("추가" if i==j else "삭제" if k==m else "교체"),
+        }))
+    selected=sorted(ranked,key=lambda x:(-x[0],x[1]))[:max(0,limit)]
+    return [x[2] for x in sorted(selected,key=lambda x:x[1])]
+
+
 def _subject_area(before: str, after: str, old_piece: str, new_piece: str) -> str:
     """Do not infer a changed procedure from a keyword on only one side."""
     for name, pattern in LABELS:
@@ -229,6 +296,7 @@ def explain(before: str, after: str) -> dict:
     best = edits[0]
     old_quote, new_quote = best["before"], best["after"]
     editorial = NON_CONTENT.sub("", before) == NON_CONTENT.sub("", after)
+    focus = focused_differences(before, after)
     kind, score = "text_revision", 55
     if fragmentary:
         kind, label, score = "source_check", "종전·현행 원문 확인 필요", -10
@@ -295,8 +363,15 @@ def explain(before: str, after: str) -> dict:
                            "신구 문장과 원문을 함께 확인하세요.")
             old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
             score = 75
+    # Show the words that actually changed, not identical clause openings.
+    # Preserve exact citations and amounts as the concise labels when present.
+    if kind in ("rewrite", "multiple_edits", "source_check") and focus:
+        first = focus[0]
+        old_quote = _abbreviate("".join(first["before"].values()), 210)
+        new_quote = _abbreviate("".join(first["after"].values()), 210)
     return {
         "label": label, "description": description,
+        "focus": focus,
         "before": old_quote, "after": new_quote,
         "editorial": editorial and not fragmentary,
         "priority": score, "edits_count": len(edits),

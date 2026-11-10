@@ -73,7 +73,11 @@ def collect_streams(api, state, today: dt.date, ingest_window,
             old_end = dt.date.fromisoformat(cursors[f"admrul|{version}"])
         else:
             old_end = today - dt.timedelta(days=7+int(state.get("cursor_days",0)))
-        old_start = old_end - dt.timedelta(days=6)
+        # Advance the independent historical cursors in useful blocks.
+        # Each queried block is recursively split by ingest_window when the
+        # public API page limit would omit records; never advance on failure.
+        span = 28 if source == "admrul" else 14
+        old_start = old_end - dt.timedelta(days=span - 1)
         if load(source, version, old_start.isoformat(),
                 old_end.isoformat(), "historical", rule_kind):
             cursors[key]=(old_start-dt.timedelta(days=1)).isoformat()
@@ -101,6 +105,7 @@ def collect_streams(api, state, today: dt.date, ingest_window,
         "historical_complete": deferred == 0 and all(
             x["complete"] for x in results if x["stage"] == "historical"),
         "backfill_end_dates": dict(cursors),
+        "historical_window_days": {"law": 14, "admrul": 28, "ordin": 14},
     }
     state["last_collected_at"] = state["collection_run"]["checked_at"]
     return deferred == 0 and all(row["complete"] for row in results)

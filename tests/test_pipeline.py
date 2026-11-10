@@ -106,6 +106,37 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(configured_law_oc(),"custom-public-oc")
 
 
+    def test_official_detail_repairs_unclassified_notice_without_title_guess(self):
+        state=new_state()
+        item=record("admrul","1234","5678",
+                    "2026-08-20","가상 연례 복지 심사기준")
+        item["revision"]="제정"
+        item["law_type"]="행정규칙"
+        state["documents"][item["id"]]=item
+        class OfficialAPI:
+            def detail(self,record):
+                return ET.fromstring("""<행정규칙>
+                  <행정규칙종류코드>3</행정규칙종류코드>
+                  <조문단위><조문번호>1</조문번호>
+                  <조문내용>제1조 이 기준을 적용한다.</조문내용>
+                  </조문단위></행정규칙>""")
+        found=analyze_one(OfficialAPI(),state,item)
+        self.assertEqual(found["status"],"enactment")
+        self.assertEqual(state["documents"][item["id"]]["law_type"],"고시")
+        # A rule without authoritative metadata must remain unclassified.
+        other=record("admrul","1235","5680",
+                     "2026-08-20","가상 연례 고시")
+        other["revision"]="제정"
+        other["law_type"]="행정규칙"
+        state["documents"][other["id"]]=other
+        class MissingType(OfficialAPI):
+            def detail(self,record):
+                root=super().detail(record)
+                root.remove(root.find("행정규칙종류코드"))
+                return root
+        analyze_one(MissingType(),state,other)
+        self.assertEqual(other["law_type"],"행정규칙")
+
     def test_annual_notice_baseline_uses_two_documented_history_modes(self):
         from policy_domino.pipeline import _annual_baseline
         import xml.etree.ElementTree as ET

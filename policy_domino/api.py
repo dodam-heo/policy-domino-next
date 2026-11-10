@@ -57,8 +57,12 @@ def parse_record(node: ET.Element, source: str) -> dict | None:
     if source == "ordin" and not ministry:
         ministry = field(node, "지자체명", True)
     if source == "admrul":
+        raw_code = field(node, "행정규칙종류코드", True)
         raw_type = field(node, "행정규칙종류", True)
-        law_type = ADMIN_RULE_KINDS.get(raw_type, raw_type or cfg["type"])
+        # Use only official type/code metadata or the verified knd search.
+        # Title keywords are not reliable evidence for administrative rule type.
+        law_type = ADMIN_RULE_KINDS.get(
+            raw_code, ADMIN_RULE_KINDS.get(raw_type, raw_type or cfg["type"]))
     return {
         "id": document_key(source, stable, serial), "source": source,
         "stable_id": stable, "serial": serial, "title": title,

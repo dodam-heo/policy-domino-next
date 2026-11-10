@@ -391,7 +391,8 @@ async function screenshotComparisonSafety(){
   assert.ok(text.includes("종전 인용 조문"));
   assert.ok(text.includes("현행 인용 조문"));
   const changes=flatten(node(ui,"detail")).filter(el=>
-    el.className==="highlight-detail" && el.children.some(x=>x.className==="highlight-comparison"));
+    el.className==="highlight-detail" &&
+    flatten(el).some(x=>x.className==="highlight-comparison"));
   assert.ok(changes.length>=1,"Core changes show short summary and collapse the before/after excerpts");
   assert.ok(changes.every(x=>!x.open),"Before/after source excerpts must start collapsed");
   assert.ok(text.includes("정확한 변경 내용을 판단할 수 없습니다"));
@@ -449,6 +450,44 @@ async function realServiceLeadDiscoveryPresentation(){
     "정부24 공공서비스 1,000건"));
   console.log("PASS: actual Gov24 public-service evidence displayed as candidates");
 }
+async function realDiffDoesNotRepeatSameClauseStart(){
+  const event=sample("deep-diff",{date:"2026-11-10"});
+  const oldText=("같은 규정의 적용 요건과 심사 절차를 유지한다. ").repeat(25)+
+    "계약이전 공개설명회를 일간신문에 공고한다.";
+  const newText=("같은 규정의 적용 요건과 심사 절차를 유지한다. ").repeat(25)+
+    "계약이전 공개설명회를 금융위원회 홈페이지에 공고한다.";
+  const focus=[{
+    before:{prefix:"…계약이전 공개설명회를 ",changed:"일간신문",
+            suffix:"에 공고한다."},
+    after:{prefix:"…계약이전 공개설명회를 ",
+           changed:"금융위원회 홈페이지",suffix:"에 공고한다."},
+    type:"교체",
+  }];
+  event.changes[0].before=oldText;
+  event.changes[0].after=newText;
+  event.changes[0].meaning={
+    ...event.changes[0].meaning,
+    before:oldText.slice(0,145),after:newText.slice(0,145),
+    focus,
+  };
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[event],
+    ai_progress:{indexed_documents:1000},generated_at:"",
+  });
+  await flush();
+  const detail=node(ui,"detail");
+  const marked=flatten(detail).filter(el=>el.tag==="mark" &&
+    el.className==="diff-changed");
+  assert.ok(marked.length>=4,"Both summary and source comparison mark real edits");
+  assert.ok(marked.some(el=>el.textContent==="일간신문"));
+  assert.ok(marked.some(el=>el.textContent==="금융위원회 홈페이지"));
+  assert.ok(!marked.some(el=>el.textContent==="같은 규정"),
+    "Identical clause beginnings must not appear as changes");
+  assert.ok(flatten(detail).some(el=>el.className==="full-clause-text"),
+    "Full official source must remain expandable");
+  console.log("PASS: identical long clause beginnings never conceal the actual edit");
+}
+
 async function officialNoticeCanBeFoundByKind(){
   const e=sample("notice",{date:"2026-11-10"});
   e.members=[{
@@ -484,5 +523,6 @@ async function noFabricatedImpact(){
 Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
-  realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind()
+  realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind(),
+  realDiffDoesNotRepeatSameClauseStart()
 ]).catch(error=>{console.error(error);process.exitCode=1});

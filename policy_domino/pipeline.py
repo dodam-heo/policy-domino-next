@@ -101,7 +101,20 @@ def _annual_baseline(api: LawAPI, doc: dict) -> dict | None:
 
 
 def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
-    after = parse_document(api.detail(doc))
+    root = api.detail(doc)
+    if doc.get("source") == "admrul":
+        from .api import field
+        from .core import ADMIN_RULE_KINDS
+        # Repair older unclassified records with exact official detail metadata.
+        official_code = field(root, "행정규칙종류코드")
+        official_type = field(root, "행정규칙종류")
+        verified_type = ADMIN_RULE_KINDS.get(
+            official_code, official_type if official_type in
+            ADMIN_RULE_KINDS.values() else "")
+        if verified_type:
+            doc["law_type"] = verified_type
+            state["documents"][doc["id"]]["law_type"] = verified_type
+    after = parse_document(root)
     state["versions"][doc["id"]] = after
     base = {
         "event_id": doc["id"], "status": "",

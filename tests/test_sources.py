@@ -67,6 +67,18 @@ class SourceExtractionTests(unittest.TestCase):
             <발령일자>20261110</발령일자></admrul>""")
         self.assertEqual(parse_record(doc,"admrul")["law_type"],"고시")
 
+    def test_regulation_kind_code_from_official_record_is_not_lost(self):
+        root=ET.fromstring("""<admrul>
+          <행정규칙ID>401</행정규칙ID>
+          <행정규칙일련번호>505</행정규칙일련번호>
+          <행정규칙명>가상 소관 부처 기준서</행정규칙명>
+          <행정규칙종류코드>3</행정규칙종류코드>
+          <발령일자>20260803</발령일자>
+          </admrul>""")
+        parsed=parse_record(root,"admrul")
+        self.assertEqual(parsed["law_type"],"고시")
+        self.assertEqual(parsed["published_at"],"2026-08-03")
+
     def test_official_api_page_limit_is_audited_not_silently_complete(self):
         def fake(url):
             return ("""<Search><totalCnt>250</totalCnt><law>

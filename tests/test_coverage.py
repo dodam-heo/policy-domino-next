@@ -35,11 +35,11 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(state["collection_run"]["failed_windows"],1)
         self.assertEqual(cursors["admrul|1|3"],"2026-11-03")
         self.assertEqual(state["collection_run"]["rule_kinds"]["고시"]["failed"],1)
-        self.assertEqual(cursors["law|1"],"2026-10-27")
-        self.assertEqual(cursors["ordin|2"],"2026-10-27")
-        self.assertTrue(collect_streams(None,state,today,ingest))
-        self.assertEqual(cursors["admrul|1|3"],"2026-10-27")
         self.assertEqual(cursors["law|1"],"2026-10-20")
+        self.assertEqual(cursors["ordin|2"],"2026-10-20")
+        self.assertTrue(collect_streams(None,state,today,ingest))
+        self.assertEqual(cursors["admrul|1|3"],"2026-10-06")
+        self.assertEqual(cursors["law|1"],"2026-10-06")
         self.assertEqual(state["collection_run"]["failed_windows"],0)
         self.assertTrue(any(x[:3]==("admrul","1","3") and
                             x[4]=="2026-11-03" for x in calls))
@@ -54,12 +54,26 @@ class CoverageTests(unittest.TestCase):
                 seen.append((version,first,last))
             return True
         collect_streams(None,state,dt.date(2026,11,10),ingest)
-        self.assertIn(("1","2026-06-25","2026-07-01"),seen)
-        self.assertIn(("2","2026-05-26","2026-06-01"),seen)
+        self.assertIn(("1","2026-06-04","2026-07-01"),seen)
+        self.assertIn(("2","2026-05-05","2026-06-01"),seen)
         self.assertEqual(state["backfill_end_dates"]["admrul|1|3"],
-                         "2026-06-24")
+                         "2026-06-03")
         self.assertEqual(state["collection_run"]["rule_kinds"]["고시"]["completed"],4)
         self.assertEqual(state["collection_run"]["streams"],30)
+
+    def test_historical_backfill_uses_multiweek_blocks_for_all_sources(self):
+        state=new_state()
+        queries=[]
+        def ingest(api,state,source,first,last,version,*,rule_kind=""):
+            queries.append((source,version,rule_kind,first,last))
+            return True
+        collect_streams(None,state,dt.date(2026,11,10),ingest)
+        latest={x[:3]:x for x in queries if x[-1]=="2026-11-03"}
+        self.assertEqual(latest[("admrul","1","3")][-2],"2026-10-07")
+        self.assertEqual(latest[("law","1","")][-2],"2026-10-21")
+        self.assertEqual(latest[("ordin","2","")][-2],"2026-10-21")
+        self.assertEqual(state["collection_run"]["historical_window_days"],
+                         {"law":14,"admrul":28,"ordin":14})
 
     def test_incomplete_time_budget_defers_unchecked_categories_without_losing_cursors(self):
         from unittest.mock import patch

@@ -1,7 +1,7 @@
 """Readable policy wording regressions: complete words, relevance and truthfulness."""
 import unittest
 
-from policy_domino.meaning import explain, event_headline, highlight_changes
+from policy_domino.meaning import explain, event_headline, highlight_changes, focused_differences
 
 
 def item(name, old, new):
@@ -140,6 +140,41 @@ class MeaningTests(unittest.TestCase):
                                   "basis_tier":"verified_program_citation"}])
         self.assertEqual(choices[0]["article"],"제3조")
         self.assertEqual(choices[1]["article"],"제10조")
+
+    def test_identical_clause_openings_reveal_real_replaced_word_far_below(self):
+        unchanged = ("금융위원회는 법에 따른 계약이전을 받는 자의 지정을 "
+                     "공개설명회를 개최하여 심사한다. ") * 35
+        before = unchanged + "공고는 일간신문에 게시한다."
+        after = unchanged + "공고는 금융위원회 홈페이지에 게시한다."
+        result = explain(before, after)
+        snippets = result["focus"]
+        self.assertGreaterEqual(len(snippets), 1)
+        combined_old = " ".join(x["before"]["changed"] for x in snippets)
+        combined_new = " ".join(x["after"]["changed"] for x in snippets)
+        self.assertIn("일간신문", combined_old)
+        self.assertIn("홈페이지", combined_new)
+        self.assertNotEqual(combined_old, combined_new)
+        self.assertNotIn(unchanged[:120], result["before"])
+
+    def test_long_annex_diff_focus_is_not_common_prefix(self):
+        shared = "공공서비스 기준 적용 기록을 보존한다. " * 480
+        result = explain(shared + "기준금액 100만원" + shared,
+                         shared + "기준금액 120만원" + shared)
+        pair = result["focus"][0]
+        self.assertIn("100", "".join(pair["before"].values()))
+        self.assertIn("120", "".join(pair["after"].values()))
+        self.assertLess(len("".join(pair["before"].values())), 350)
+        self.assertNotEqual(pair["before"]["changed"],
+                            pair["after"]["changed"])
+
+    def test_focus_marks_insertions_and_deletions_without_inventing_text(self):
+        source = "제1조 관보에 공고한다."
+        updated = "제1조 관보 및 홈페이지에 공고한다."
+        lead = focused_differences(source, updated)
+        self.assertTrue(lead)
+        self.assertNotEqual(lead[0]["before"],lead[0]["after"])
+        self.assertIn("홈페이지", "".join(lead[0]["after"].values()))
+        self.assertEqual(focused_differences(source,source), [])
 
     def test_no_early_100_character_chop_of_a_korean_legal_token(self):
         long_word = "가상복합지원자격심사위원회"
