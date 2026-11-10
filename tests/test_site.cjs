@@ -285,7 +285,7 @@ async function institutionFilterNavigation(){
   assert.ok(!textOf(results).includes("교육 지원 변경 대조"));
   assert.equal(agencyButtons().find(x=>x.dataset.institution==="가상복지공단")
     .getAttribute("aria-pressed"),"true");
-  assert.ok(textOf(detail).includes("1개 기관 · 1건"));
+  assert.ok(textOf(detail).includes("1개 기관 · 변경 조문 검토 1건"));
 
   const agencySearch=pick(detail,"agency-filter-search");
   agencySearch.value="교육";
@@ -434,13 +434,23 @@ async function realServiceLeadDiscoveryPresentation(){
   await flush();
   const detail=node(ui,"detail");
   const text=textOf(detail);
-  assert.ok(text.includes("공공기관·서비스 적용기준 검토"));
-  assert.ok(text.includes("가상광역시청 · 가상생활지원서비스"));
-  assert.ok(text.includes("검토할 공공서비스 1건"));
-  assert.ok(text.includes("조치 의무나 반영 완료를 확정한 내용은 아닙니다"));
+  assert.ok(text.includes("기관별 변경·사업 검토사항"));
+  assert.ok(text.includes("가상광역시청"));
+  assert.ok(text.includes("가상생활지원서비스"));
+  assert.ok(text.includes("공공서비스 기준 확인 1건"));
+  assert.ok(text.includes("각각의 근거 수준은 구분해 보여줍니다"));
   assert.ok(text.includes("10만원"));
-  assert.ok(text.includes("선정기준 · 확인할 업무"));
+  assert.ok(text.includes("선정기준 · 검토할 기준"));
   assert.ok(text.includes("개정 조문 12만원"));
+  const grouped=flatten(detail).find(el=>el.className==="agency-group-results");
+  assert.ok(grouped && grouped.children.length===1,
+    "Public-service-only agency must be available in the institution selector");
+  const options=flatten(detail).find(el=>el.className==="agency-select");
+  assert.ok(options.children.some(x=>x.value==="가상광역시청"));
+  const agencyButton=flatten(detail).find(x=>x.dataset.institution==="가상광역시청");
+  assert.ok(agencyButton);
+  agencyButton.onclick();
+  assert.ok(textOf(grouped).includes("가상생활지원서비스"));
   const lead=flatten(detail).find(el=>el.className.includes("service-criterion"));
   assert.ok(lead,"The existing public service criterion is visible on expansion");
   const links=flatten(detail).filter(el=>el.tag==="a");
@@ -450,6 +460,38 @@ async function realServiceLeadDiscoveryPresentation(){
     "정부24 공공서비스 1,000건"));
   console.log("PASS: actual Gov24 public-service evidence displayed as candidates");
 }
+async function indexedNoticesAreSearchableWithoutFakingImpact(){
+  const event=sample("confirmed",{date:"2026-11-10"});
+  const official={
+    id:"official-queued-01",title:"2027년도 가상 지원기준 고시",
+    source:"admrul",law_type:"고시",published_at:"2026-07-29",
+    ministry:"가상복지부",url:"https://www.law.go.kr/행정규칙/가상지원기준",
+    analysis:{status:"queued",changes:[]},
+  };
+  const bodyMissing={...official,id:"official-missing-02",
+    title:"2027년도 가상 서비스기준 고시",
+    analysis:{status:"body_unavailable",changes:[]}};
+  const data={schema:"policy-domino-next-v1",events:[event],
+    documents:[official,bodyMissing],
+    ai_progress:{indexed_documents:3},generated_at:""};
+  const ui=browser(false,"",data);
+  await flush();
+  node(ui,"search").oninput({target:{value:"2027년도 가상 고시"}});
+  const items=node(ui,"items");
+  const text=textOf(items);
+  assert.ok(text.includes("공식자료 검색 · 분석 대기 포함 2건"));
+  assert.ok(text.includes("신구 분석 대기"));
+  assert.ok(text.includes("본문 미확보"));
+  assert.ok(text.includes("정책 변경으로 확정하거나 기관별 업무 변경으로 표시하지 않습니다"));
+  assert.equal(flatten(items).filter(x=>x.dataset.eventId==="official-queued-01").length,0);
+  assert.ok(flatten(items).some(x=>x.tag==="a" &&
+    x.href==="https://www.law.go.kr/행정규칙/가상지원기준"));
+  node(ui,"search").oninput({target:{value:"2027년도 존재하지않음"}});
+  assert.ok(textOf(node(ui,"items")).includes(
+    "현재 색인에 일치하는 공식자료가 없습니다"));
+  console.log("PASS: indexed notices and analysis failures visible without fictitious change event");
+}
+
 async function realDiffDoesNotRepeatSameClauseStart(){
   const event=sample("deep-diff",{date:"2026-11-10"});
   const oldText=("같은 규정의 적용 요건과 심사 절차를 유지한다. ").repeat(25)+
@@ -515,7 +557,7 @@ async function noFabricatedImpact(){
   });
   await flush();
   assert.equal(node(ui,"stat-agencies").textContent,"0");
-  assert.ok(textOf(node(ui,"detail")).includes("연결 근거는 아직 확인되지 않았습니다"));
+  assert.ok(textOf(node(ui,"detail")).includes("공식 근거가 아직 확인되지 않았습니다"));
   node(ui,"mode-impact").onclick();
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,0);
   console.log("PASS: no invented institutions or operational actions");
@@ -524,5 +566,6 @@ Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
   realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind(),
-  realDiffDoesNotRepeatSameClauseStart()
+  realDiffDoesNotRepeatSameClauseStart(),
+  indexedNoticesAreSearchableWithoutFakingImpact()
 ]).catch(error=>{console.error(error);process.exitCode=1});

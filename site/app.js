@@ -90,6 +90,59 @@
   function filtered() {
     return view.filterEvents(state.events,state);
   }
+  function renderIndexedOfficialSources(root, events) {
+    // The official index and a verified policy change are different stages.
+    // A document without completed comparison must be discoverable, but must
+    // NEVER be represented as an already verified amendment or agency impact.
+    if(state.mode!=="all")return;
+    const terms=state.query.trim().toLocaleLowerCase("ko-KR")
+      .split(/\s+/).filter(Boolean);
+    if(!terms.length || terms.join("").length<2)return;
+    const verified=new Set(state.events.flatMap(e=>e.source_documents||[]));
+    const docs=(state.data?.documents||[]).filter(doc=>{
+      if(verified.has(doc.id))return false;
+      const text=[doc.title,doc.law_type,doc.ministry]
+        .join(" ").toLocaleLowerCase("ko-KR");
+      return terms.every(term=>text.includes(term));
+    });
+    const section=create("details","indexed-search-section");
+    section.open=!events.length;
+    append(section,create("summary","",
+      "공식자료 검색 · 분석 대기 포함 "+num(docs.length)+"건"));
+    append(section,create("p","index-warning",
+      "여기는 공식 원천에서 색인한 문서 목록입니다. 신구 비교가 완료되지 않은 자료는 정책 변경으로 확정하거나 기관별 업무 변경으로 표시하지 않습니다."));
+    if(!docs.length){
+      append(section,create("p","empty",
+        "현재 색인에 일치하는 공식자료가 없습니다. 미수집 연혁·고시 원문은 별도 수집이 필요합니다."));
+    }
+    for(const doc of docs.slice(0,25)){
+      const item=create("div","indexed-source-item");
+      const status=doc.analysis?.status||"queued";
+      const label={
+        queued:"신구 분석 대기",
+        body_unavailable:"본문 미확보",
+        history_unavailable:"종전 이력 미확보",
+        baseline_unavailable:"종전 기준 미확보",
+        partial_unresolved:"원문 일부 미확인",
+        source_error:"공식 조회 오류",
+        compared:"변경 사건 없음",
+        no_text_change:"텍스트 변경 없음",
+        enactment:"신규 제정",
+        repeal:"폐지",
+      }[status]||"원문 비교 확인 중";
+      append(item,create("strong","",doc.title),
+        create("p","",[
+          doc.law_type||doc.source,doc.published_at,
+          doc.ministry,label].filter(Boolean).join(" · ")),
+        link(doc.url,"공식 법령·고시 원문"));
+      append(section,item);
+    }
+    if(docs.length>25)
+      append(section,create("p","section-help",
+        "처음 25건만 표시합니다. 검색어를 더 구체화하세요."));
+    append(root,section);
+  }
+
   function renderList() {
     renderFilters();
     const events=filtered();
@@ -116,6 +169,8 @@
       if (event.source_count>1) append(tags,pill("동시 개정 "+num(event.source_count)+"건"));
       if (event.institution_count) append(tags,pill("검토 기관 "+num(event.institution_count)+"곳","impact"));
       if (event.review_count) append(tags,pill("업무 "+num(event.review_count)+"건"));
+      if (event.public_service_lead_count)
+        append(tags,pill("공공서비스 기준 "+num(event.public_service_lead_count)+"건"));
       if (event.ai_count) append(tags,pill("AI 보조검토","ai"));
       const highlighted=(event.highlights||[])[0];
       const important=highlighted && (event.changes||[]).find(ch=>
@@ -126,6 +181,7 @@
       item.onclick=()=>select(event.id);
       append(root,item);
     }
+    renderIndexedOfficialSources(root,events);
     $("more").hidden=events.length<=state.visible;
   }
   function sourceDiffPreview(change, beforeLabel="변경 전", afterLabel="변경 후") {
@@ -299,12 +355,12 @@
     return card;
   }
   function renderInstitutions(event) {
-    const section=heading("기관별 변경 검토사항",
-      "변경 조문으로 검토 대상이 특정된 기관·사업입니다. 실제 반영 여부는 확인되지 않았습니다.");
+    const section=heading("기관별 변경·사업 검토사항",
+      "변경 조문에 직접 연결된 기관 검토와 정부24에 등록된 실제 공공서비스 기준을 함께 찾되, 각각의 근거 수준은 구분해 보여줍니다.");
     const groups=view.impactGroups(event);
     if (!groups.length) {
       append(section,create("p","no-impacts",
-        "변경 내용은 확인됐지만, 직접 규율받는 기관이나 사업의 연결 근거는 아직 확인되지 않았습니다."));
+        "이 변경 조문과 연결되는 기관·공공사업의 공식 근거가 아직 확인되지 않았습니다. 원천자료 수집·인용 대조가 더 필요합니다."));
       return section;
     }
     // Names come solely from this event's verified institutional reviews.
@@ -335,7 +391,7 @@
     all.value="all";
     append(compactSelect,all);
     for(const entry of groups) {
-      const opt=create("option","",entry.agency+" ("+num(entry.reviews.length)+")");
+      const opt=create("option","",entry.agency+" ("+num(entry.reviews.length+entry.services.length)+")");
       opt.value=entry.agency;
       append(compactSelect,opt);
     }
@@ -352,8 +408,10 @@
     function drawResults(){
       const shown=state.institutionFilter==="all" ? groups :
         groups.filter(g=>g.agency===state.institutionFilter);
-      const count=shown.reduce((total,g)=>total+g.reviews.length,0);
-      counter.textContent=num(shown.length)+"개 기관 · "+num(count)+"건";
+      const reviewCount=shown.reduce((total,g)=>total+g.reviews.length,0);
+      const serviceCount=shown.reduce((total,g)=>total+g.services.length,0);
+      counter.textContent=num(shown.length)+"개 기관 · 변경 조문 검토 "+
+        num(reviewCount)+"건 · 공공서비스 기준 확인 "+num(serviceCount)+"건";
       compactSelect.value=state.institutionFilter;
       results.replaceChildren();
       for(let i=0;i<shown.length;i++){
@@ -363,10 +421,13 @@
           shown.length<=3 || i===0;
         const top=create("summary","agency-heading");
         append(top,create("strong","",entry.agency),
-          create("span","",num(entry.reviews.length)+"건"));
+          create("span","",num(entry.reviews.length+entry.services.length)+"건"));
         append(group,top);
         for(const review of entry.reviews){
           append(group,reviewCard(review));
+        }
+        for(const service of entry.services) {
+          append(group,serviceLeadCard(service));
         }
         append(results,group);
       }
@@ -394,7 +455,7 @@
         button.setAttribute("aria-pressed",String(selected));
         button.dataset.institution=entry.agency;
         append(button,create("span","agency-filter-name",entry.agency),
-          create("span","agency-filter-count",num(entry.reviews.length)));
+          create("span","agency-filter-count",num(entry.reviews.length+entry.services.length)));
         button.onclick=()=>choose(entry.agency);
         append(buttons,button);
       }
@@ -478,52 +539,37 @@
     append(section,drawer);
     return section;
   }
-  function renderPublicServices(event) {
-    const items=event.public_service_leads||[];
-    if(!items.length)return null;
-    const section=heading("공공기관·서비스 적용기준 검토",
-      "정부24의 실제 기관·서비스·운영기준과 변경 조문을 연결했습니다. 아래는 확인할 업무이며 조치 의무나 반영 완료를 확정한 내용은 아닙니다.");
-    append(section,create("p","section-counter",
-      "검토할 공공서비스 "+num(event.public_service_lead_count||items.length)+"건"));
-    const list=create("div","public-service-leads");
-    for(const item of items){
-      const card=create("details","agency-group public-service-lead");
-      const label=create("summary","agency-heading");
-      append(label,create("strong","",item.agency+" · "+item.service_name),
-        create("span","",item.match_tier==="official_clause_citation"?
-          "개정 조문 직접 인용":"근거 법령명 연결"));
-      append(card,label);
-      const content=create("div","public-service-lead-body");
-      append(content,create("p","",
-        "변경된 근거: "+item.law_title+" "+item.article));
-      const tier=item.match_tier==="official_clause_citation"?
-        "공식 서비스에서 해당 개정 조문을 인용합니다.":
-        "공식 서비스에 법령명이 있지만, 변경된 조문까지 직접 인용했는지는 미확인입니다.";
-      append(content,create("p","public-service-match-tier",tier));
-      for(const target of item.review_targets||[]) {
-        const box=create("div","service-criterion");
-        append(box,create("strong","",target.field+" · 확인할 업무"),
-          create("p","",target.review_question));
-        if(target.old_value&&target.new_legal_value)
-          append(box,create("p","service-criterion-values",
-            "서비스 등록기준 "+target.old_value+" · 개정 조문 "+target.new_legal_value));
-        const source=create("details","service-source");
-        append(source,create("summary","","정부24 등록기준 원문 보기"),
-          create("p","",target.source_excerpt));
-        append(box,source);
-        append(content,box);
-      }
-      const legal=create("details","service-source");
-      append(legal,create("summary","","법령 연결 근거 펼쳐 보기"),
-        create("p","",item.basis_quote));
-      append(content,legal,
-        link(item.service_url||item.source_url,
-          item.service_url?"정부24 서비스 원문":"정부24 공식 공공서비스 데이터"));
-      append(card,content);
-      append(list,card);
+  function serviceLeadCard(item) {
+    const card=create("details","review-card service-review-lead");
+    const title=create("summary","service-review-heading");
+    append(title,create("strong","",item.service_name),
+      create("span","",item.match_tier==="official_clause_citation"?
+        "공식 변경 조문 인용":"공식 법령명 인용 · 조문 확인 필요"));
+    append(card,title);
+    const content=create("div","public-service-lead-body");
+    append(content,create("p","",
+      "개정 근거: "+item.law_title+" "+item.article));
+    for(const target of item.review_targets||[]) {
+      const box=create("div","service-criterion");
+      append(box,create("strong","",target.field+" · 검토할 기준"),
+        create("p","",target.review_question));
+      if(target.old_value&&target.new_legal_value)
+        append(box,create("p","service-criterion-values",
+          "서비스 등록기준 "+target.old_value+" → 개정 조문 "+target.new_legal_value));
+      const original=create("details","service-source");
+      append(original,create("summary","","실제 서비스 등록기준 원문"),
+        create("p","",target.source_excerpt));
+      append(box,original);
+      append(content,box);
     }
-    append(section,list);
-    return section;
+    const proof=create("details","service-source");
+    append(proof,create("summary","","공식 법령 인용 근거 펼쳐보기"),
+      create("p","",item.basis_quote));
+    append(content,proof,
+      link(item.service_url||item.source_url,
+        item.service_url?"정부24 서비스 원문":"정부24 공식 서비스 데이터"));
+    append(card,content);
+    return card;
   }
 
   function renderDetail() {
@@ -542,7 +588,7 @@
     append(head,meta,create("h2","",event.title),
       event.effective_date ?
         create("p","effective","시행일 "+event.effective_date):null);
-    append(root,head,renderCore(event),renderPublicServices(event),
+    append(root,head,renderCore(event),
       renderInstitutions(event),renderEvidence(event),renderAI(event));
   }
   function show(data) {

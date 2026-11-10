@@ -23,7 +23,7 @@ from .meaning import explain, event_headline, highlight_changes
 # A regulation that directly governs the organization named in its *title*.
 # This is a generic structural pattern, not a list of known agencies.
 ORGANIZATION_RULE = re.compile(
-    r"^(.+?)(?:와|과) 그 소속기관 직제(?: 시행규칙)?$"
+    r"^(.+?)(?:(?:와|과) 그 소속기관)? 직제(?: 시행규칙)?$"
 )
 VALID_COMPARISONS = {"compared", "partial_compared"}
 VERIFIED_LIFECYCLE = {"enactment", "repeal"}
@@ -99,6 +99,21 @@ def _review_row(document: dict, change: dict, institution: str, *,
     identity = [document["id"], article, institution, program_id, tier]
     if tier == "verified_official_rule_citation":
         identity += [linking_regulation, related_rule_article, related_rule_url]
+    # A direct source-backed before/after fragment is more informative
+    # than repeating "please compare the law" for every institution.
+    meanings = explain(change.get("before", ""), change.get("after", ""))
+    focus = meanings.get("focus") or []
+    first = focus[0] if focus else {}
+    old_delta = str(first.get("before", {}).get("changed", "")).strip()
+    new_delta = str(first.get("after", {}).get("changed", "")).strip()
+    if (old_delta != new_delta and old_delta and new_delta and
+            max(len(old_delta), len(new_delta)) <= 65 and
+            not meanings.get("source_check_required")):
+        operational_focus = (
+            "변경된 기준 ‘" + old_delta + "’ → ‘" + new_delta +
+            "’을 근거로 " + _review_task(category, place))
+    else:
+        operational_focus = _review_task(category, place)
     result = {
         "id": _id("|".join(identity)),
         "document_id": document["id"],
@@ -109,7 +124,11 @@ def _review_row(document: dict, change: dict, institution: str, *,
         "article": article,
         "category": category,
         "change": _change_brief(change),
-        "task": _review_task(category, place),
+        "task": operational_focus,
+        "source_delta": {
+            "before": old_delta,
+            "after": new_delta,
+        } if old_delta != new_delta else {},
         "basis_tier": tier,
         "basis_quote": source_quote[:450],
         "source_url": change.get("source_url", document.get("url", "")),

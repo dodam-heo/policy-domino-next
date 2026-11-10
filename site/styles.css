@@ -287,3 +287,21 @@ a{color:var(--blue);text-underline-offset:3px}
 .service-source p{margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;
   color:#455963;font-size:11px}
 .public-service-match-tier{font-size:11px;color:#416d7d}
+
+/* A single institution filter separates source-bound legal reviews and
+   official service criteria leads without suggesting implementation status. */
+.service-review-lead{margin:10px 14px;padding:11px 12px;
+  border:1px solid #d8e8ef;background:#f9fcfd;border-radius:8px}
+.service-review-heading{display:flex;gap:9px;flex-wrap:wrap;
+  justify-content:space-between;align-items:center;
+  color:#24536b;font-size:12px;cursor:pointer}
+.service-review-heading span{font-size:10px;color:#57798b;font-weight:650}
+.indexed-search-section{margin:14px 0;padding:13px;
+  border:1px solid #d8e5ec;border-radius:10px;background:#f8fbfd}
+.indexed-search-section>summary{cursor:pointer;font-weight:750;
+  font-size:12px;color:#1b5b77}
+.index-warning{color:#587381;font-size:11px;line-height:1.6;margin:10px 0}
+.indexed-source-item{padding:11px 2px;border-top:1px solid #dce7ed;
+  overflow-wrap:anywhere}
+.indexed-source-item strong{display:block;font-size:12px;color:#244b62}
+.indexed-source-item p{margin:4px 0;font-size:11px;color:#648092;line-height:1.5}

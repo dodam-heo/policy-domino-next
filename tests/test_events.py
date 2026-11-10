@@ -140,6 +140,30 @@ class PolicyEventModelTests(unittest.TestCase):
         self.assertEqual(event["highlights"], [
             {"document_id": d["id"], "article": "제3조"}])
 
+    def test_single_agency_organization_chart_has_real_owner_and_delta(self):
+        # "○○ 직제" is an official regulated-organization naming pattern,
+        # not a case-specific whitelist of ministries and agencies.
+        official = doc("가상우정사업본부 직제","77","7000")
+        findings = changed(official, category="조직·정원")
+        result=build_events({official["id"]:official},
+                            {official["id"]:findings})
+        self.assertEqual(result[0]["institution_count"],1)
+        review=result[0]["institutional_reviews"][0]
+        self.assertEqual(review["institution"],"가상우정사업본부")
+        self.assertEqual(review["basis_tier"],"direct_regulated_institution")
+        self.assertIn("10", review["source_delta"]["before"])
+        self.assertIn("12", review["source_delta"]["after"])
+        self.assertIn("10", review["task"])
+        self.assertIn("12", review["task"])
+
+    def test_related_organization_rule_keeps_original_agency_scope(self):
+        original=doc("가상교육청과 그 소속기관 직제 시행규칙",
+                     "89","12345")
+        events=build_events({original["id"]:original},
+                            {original["id"]:changed(original)})
+        self.assertEqual(events[0]["institutional_reviews"][0]["institution"],
+                         "가상교육청")
+
     def test_local_same_number_never_cross_merges(self):
         docs = [
             doc("가상A 조례", "11", "121", source="ordin"),

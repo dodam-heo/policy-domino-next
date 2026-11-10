@@ -393,6 +393,17 @@ def validate_public(payload: dict) -> dict:
                 continue
             verify(action.get("source_url") == change.get("source_url"), loc,
                    "institutional review source must match changed official clause")
+            # The concise operator-facing change must be copied from the
+            # actual legal comparison, not a proposed impact or generated text.
+            focus = (change.get("meaning", {}).get("focus") or [])
+            initial = focus[0] if focus else {}
+            old_delta = str(initial.get("before", {}).get("changed", "")).strip()
+            new_delta = str(initial.get("after", {}).get("changed", "")).strip()
+            expected_delta = ({"before": old_delta, "after": new_delta}
+                              if old_delta != new_delta else {})
+            if "source_delta" in action:
+                verify(action["source_delta"] == expected_delta, loc,
+                       "displayed before-after fragment must match the changed official clause")
             verify(bool(action.get("task")) and
                    action.get("implementation_status") == "not_verified", loc,
                    "review may not claim verified operational implementation")
@@ -529,6 +540,13 @@ def validate_public(payload: dict) -> dict:
         "confirmed_direct_legal_references": len(payload["relationships"]),
         "verified_policy_events": len(payload["events"]),
         "source_bound_institutional_reviews": event_actions,
+        "official_public_services_indexed": payload.get("public_services_indexed",0),
+        "service_criterion_review_candidates": sum(
+            len(event.get("public_service_leads",[]))
+            for event in payload.get("events",[])),
+        "not_yet_verified_source_documents": sum(
+            1 for doc in payload.get("documents",[])
+            if doc.get("analysis",{}).get("status","queued") == "queued"),
     }
 
 

@@ -33,6 +33,10 @@
         ]),
         ...(event.institutional_reviews||[]).flatMap(x=>[
           x.institution,x.program,x.task
+        ]),
+        ...(event.public_service_leads||[]).flatMap(x=>[
+          x.agency,x.service_name,
+          ...(x.review_targets||[]).map(y=>y.field)
         ])
       ].join(" ").toLocaleLowerCase("ko-KR");
       return searchable.includes(term);
@@ -42,15 +46,29 @@
       String(a.id||"").localeCompare(String(b.id||"")));
   }
   function impactGroups(event) {
+    // A single institution selector for independently verified changed-clause
+    // reviews and official public-service review leads. These evidence tiers
+    // must never be merged into "confirmed institutional actions".
     const grouped=new Map();
-    for(const review of event.institutional_reviews||[]) {
-      const agency=String(review.institution||"").trim();
-      if(!agency)continue;
-      if(!grouped.has(agency))grouped.set(agency,[]);
-      grouped.get(agency).push(review);
+    function item(agency) {
+      agency=String(agency||"").trim();
+      if(!agency)return null;
+      if(!grouped.has(agency))grouped.set(agency,{
+        agency,reviews:[],services:[],
+      });
+      return grouped.get(agency);
     }
-    return Array.from(grouped,([agency,reviews])=>({agency,reviews}))
-      .sort((a,b)=>a.agency.localeCompare(b.agency,"ko-KR"));
+    for(const review of event.institutional_reviews||[]) {
+      const target=item(review.institution);
+      if(target)target.reviews.push(review);
+    }
+    for(const service of event.public_service_leads||[]) {
+      if(service.verification!=="candidate_not_confirmed")continue;
+      const target=item(service.agency);
+      if(target)target.services.push(service);
+    }
+    return [...grouped.values()].sort((a,b)=>
+      a.agency.localeCompare(b.agency,"ko-KR"));
   }
   function overview(events,progress={}) {
     const agencies=new Set(events.flatMap(e=>
