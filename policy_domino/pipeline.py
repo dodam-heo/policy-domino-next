@@ -237,6 +237,12 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24) -> dict:
     if hasattr(api,"request"):
         from .discovery import discover_dependents
         discover_dependents(api,state,limit_events=min(3,max(1,limit//8)))
+    # Separately discover official public-program evidence. Failure to parse
+    # an external source never removes previously collected legal or program data.
+    # Synthetic unit-test clients do not initiate uncontrolled network requests.
+    if isinstance(api, LawAPI):
+        from .alioplus import ALIOPlusClient
+        state["program_source_audit"] = ALIOPlusClient().collect(state, max_details=6)
     state["generated_at"] = utc_now()
     return state
 
@@ -248,6 +254,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     edges = connect_changes(findings, state.get("versions", {}), docs)
     from .analysis import cross_document_actor_reviews
     work_reviews = cross_document_actor_reviews(edges, findings)
+    from .programs import discover_program_links, program_audit
+    program_links = discover_program_links(state, edges)
     indexed = sorted((d.copy() for d in docs.values() if not d.get("reference_only")),
                      key=lambda d: (
         d.get("published_at", ""), d.get("serial", "")), reverse=True)
@@ -265,6 +273,11 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "documents": indexed,
         "relationships": edges,
         "cross_document_review_candidates": work_reviews,
+        "program_dependencies": program_links,
+        "program_discovery_audit": {
+            **program_audit(state, program_links),
+            "source": state.get("program_source_audit", {}),
+        },
         "discovery_audit": state.get("discovery_metrics",{}),
         "principles": {
             "manual_institutions": False,
