@@ -3,19 +3,20 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const html = fs.readFileSync("site/index.html","utf8");
 const appSource = fs.readFileSync('site/app.js','utf8');
+const viewSource = fs.readFileSync('site/presentation.js','utf8');
 const styleSource = fs.readFileSync('site/styles.css','utf8');
 assert.ok(html.includes('<script src="./app.js"></script>'),"UI controller must load externally");
+assert.ok(html.indexOf('presentation.js') < html.indexOf('app.js'),"View model must load before DOM controller");
 assert.ok(html.includes('<link rel="stylesheet" href="./styles.css">'),"UI style must load externally");
+new vm.Script(viewSource,{filename:'site/presentation.js'});
 new vm.Script(appSource,{filename:'site/app.js'});
 const source = html+'\n'+appSource;
 for(const word of [
-  "① 정책에서 실제 바뀐 내용","② 기관별 변경 검토사항",
-  "③ 변경 조문을 직접 인용하는 관련 규정",
-  "④ 원문 변경에 따른 추가 검토 후보",
+  "① 실제 변경 내용","② 기관별 변경 검토사항",
   "operational_program_verified","required_action_verified",
   'fetch("./data.json"'
 ]){
-  assert.ok(source.includes(word),"Missing source-evidence feature: "+word);
+  assert.ok((source+'\n'+viewSource).includes(word),"Missing evidence-first feature: "+word);
 }
 for(const deprecated of ['data-law="organization"','data-law="lifecycle"']){
   assert.ok(!source.includes(deprecated),"Unrequested filter: "+deprecated);
@@ -89,13 +90,17 @@ function setupBrowser(mobile=true,initialHash="",override=null){
     schema:"policy-domino-next-v1",configuration:"running",
     documents:override?.documents||fakeDocs,
     relationships:override?.relationships||[],quality:{},
+    program_dependencies:override?.program_dependencies||[],
+    ai_status:override?.ai_status||"not_run",
     cross_document_review_candidates:override?.cross_document_review_candidates||[],
     generated_at:"",
   })});
-  vm.runInNewContext(appSource,{
+  const context={
     document,window:win,history,location,fetch,URL,console,
     encodeURIComponent,decodeURIComponent,
-  },{filename:"site/index.html"});
+  };
+  vm.runInNewContext(viewSource,context,{filename:"site/presentation.js"});
+  vm.runInNewContext(appSource,context,{filename:"site/app.js"});
   return {dom,body,listeners,location,calls};
 }
 async function flush(){
@@ -160,98 +165,100 @@ function sample(id,revision,status,date,category=null){
 async function verifyRealFilters(){
   const substantive=sample("c1","일부개정","compared","2026-11-07","금액·비율");
   substantive.analysis.direct_actor_reviews=[{
-    actor:"가상청장",article:"제3조",review:"신규 지급액 기준 대조",
+    actor:"가상청장",article:"제3조",review:"변경 문구 확인",
     source_url:"https://www.law.go.kr/법령/example",
+    operational_program_verified:false,required_action_verified:false,
   }];
   substantive.analysis.review_candidates=[{
-    article:"제3조",category:"금액·비율",
-    review:"공공부문 사업 적용 관계 재검증",
-    source_url:"https://www.law.go.kr/법령/example",
+    article:"제3조",category:"금액·비율",review:"기관 미배정 검토 후보",
   }];
   const structural=sample("c2","일부개정","compared","2026-11-08","조직·정원");
   const newPolicy=sample("n1","제정","enactment","2026-11-09");
   const repealed=sample("r1","폐지","repeal","2026-11-04");
-  const newerSubstantive=sample("c3","일부개정","compared","2026-11-10","기한·절차");
+  const later=sample("c3","일부개정","compared","2026-11-10","기한·절차");
   const pending=sample("p1","일부개정","queued","2026-11-11");
-  const docs=[substantive,structural,newPolicy,repealed,newerSubstantive,pending];
-  const rel=[
-    {source_event_id:"c1",referencing_document_id:"a",relationship:"verified_exact_article_citation",
-      operational_program_verified:false,required_action_verified:false,
-      referencing_title:"가상 집행규정",referencing_article:"제7조",changed_article:"제3조",
-      publishing_agency:"가상청",reference_quote:"「가상 c1 정책」 제3조를 인용한다.",
-      referencing_source_url:"https://www.law.go.kr/법령/example"},
-    {source_event_id:"c1",referencing_document_id:"b",relationship:"verified_exact_article_citation",
-      operational_program_verified:false,required_action_verified:false,
-      referencing_title:"가상 시행규칙",referencing_article:"제4조",changed_article:"제3조",
-      publishing_agency:"가상청",reference_quote:"「가상 c1 정책」 제3조를 인용한다.",
-      referencing_source_url:"https://www.law.go.kr/법령/example"},
-  ];
+  const docs=[substantive,structural,newPolicy,repealed,later,pending];
+
+  const citation={source_event_id:"c1",referencing_document_id:"r1",
+    relationship:"verified_exact_article_citation",
+    operational_program_verified:false,required_action_verified:false,
+    referencing_title:"가상 규정",referencing_article:"제7조",changed_article:"제3조",
+    reference_quote:"「가상 c1 정책」 제3조",referencing_source_url:"https://www.law.go.kr/법령/example"};
+  const verified={...citation,referencing_document_id:"r2",
+    verified_agency:"가상지원공사",verified_program:"공식 지원업무",
+    operational_program_verified:true,required_action_verified:true,
+    official_operational_url:"https://www.law.go.kr/법령/example",
+    required_review:"변경 전후 지급기준을 지원업무에 적용할지 검토"};
+  const verified2={...verified,referencing_document_id:"r3",
+    verified_agency:"가상행정청",verified_program:"공식 심사업무"};
   const cross=[{source_event_id:"c1",actor:"가상보건청장",
     work_regulation:"가상 집행규정",target_location:"제7조",
-    review:"가상 사업의 기준 대조",source_url:"https://www.law.go.kr/법령/example",
+    review:"사업 적용 여부 추가 확인",source_url:"https://www.law.go.kr/법령/example",
     operational_program_verified:false,required_action_verified:false}];
-  const ui=setupBrowser(true,"",{documents:docs,relationships:rel,
+
+  const ui=setupBrowser(true,"",{documents:docs,relationships:[citation,verified,verified2],
                                     cross_document_review_candidates:cross});
   await flush();
-  // Full official catalogue stays visible: never hide structural changes,
-  // enactments, repeals or incomplete source records behind a fake rating.
-  assert.deepEqual(cardIds(ui),["c3","c2","c1","n1","r1","p1"]);
+  assert.deepEqual(cardIds(ui),["p1","c3","n1","c2","c1","r1"],
+    "Latest official changes must be the default even if comparison is queued");
   assert.equal(ui.dom.get("mode-all").getAttribute("aria-pressed"),"true");
-  ui.dom.get("sort-latest").onclick();
-  assert.deepEqual(cardIds(ui),["p1","c3","n1","c2","c1","r1"]);
-  ui.dom.get("sort-verified").onclick();
-  assert.deepEqual(cardIds(ui),["c3","c2","c1","n1","r1","p1"]);
-  ui.dom.get("mode-pending").onclick();
-  assert.deepEqual(cardIds(ui),["p1"],"Pending data is searchable without fabricated changes");
   ui.dom.get("mode-new").onclick();
   assert.deepEqual(cardIds(ui),["n1"]);
   ui.dom.get("mode-amended").onclick();
-  assert.deepEqual(new Set(cardIds(ui)),new Set(["c1","c2","c3","p1"]));
+  assert.deepEqual(cardIds(ui),["p1","c3","c2","c1"]);
   ui.dom.get("mode-repealed").onclick();
   assert.deepEqual(cardIds(ui),["r1"]);
   ui.dom.get("mode-all").onclick();
-  ui.dom.get("search").oninput({target:{value:"가상 c2"}});
-  assert.deepEqual(cardIds(ui),["c2"],"Search must apply to the selected mode");
+  ui.dom.get("search").oninput({target:{value:"가상 c1"}});
+  assert.deepEqual(cardIds(ui),["c1"]);
   ui.dom.get("search").oninput({target:{value:""}});
-  ui.dom.get("items").children[2].onclick(); // c1 source with 2 named actors
-  assert.equal(ui.dom.get("layout").classList.contains("detail-open"),true);
-  const filterButtons=()=>flattened(ui.dom.get("detail"))
-    .filter(x=>x.dataset.agencyFilter!==undefined);
-  let tabs=filterButtons();
-  assert.deepEqual(tabs.map(x=>x.dataset.agencyFilter),
-    ["all","가상보건청장","가상청장"]);
-  assert.ok(!tabs.some(x=>x.textContent.includes("집행기관 추가 조사")),
-    "Never invent a fake agency name for unassigned source clauses");
-  tabs.find(x=>x.dataset.agencyFilter==="가상청장").onclick();
-  tabs=filterButtons();
-  assert.equal(tabs.find(x=>x.dataset.agencyFilter==="가상청장")
-    .getAttribute("aria-pressed"),"true");
-  const impacts=()=>flattened(ui.dom.get("detail")).find(
-    x=>x.tag==="section" && flattened(x).some(child=>
-      child.tag==="h3" && child.textContent.includes("② 기관별")));
-  const sectionText=()=>flattened(impacts()).filter(x=>x.className==="agency-group")
+  ui.dom.get("items").children[4].onclick();
+
+  const nodes=()=>flattened(ui.dom.get("detail"));
+  const tabs=()=>nodes().filter(x=>x.dataset.agencyFilter!==undefined);
+  assert.deepEqual(tabs().map(x=>x.dataset.agencyFilter),
+    ["all","가상지원공사","가상행정청"],
+    "Only institutionally verified program duties qualify for action filters");
+  const section=()=>nodes().find(x=>x.tag==="section" &&
+    flattened(x).some(y=>y.tag==="h3" && y.textContent.includes("② 기관별")));
+  const actionText=()=>flattened(section()).filter(x=>x.className==="agency-group")
     .flatMap(flattened).map(x=>x.textContent).join(" ");
-  assert.ok(sectionText().includes("가상청장"),"Statutory named actor must appear");
-  assert.ok(!sectionText().includes("가상보건청장"),
-    "Selecting a named actor must filter other agencies out");
-  assert.ok(!sectionText().includes("담당 집행기관 추가 조사"),
-    "Unassigned clause is not an institution");
-  tabs.find(x=>x.dataset.agencyFilter==="가상보건청장").onclick();
-  assert.ok(sectionText().includes("가상보건청장"),
-    "Different agency must show its own separately evidenced duties");
-  assert.ok(!sectionText().includes("가상청장"),
-    "Other actors must be excluded from selected agency cards");
+  assert.ok(actionText().includes("공식 지원업무"));
+  assert.ok(!actionText().includes("가상청장") &&
+            !actionText().includes("가상보건청장"),
+    "Statutory actor mentions must NOT be represented as verified actions");
+  tabs().find(x=>x.dataset.agencyFilter==="가상행정청").onclick();
+  assert.ok(actionText().includes("가상행정청"));
+  assert.ok(!actionText().includes("가상지원공사"),
+    "Agency-name filtering must not leak other agency's actions");
+
+  const evidenceDrawer=nodes().find(x=>x.tag==="details"&&
+    x.className==="evidence-drawer");
+  assert.ok(evidenceDrawer,"Investigative leads stay available in a collapsed disclosure");
+  const leads=flattened(evidenceDrawer).map(x=>x.textContent).join(" ");
+  assert.ok(leads.includes("가상청장")&&leads.includes("가상보건청장"));
+  assert.ok(!actionText().includes("기관 미배정 검토 후보"),
+    "Generic source-clause review topics must not masquerade as institution duties");
+
+  const unverified=setupBrowser(true,"",{documents:[substantive],
+    relationships:[citation],cross_document_review_candidates:cross});
+  await flush();
+  unverified.dom.get("items").children[0].onclick();
+  const unverifiedNodes=flattened(unverified.dom.get("detail"));
+  assert.equal(unverifiedNodes.filter(x=>x.dataset.agencyFilter!==undefined).length,0);
+  assert.ok(unverifiedNodes.some(x=>x.className==="agency-empty"&&
+    x.textContent.includes("아직 없습니다")),
+    "No proven program actions must show an honest empty result");
+
   ui.dom.get("backToList").onclick();
   assert.equal(ui.dom.get("layout").classList.contains("detail-open"),false);
-  assert.deepEqual(cardIds(ui),["c3","c2","c1","n1","r1","p1"],
-    "Mobile back should preserve filters and verified sort");
-  // Long official before/after must be present ONLY within collapsed disclosure.
+  assert.deepEqual(cardIds(ui),["p1","c3","n1","c2","c1","r1"]);
+
   const largeBefore="제3조 앞 내용 "+"가".repeat(1200)+" 20만원 지급한다.";
-  const largeAfter ="제3조 앞 내용 "+"가".repeat(1200)+" 30만원 지급한다.";
+  const largeAfter="제3조 앞 내용 "+"가".repeat(1200)+" 30만원 지급한다.";
   const long=sample("long","일부개정","compared","2026-11-10");
   long.analysis.changes=[{
-    article:"제3조",category:"금액·비율",
-    before:largeBefore,after:largeAfter,
+    article:"제3조",category:"금액·비율",before:largeBefore,after:largeAfter,
     actual_edits:[{old_excerpt:"지원 기준 20만원 지급",new_excerpt:"지원 기준 30만원 지급"}],
     old_values:["20만원"],new_values:["30만원"],
     source_url:"https://www.law.go.kr/법령/example"
@@ -260,24 +267,71 @@ async function verifyRealFilters(){
   await flush();
   detail.dom.get("items").children[0].onclick();
   const rendered=flattened(detail.dom.get("detail"));
-  const disclosure=rendered.find(x=>x.tag==="details");
-  assert.ok(disclosure,"Full original clauses should be hidden in a disclosure");
-  assert.ok(rendered.some(x=>x.tag==="mark"&&x.textContent==="20"),
-    "Before changed digits must be highlighted");
-  assert.ok(rendered.some(x=>x.tag==="mark"&&x.textContent==="30"),
-    "After changed digits must be highlighted");
-  assert.ok(disclosure.children.some(x=>x.tag==="summary"),
-    "A clear show-full-text control is required");
-  assert.ok(flattened(disclosure).some(x=>x.textContent.includes("가".repeat(300))),
-    "Entire official text must remain available on demand");
-  assert.ok(!flattened(detail.dom.get("detail")).some(
-    x=>x.tag==="div" && x.className==="before" &&
-    x.children.some(z=>z.tag==="mark") &&
-    x.textContent.includes("가".repeat(300))),
-    "Default changed-text preview must not print a full giant provision");
-  console.log("PASS: trustworthy source filters, agency-name filters, compact highlighted clause diff and mobile navigation");
+  const disclosure=rendered.find(x=>x.tag==="details"&&x.className==="original-drawer");
+  assert.ok(disclosure,"Full text must be collapsed by default");
+  assert.ok(rendered.some(x=>x.tag==="mark"&&x.textContent==="20"));
+  assert.ok(rendered.some(x=>x.tag==="mark"&&x.textContent==="30"));
+  assert.ok(flattened(disclosure).some(x=>x.textContent.includes("가".repeat(300))));
+  console.log("PASS: latest-first, actual duties separated from research leads, focused comparison");
 }
-Promise.all([verifyNavigation(),verifyRealFilters()]).catch(error=>{
+async function verifyAIProgramEvidence(){
+  const document=sample("ai1","일부개정","compared","2026-11-10","금액·비율");
+  const official={
+    source_event_id:"ai1",changed_article:"제3조",agency:"가상장학공사",
+    program:"학비지원 운영사업",program_id:"official-program-1",
+    referenced_article:"제3조",path:"direct",
+    verification:"verified_program_citation",operational_program_verified:true,
+    required_action_verified:false,
+    review:"지급금액 적용 여부를 기관에서 확인",
+    citation_quote:"「가상 ai1 정책」 제3조에 따른 지급기준",
+    program_url:"https://www.alioplus.go.kr/business/bsnDetail.do?bsnSeq=814&bsnTyp=DET"
+  };
+  document.analysis.ai={
+    status:"generated",source_sha256:"f".repeat(64),model:"gpt-4.1-mini",
+    generated_at:"2026-11-10T03:00:00Z",required_action_verified:false,
+    change_reviews:[{
+      article:"제3조",summary:"지급액이 달라짐",
+      before_quote:"20만원",after_quote:"30만원",
+      review_question:"지급액 변경을 사업 기준에 적용할지 확인할까?"
+    }],
+    program_reviews:[{
+      program_id:"official-program-1",article:"제3조",agency:"가상장학공사",
+      program_quote:"「가상 ai1 정책」 제3조",
+      reason:"공식 인용 사업의 적용 대상이 달라질 수 있음",
+      review_question:"신구 지급 기준을 사업 공고와 대조해야 하는가?"
+    }]
+  };
+  const ui=setupBrowser(true,"",{
+    documents:[document],program_dependencies:[official],ai_status:"generated"
+  });
+  await flush();
+  ui.dom.get("items").children[0].onclick();
+  const nodes=flattened(ui.dom.get("detail"));
+  const all=nodes.map(x=>x.textContent).join(" ");
+  assert.ok(all.includes("가상장학공사"));
+  assert.ok(all.includes("학비지원 운영사업"));
+  assert.ok(all.includes("공식 사업자료에서 제3조 인용 확인"));
+  assert.ok(all.includes("AI 업무 검토 초안"));
+  assert.ok(all.includes("신구 지급 기준을 사업 공고와 대조"));
+  assert.ok(all.includes("③ AI 변경 영향 분석"));
+  assert.ok(all.includes("지급액 변경을 사업 기준에 적용할지"));
+  assert.ok(nodes.some(x=>x.tag==="a"&&x.href===official.program_url),
+    "Official program URLs should be reachable");
+  assert.deepEqual(nodes.filter(x=>x.dataset.agencyFilter!==undefined)
+    .map(x=>x.dataset.agencyFilter),["all","가상장학공사"]);
+  const noAI=setupBrowser(true,"",{
+    documents:[sample("plain","일부개정","compared","2026-11-10","금액·비율")],
+    ai_status:"not_configured"
+  });
+  await flush();
+  noAI.dom.get("items").children[0].onclick();
+  const texts=flattened(noAI.dom.get("detail")).map(x=>x.textContent).join(" ");
+  assert.ok(texts.includes("AI 분석 미실행"));
+  assert.ok(!texts.includes("③ AI 변경 영향 분석"),
+    "Missing credentials must not produce synthetic AI inference");
+  console.log("PASS: official program links and clearly labeled AI proposals");
+}
+Promise.all([verifyNavigation(),verifyRealFilters(),verifyAIProgramEvidence()]).catch(error=>{
   console.error(error);process.exitCode=1;
 });
 

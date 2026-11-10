@@ -137,6 +137,113 @@ def validate_public(payload: dict) -> dict:
         verify(item.get("operational_program_verified") is False and
                item.get("required_action_verified") is False, pos,
                "candidate may not claim confirmed program/action")
+    # Operational dependencies are a separate evidence tier: a public
+    # program's exact citation is verified, its required action is NOT.
+    from .analysis import extract_references
+    from .programs import canonical_url
+    for i, impact in enumerate(payload.get("program_dependencies", [])):
+        pos = f"program_dependencies[{i}]"
+        if not isinstance(impact, dict):
+            verify(False, pos, "must be an object")
+            continue
+        event_id = impact.get("source_event_id")
+        changed = impact.get("changed_article")
+        parent = docs.get(event_id, {})
+        analyses = parent.get("analysis", {}) if isinstance(parent, dict) else {}
+        deltas = analyses.get("changes", []) if isinstance(analyses, dict) else []
+        verify(bool(parent) and any(
+            isinstance(c, dict) and c.get("article") == changed for c in deltas),
+            pos, "program linkage requires a verified changed provision")
+        verify(bool(impact.get("agency")) and bool(impact.get("program")),
+               pos, "missing public institution or actual program")
+        verify(bool(canonical_url(impact.get("program_url"))) and
+               impact.get("program_url") == canonical_url(impact.get("program_url")),
+               pos, "unverified official business source URL")
+        proof_hash = impact.get("program_body_sha256", "")
+        verify(isinstance(proof_hash, str) and len(proof_hash) == 64 and
+               all(ch in "0123456789abcdef" for ch in proof_hash),
+               pos, "missing official program text fingerprint")
+        verify(impact.get("operational_program_verified") is True and
+               impact.get("required_action_verified") is False and
+               impact.get("verification") == "verified_program_citation",
+               pos, "program citation cannot prove mandatory business actions")
+        title = impact.get("referenced_title")
+        article = impact.get("referenced_article")
+        refs = {(x["title"], x["article"])
+                for x in extract_references(str(impact.get("citation_quote", "")))}
+        verify((title, article) in refs and bool(article), pos,
+               "program quote must explicitly cite the claimed regulation/article")
+        if impact.get("path") == "direct":
+            verify(title == parent.get("title") and article == changed, pos,
+                   "direct link must cite the changed exact article")
+            verify(not impact.get("intermediate_url"), pos,
+                   "direct evidence must not invent an intermediary")
+        elif impact.get("path") == "via_regulation":
+            verify(any(e.get("source_event_id") == event_id and
+                       e.get("changed_article") == changed and
+                       e.get("referencing_title") == title and
+                       e.get("referencing_article") == article and
+                       e.get("referencing_source_url") == impact.get("intermediate_url")
+                       for e in payload["relationships"]), pos,
+                   "indirect link requires a proven intermediary legal edge")
+        else:
+            verify(False, pos, "unsupported program dependency path")
+    # LLM analysis is evidence-anchored draft text, never official action.
+    for i, document in enumerate(payload["documents"]):
+        analysis = document.get("analysis", {}) if isinstance(document, dict) else {}
+        ai = analysis.get("ai") if isinstance(analysis, dict) else None
+        if ai is None:
+            continue
+        pos = f"documents[{i}].analysis.ai"
+        if not isinstance(ai, dict):
+            verify(False, pos, "AI analysis must be an object")
+            continue
+        verify(ai.get("status") == "generated" and bool(ai.get("model")),
+               pos, "AI model invocation not recorded")
+        verify(ai.get("required_action_verified") is False,
+               pos, "AI cannot confirm mandatory institutional actions")
+        fingerprint = ai.get("source_sha256", "")
+        verify(isinstance(fingerprint, str) and len(fingerprint) == 64 and
+               all(ch in "0123456789abcdef" for ch in fingerprint),
+               pos, "source evidence fingerprint required")
+        source_changes = {
+            ch.get("article"): ch for ch in analysis.get("changes", [])
+            if isinstance(ch, dict)
+        }
+        for j, proposal in enumerate(ai.get("change_reviews", [])):
+            location = pos + f".change_reviews[{j}]"
+            if not isinstance(proposal, dict):
+                verify(False, location, "change review must be object")
+                continue
+            before_after = source_changes.get(proposal.get("article"), {})
+            before_q = proposal.get("before_quote")
+            after_q = proposal.get("after_quote")
+            verify(bool(before_after) and isinstance(before_q, str) and
+                   bool(before_q.strip()) and before_q in before_after.get("before", "") and
+                   isinstance(after_q, str) and bool(after_q.strip()) and
+                   after_q in before_after.get("after", ""),
+                   location, "AI literal before-after evidence not found")
+            verify(bool(proposal.get("summary")) and
+                   bool(proposal.get("review_question")), location,
+                   "AI change review must describe what changed and what to check")
+        for j, proposal in enumerate(ai.get("program_reviews", [])):
+            location = pos + f".program_reviews[{j}]"
+            if not isinstance(proposal, dict):
+                verify(False, location, "program review must be object")
+                continue
+            matched = next((dep for dep in payload.get("program_dependencies", [])
+                            if dep.get("source_event_id") == document.get("id") and
+                            dep.get("program_id") == proposal.get("program_id") and
+                            dep.get("changed_article") == proposal.get("article") and
+                            dep.get("agency") == proposal.get("agency")), None)
+            snippet = proposal.get("program_quote")
+            verify(matched is not None and isinstance(snippet, str) and
+                   bool(snippet.strip()) and
+                   snippet in (matched or {}).get("citation_quote", ""),
+                   location, "AI program quote not found in verified official citation")
+            verify(bool(proposal.get("reason")) and
+                   bool(proposal.get("review_question")), location,
+                   "AI program review lacks concrete rationale or check item")
     for key in ("manual_institutions", "inferred_programs_count_as_confirmed",
                 "internal_compliance_status_known"):
         verify(payload.get("principles", {}).get(key) is False, "principles." + key,

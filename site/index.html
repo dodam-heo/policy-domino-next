@@ -11,40 +11,24 @@
 <header class="hero">
   <div class="brand">POLICY DOMINO · NEXT</div>
   <h1>정책의 변화가 업무에 미치는 영향까지.</h1>
-  <p>공식 개정문을 비교하고, 그 변경을 인용하는 관련 규정을 추적합니다. 실제 기관·사업 적용이 확인되지 않은 결과는 분리합니다.</p>
+  <p>공식 정책 변경의 실제 차이와 공공기관·사업에 미치는 영향을 근거와 함께 확인합니다.</p>
 </header>
-<div class="status" aria-label="수집 현황">
-  <div class="metric"><b id="indexed">—</b><span>공식 목록 수집</span></div>
-  <div class="metric"><b id="compared">—</b><span>본문 변경 확인</span></div>
-  <div class="metric"><b id="pending">—</b><span>분석 대기·재검증</span></div>
-  <div class="metric"><b id="links">—</b><span>변경 조문 직접 인용</span></div>
-</div>
-<div class="workflow" aria-label="정책도미노 분석 단계">
-  <strong>① 신규·개정 변경 확인</strong><i aria-hidden="true"></i>
-  <span>② 변경 내용 비교</span><i aria-hidden="true"></i>
-  <span>③ 기관별 조치 전체 확인</span>
-</div>
 <main class="container" id="layout">
   <aside class="panel" id="listPanel" aria-label="공식 변경 목록">
     <div class="panel-head">
       <h2>공식 정책 변경 목록</h2>
-      <div class="sub">신규·개정·폐지 및 공식 원문 분석 상태를 확인합니다.</div>
+      <div class="sub">최신 변경부터 확인하고, 항목을 선택해 상세 내용을 볼 수 있습니다.</div>
       <div class="filters" aria-label="정책 필터와 정렬">
         <div class="filter-group" role="group" aria-label="변경 유형 필터">
-          <button type="button" class="filter-chip active" id="mode-all" data-mode="all" aria-pressed="true">전체 공식자료</button>
+          <button type="button" class="filter-chip active" id="mode-all" data-mode="all" aria-pressed="true">전체</button>
           <button type="button" class="filter-chip" id="mode-new" data-mode="new" aria-pressed="false">신규</button>
           <button type="button" class="filter-chip" id="mode-amended" data-mode="amended" aria-pressed="false">개정</button>
           <button type="button" class="filter-chip" id="mode-repealed" data-mode="repealed" aria-pressed="false">폐지</button>
-          <button type="button" class="filter-chip" id="mode-pending" data-mode="pending" aria-pressed="false">분석 대기</button>
         </div>
-        <div class="filter-group" role="group" aria-label="정렬 방법">
-          <button type="button" class="filter-chip secondary active" id="sort-verified" data-sort="verified" aria-pressed="true">변경 확인 우선</button>
-          <button type="button" class="filter-chip secondary" id="sort-latest" data-sort="latest" aria-pressed="false">최신순</button>
-        </div>
+
       </div>
       <input class="search" id="search" type="search" autocomplete="off" placeholder="법령명·정책명·소관기관 검색" aria-label="정책 검색">
       <div class="sub" id="feed-state" aria-live="polite">원천자료 확인 중</div>
-      <p class="filter-explain" id="filter-explain">변경 확인 우선: 신구 원문 대조가 확인된 자료를 앞에 표시하며, 분석 대기 자료도 목록에 유지합니다.</p>
     </div>
     <div class="item-list" id="items"><div class="empty">원천자료를 불러오는 중</div></div>
     <button class="more" id="more" hidden>다음 목록 더 보기</button>
@@ -58,9 +42,9 @@
 </main>
 <footer class="footer">
   출처: <a href="https://www.law.go.kr/" target="_blank" rel="noopener">국가법령정보센터</a> ·
-  실제 내부 규정 반영·기관의 조치 완료 여부는 공개자료만으로 확인되지 않습니다. ·
   <span id="updated"></span>
 </footer>
+<script src="./presentation.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>
