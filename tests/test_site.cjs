@@ -186,7 +186,8 @@ async function verifiedNavigation(){
   assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),
                    ["amended","new","ordinary","repealed"]);
   node(ui,"mode-impact").onclick();
-  assert.deepEqual(node(ui,"items").children.map(x=>x.dataset.eventId),[],
+  assert.deepEqual(node(ui,"items").children
+    .filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),[],
     "A single verified agency must not be mislabeled as high impact");
   assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 0건");
   node(ui,"mode-new").onclick();
