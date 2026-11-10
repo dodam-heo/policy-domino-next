@@ -202,11 +202,18 @@ class ALIOPlusClient:
         """Fetch one index page, then explicitly linked official detail records."""
         audit = {"source": "alioplus", "pages_attempted": 1, "ids_discovered": 0,
                  "pages_checked": 0, "accepted": 0, "rejected": 0,
-                 "complete": False, "error": ""}
+                 "reported_total": None, "scope": "index_page_1_only",
+                 "pagination_verified": False, "complete": False, "error": ""}
         try:
             raw = self.fetch(INDEX)
             urls = listing_detail_urls(raw)
             display_names = listing_business_titles(raw)
+            # Provider totals are *reported* counts, not verified collected rows.
+            match = re.search(
+                r'class="total"[^>]*>\\s*전체\\s*<strong>([\\d,]+)</strong>',
+                raw, re.DOTALL)
+            if match:
+                audit["reported_total"] = int(match.group(1).replace(",", ""))
             audit["ids_discovered"] = len(urls)
             if not urls:
                 raise ProgramSourceError(
@@ -215,7 +222,7 @@ class ALIOPlusClient:
                        if isinstance(p, dict) and p.get("url")}
             todo = [url for url in urls if url not in already]
             if not todo:
-                audit["error"] = "No new program IDs on the current index page"
+                audit["error"] = "Index page 1 exhausted; remaining pages unverified and not marked complete"
                 return audit
             records = []
             for url in todo[:max(0, min(max_details, 15))]:
@@ -241,7 +248,7 @@ class ALIOPlusClient:
                 audit.setdefault("reasons", []).extend(result["reasons"])
             # One listing page is NOT national coverage or even portal coverage.
             audit["complete"] = False
-            audit["error"] = audit["error"] or "Bounded sample; portal pagination unchecked"
+            audit["error"] = audit["error"] or "Index page 1 sample only; other official pages not verified"
         except (ProgramSourceError, OSError, ValueError) as exc:
             audit["error"] = type(exc).__name__ + ": " + str(exc)[:160]
         return audit
