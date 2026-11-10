@@ -219,7 +219,8 @@ async function verifyRealFilters(){
     "Only institutionally verified program duties qualify for action filters");
   const section=()=>nodes().find(x=>x.tag==="section" &&
     flattened(x).some(y=>y.tag==="h3" && y.textContent.includes("② 기관별")));
-  const actionText=()=>flattened(section()).map(x=>x.textContent).join(" ");
+  const actionText=()=>flattened(section()).filter(x=>x.className==="agency-group")
+    .flatMap(flattened).map(x=>x.textContent).join(" ");
   assert.ok(actionText().includes("공식 지원업무"));
   assert.ok(!actionText().includes("가상청장") &&
             !actionText().includes("가상보건청장"),
