@@ -229,7 +229,9 @@ def quality(state: dict) -> dict:
 
 
 def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
-             *, max_seconds: float | None = None) -> dict:
+             *, max_seconds: float | None = None,
+             collect_sources: bool = True,
+             source_budget_seconds: float = 150) -> dict:
     """Process as much verified backlog as fits; always save partial progress.
 
     The CLI stops before the Actions timeout rather than wasting a long source
@@ -248,9 +250,12 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
                    "admrul|1|3" not in state.get("backfill_end_dates", {}))
         except (TypeError, ValueError):
             due = True
-    if due:
-        source_budget=(max(45, min(420, max_seconds-240))
-                       if max_seconds is not None else None)
+    if collect_sources and due:
+        # The source crawl may be slow. It must not consume most of the time
+        # reserved for parsing existing unexamined documents.
+        source_budget=(max(20, min(
+            source_budget_seconds, max_seconds-240))
+            if max_seconds is not None else source_budget_seconds)
         collect(api, state, today, max_seconds=source_budget)
 
     selected = work_queue(state, today, limit)
@@ -297,6 +302,9 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
         "remaining": sum(v["unexamined"]+v["retryable"]
                          for v in pending_counts(state).values()),
         "budget_exhausted": analyzed < len(selected),
+        "collection_requested": bool(collect_sources and due),
+        "source_budget_seconds": (
+            source_budget_seconds if collect_sources and due else 0),
         "time_seconds": round(time.monotonic()-started, 1),
     }
     state["generated_at"] = utc_now()
@@ -433,6 +441,9 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, default=24)
     parser.add_argument("--page-budget", type=int, default=2)
     parser.add_argument("--time-budget", type=float, default=670)
+    parser.add_argument("--analysis-only", action="store_true",
+                        help="Revisit existing official documents without recrawling index")
+    parser.add_argument("--source-budget", type=float, default=150)
     parser.add_argument("--state", type=Path, default=STATE_FILE)
     parser.add_argument("--output", type=Path, default=DATA_FILE)
     args = parser.parse_args(argv)
@@ -444,7 +455,9 @@ def main(argv=None):
         credential = configured_law_oc()
         run_once(state, LawAPI(credential), dt.date.today(),
                  max(1, min(args.limit, 150)),
-                 max_seconds=max(120, min(args.time_budget, 840)))
+                 max_seconds=max(120, min(args.time_budget, 840)),
+                 collect_sources=not args.analysis_only,
+                 source_budget_seconds=max(30, min(args.source_budget, 300)))
         write_json(args.state, state)
     if args.mode == "gov24":
         from .gov24 import collect_gov24

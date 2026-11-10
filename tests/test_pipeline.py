@@ -172,6 +172,29 @@ class PipelineTests(unittest.TestCase):
         self.assertIn("ordin",{x["source"] for x in queue})
         self.assertEqual(len(queue),6)
 
+    def test_analysis_only_never_stalls_on_official_index_crawl(self):
+        from unittest.mock import patch
+        state=new_state()
+        api=DummyAPI([])
+        with patch("policy_domino.pipeline.collect") as fetch:
+            run_once(state,api,dt.date(2026,11,10),limit=4,
+                     max_seconds=690,collect_sources=False)
+            fetch.assert_not_called()
+        self.assertFalse(state["analysis_run"]["collection_requested"])
+        self.assertEqual(state["analysis_run"]["selected"],0)
+
+    def test_source_crawl_is_capped_to_preserve_analysis_time(self):
+        from unittest.mock import patch
+        state=new_state()
+        api=DummyAPI([])
+        with patch("policy_domino.pipeline.collect",return_value=True) as fetch:
+            run_once(state,api,dt.date(2026,11,10),limit=2,
+                     max_seconds=690,collect_sources=True,
+                     source_budget_seconds=150)
+            self.assertEqual(fetch.call_args.kwargs["max_seconds"],150)
+        self.assertTrue(state["analysis_run"]["collection_requested"])
+        self.assertEqual(state["analysis_run"]["source_budget_seconds"],150)
+
     def test_end_to_end_persistence_and_unseeded_change(self):
         original=record("law","1","10","2026-11-08")
         new=record("law","1","11","2026-11-09")

@@ -37,6 +37,21 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
                       workflow)
 
+    def test_schedule_reserves_dedicated_existing_document_analysis(self):
+        workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(
+            encoding="utf-8")
+        pipeline = (ROOT / "policy_domino/pipeline.py").read_text(
+            encoding="utf-8")
+        self.assertIn("cron: '17 */2 * * *'", workflow)
+        self.assertIn("cron: '47 1-23/2 * * *'", workflow)
+        self.assertIn("run --analysis-only --limit 150", workflow)
+        self.assertIn("run --limit 150 --time-budget 690 --source-budget 150",
+                      workflow)
+        self.assertIn("collect_sources=not args.analysis_only", pipeline)
+        self.assertIn("source_budget_seconds", pipeline)
+        self.assertEqual(workflow.count("uses: actions/deploy-pages@"), 1)
+        self.assertEqual(workflow.count("git add data/state.json site/data.json"), 1)
+
     def test_gov24_credential_can_be_checked_without_full_reindex(self):
         workflow=(ROOT/".github/workflows/pipeline.yml").read_text(encoding="utf-8")
         self.assertIn("[gov24-sync]",workflow)

@@ -10,6 +10,9 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 */2 * * *'
+    # Additional analysis-only execution: clear existing official backlog
+    # without blocking on another 15-stream historical index crawl.
+    - cron: '47 1-23/2 * * *'
 permissions:
   contents: read
 
@@ -62,7 +65,12 @@ jobs:
         env:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
         timeout-minutes: 17
-        run: python -m policy_domino run --limit 72 --time-budget 690
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ github.event.schedule }}" = "47 1-23/2 * * *" ]; then
+            python -m policy_domino run --analysis-only --limit 150 --time-budget 690
+          else
+            python -m policy_domino run --limit 150 --time-budget 690 --source-budget 150
+          fi
       - name: Collect official nationwide Gov24 services and operating criteria
         env:
           GOV24_SERVICE_KEY: ${{ secrets.GOV24_SERVICE_KEY }}
