@@ -178,7 +178,7 @@ def collect_gov24(state: dict, key: str, *, pages_per_feed: int = 2,
     audit["status"] = "partial"
     for source in SCHEMA:
         page = max(1, int(cursors.get(source, 1)))
-        for _ in range(max(0, min(6, pages_per_feed))):
+        for _ in range(max(0, min(12, pages_per_feed))):
             try:
                 response = client.fetch_page(source, page, page_size)
             except Gov24SourceError as exc:
@@ -202,6 +202,11 @@ def collect_gov24(state: dict, key: str, *, pages_per_feed: int = 2,
             page += 1
         cursors[source] = page
     audit["records_stored"] = len(store)
+    audit["records_with_issuer"] = sum(bool(x.get("agency")) for x in store.values())
+    audit["records_with_legal_basis"] = sum(bool(x.get("regulatory_basis")) for x in store.values())
+    audit["records_with_operational_criteria"] = sum(bool(
+        any(x.get("fields", {}).get(field) for field in CRITERION_FIELDS))
+        for x in store.values())
     audit["cursors"] = dict(cursors)
     audit["status"] = "partial" if audit["errors"] else "collected_incrementally"
     state["gov24_audit"] = audit
@@ -209,55 +214,132 @@ def collect_gov24(state: dict, key: str, *, pages_per_feed: int = 2,
 
 
 def _plain(text: str) -> str:
-    return re.sub(r"\s+", "", text)
+    return re.sub(r"\s+", "", str(text or ""))
 
 
 def _explicit_law_basis(service: dict, title: str, article: str) -> tuple[str, str] | None:
-    """Real legal citation is a *discovery lead*, not a proven obligation."""
+    """Exact official legal-title evidence; article citation has higher weight."""
     basis = service.get("regulatory_basis", "")
-    if not title or len(title) < 5 or _plain(title) not in _plain(basis):
+    title_plain = _plain(title)
+    if not title_plain or len(title_plain) < 5 or title_plain not in _plain(basis):
         return None
     for ref in extract_references(basis):
-        if _plain(ref.get("title", "")) == _plain(title) and (
+        if _plain(ref.get("title", "")) == title_plain and (
                 _plain(ref.get("article", "")) == _plain(article)):
             return "official_clause_citation", ref.get("quote", "")[:280]
-    # The full named rule is present but its particular changed article is not
-    # cited. Do not upgrade this to confirmed article-level impact.
-    at = _plain(basis).find(_plain(title))
+    # Title-only reference is intentionally NOT a confirmed article link.
+    # A shorter name embedded inside a differently named 「legal title」 is
+    # insufficient proof of the requested rule.
+    quoted = re.findall(r"「([^」]{2,150})」", basis)
+    if quoted and not any(_plain(x) == title_plain for x in quoted):
+        # A source may contain several unquoted texts too, but ambiguity
+        # must not be converted into an institutional impact automatically.
+        return None
     return "official_rule_title", basis[:280]
+
+
+CRITERION_FIELDS = ("선정기준", "지원대상", "지원내용", "신청방법", "신청기한")
+
+
+def _changed_values(change: dict) -> tuple[str, str]:
+    """Numeric before/after ONLY if the literal statute values differ uniquely."""
+    unit = r"\d[\d,.]*\s*(?:억\s*원|만원|원|%|명|개월|일)"
+    before = set(re.findall(unit, change.get("before", "")))
+    after = set(re.findall(unit, change.get("after", "")))
+    old, new = sorted(before - after), sorted(after - before)
+    return (old[0], new[0]) if len(old) == len(new) == 1 else ("", "")
+
+
+def criteria_to_review(service: dict, change: dict, tier: str) -> list[dict]:
+    """Concrete review targets from actual government-service field snapshots.
+
+    A matched former legal number is evidence for a TARGETED comparison,
+    not proof that an agency's internal rules have already changed.
+    """
+    fields = service.get("fields", {})
+    old, new = _changed_values(change)
+    targets = []
+    for field in CRITERION_FIELDS:
+        source = fields.get(field, "")
+        if not source:
+            continue
+        old_found = bool(old and old in source)
+        question = (
+            field + "에 기재된 " + old +
+            " 기준을 변경 조문의 " + new + " 기준과 대조하고 적용 여부를 확인"
+            if old_found and new else
+            field + "의 실제 적용기준과 " + change["article"] +
+            " 개정내용의 관계를 확인")
+        targets.append({
+            "field": field,
+            "source_excerpt": source[:300],
+            "old_value": old if old_found else "",
+            "new_legal_value": new if old_found else "",
+            "review_question": question,
+            "verification": "source_field_and_legal_change_only",
+        })
+    targets.sort(key=lambda x: (
+        not bool(x["old_value"]),
+        CRITERION_FIELDS.index(x["field"]),
+    ))
+    if not targets:
+        return [{
+            "field": "근거법령",
+            "source_excerpt": service.get("regulatory_basis", "")[:300],
+            "old_value": "", "new_legal_value": "",
+            "review_question": (
+                "공식 서비스에 적용하는 근거 조문과 " +
+                change["article"] + " 개정 내용의 관계를 확인"),
+            "verification": "source_field_and_legal_change_only",
+        }]
+    # Quoted source excerpts and questions remain discoverable in the
+    # original Gov24 record. Never turn these into a completed action.
+    return targets[:3]
 
 
 def discover_public_service_leads(state: dict, events: list[dict],
                                   *, max_per_event: int = 15) -> dict:
-    """Find possible institution/service review locations from legal evidence.
+    """Join actual public-service agencies, program fields and changed laws.
 
-    A result is a *lead requiring validation*, not an institutional review or
-    a claim that a service value has actually changed.
+    Strict legal title/article citation is distinguished from title-only
+    leads. Only source-evidenced criterion differences get specific numeric
+    review tasks; no inferred or hardcoded agency/program names.
     """
     sources = state.get("public_services", {})
+    matched = {}
+    all_titles = {
+        change.get("document_title", "") for event in events
+        for change in event.get("changes", [])
+        if change.get("document_title")
+    }
+    candidates_by_title = defaultdict(list)
+    # One scan of official public-service records, not O(changes × services).
+    for service in sources.values():
+        if not service.get("agency") or not service.get("service_name"):
+            continue
+        basis_plain = _plain(service.get("regulatory_basis", ""))
+        if not basis_plain:
+            continue
+        for title in all_titles:
+            if len(title) >= 5 and _plain(title) in basis_plain:
+                candidates_by_title[title].append(service)
+
     linked = {}
     proofs = {}
     for event in events:
         selected = {}
         for change in event.get("changes", []):
             title, article = change["document_title"], change["article"]
-            for service in sources.values():
-                if not service.get("agency") or not service.get("service_name"):
-                    continue
+            for service in candidates_by_title.get(title, []):
                 basis = _explicit_law_basis(service, title, article)
                 if not basis:
                     continue
                 tier, quote = basis
                 key = (service["service_id"],change["document_id"],article)
-                source_text = service.get("fields", {})
-                matched_old = [
-                    x for x in re.findall(
-                        r"\d[\d,.]*\s*(?:억원|만원|원|%|개월|일)",
-                        change.get("before", ""))
-                    if any(x in source_text.get(field, "") for field
-                           in ("선정기준", "지원내용", "지원대상"))
-                ]
-                lead = {
+                targets = criteria_to_review(service, change, tier)
+                old_values = list(dict.fromkeys(
+                    item["old_value"] for item in targets if item["old_value"]))
+                selected[key] = {
                     "service_id": service["service_id"],
                     "service_name": service["service_name"],
                     "agency": service["agency"],
@@ -265,20 +347,20 @@ def discover_public_service_leads(state: dict, events: list[dict],
                     "document_id": change["document_id"],
                     "article": article, "law_title": title,
                     "match_tier": tier, "basis_quote": quote,
-                    "old_value_seen_in_service": matched_old[:3],
+                    "review_targets": targets,
+                    "old_value_seen_in_service": old_values[:3],
                     "source_url": service["source_url"],
                     "service_url": service.get("service_url", ""),
                     "verification": "candidate_not_confirmed",
                     "review_question": (
-                        "해당 공공서비스의 운영·선정 기준에 개정 조문이 "
-                        "적용되는지 공식 사업자료와 대조 필요"),
+                        "실제 공공서비스의 업무·자격·신청 기준에 "
+                        "변경 조문을 적용해야 하는지 검토"),
                 }
-                selected[key] = lead
                 proofs[service["service_id"]] = service
-        ordered = sorted(selected.values(),key=lambda x:(
+        ordered = sorted(selected.values(), key=lambda x: (
             x["match_tier"] != "official_clause_citation",
-            not x["old_value_seen_in_service"], x["agency"],
-            x["service_name"], x["article"]))
+            not x["old_value_seen_in_service"],
+            x["agency"],x["service_name"],x["article"]))
         event["public_service_leads"] = ordered[:max_per_event]
         event["public_service_lead_count"] = len(ordered)
         linked[event["id"]] = len(ordered)

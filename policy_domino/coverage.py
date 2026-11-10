@@ -7,7 +7,7 @@ separate processing turns. Failed windows never silently count as covered.
 from __future__ import annotations
 
 import datetime as dt
-from .core import SOURCES, utc_now
+from .core import SOURCES, ADMIN_RULE_KINDS, utc_now
 
 MAX_ATTEMPTS = 4
 DONE = frozenset({"compared", "no_text_change", "enactment", "repeal"})
@@ -21,48 +21,66 @@ def collect_streams(api, state, today: dt.date, ingest_window) -> bool:
     state["coverage"] = []
     results = []
 
-    def load(source, version, first, last, stage):
+    def load(source, version, first, last, stage, rule_kind=""):
         try:
-            completed = ingest_window(api, state, source, first, last, version)
+            if rule_kind:
+                completed = ingest_window(
+                    api, state, source, first, last, version, rule_kind=rule_kind)
+            else:
+                completed = ingest_window(api, state, source, first, last, version)
             error = "" if completed else "Official pagination incomplete"
         except Exception as exc:
             completed = False
             error = type(exc).__name__ + ": " + str(exc)[:160]
             state["coverage"].append({
-                "source": source, "version": version, "first": first,
-                "last": last, "complete": False, "reported": -1,
-                "collected": 0, "pages": 0, "error": error,
-            })
+                "source": source, "version": version, "rule_kind": rule_kind,
+                "first": first, "last": last, "complete": False,
+                "reported": -1, "collected": 0, "pages": 0, "error": error})
         record = {
-            "source": source, "version": version, "first": first,
-            "last": last, "stage": stage, "complete": completed,
-            "error": error, "checked_at": utc_now(),
-        }
-        audits["|".join((source, version, first, last))] = record
+            "source": source, "version": version,
+            "rule_kind": rule_kind,
+            "rule_category": ADMIN_RULE_KINDS.get(rule_kind, ""),
+            "first": first, "last": last, "stage": stage,
+            "complete": completed, "error": error, "checked_at": utc_now()}
+        audits["|".join((source,version,rule_kind,first,last))] = record
         results.append(record)
         return completed
 
-    for source in SOURCES:
-        for version in (("1", "2") if source != "law" else ("1",)):
-            key = source + "|" + version
-            load(source, version, recent_first, recent_last, "recent")
-            if key in cursors:
-                old_end = dt.date.fromisoformat(cursors[key])
-            else:
-                older_days = 7 + int(state.get("cursor_days", 0))
-                old_end = today - dt.timedelta(days=older_days)
-            old_start = old_end - dt.timedelta(days=6)
-            if load(source, version, old_start.isoformat(),
-                    old_end.isoformat(), "historical"):
-                cursors[key] = (old_start - dt.timedelta(days=1)).isoformat()
-            else:
-                cursors[key] = old_end.isoformat()
+    streams = ([("law", "1", "")] +
+               [("admrul", version, kind)
+                for version in ("1", "2")
+                for kind in ADMIN_RULE_KINDS] +
+               [("ordin", version, "") for version in ("1", "2")])
+    for source, version, rule_kind in streams:
+        key = "|".join(filter(None, (source, version, rule_kind)))
+        load(source, version, recent_first, recent_last, "recent", rule_kind)
+        if key in cursors:
+            old_end = dt.date.fromisoformat(cursors[key])
+        elif rule_kind and f"admrul|{version}" in cursors:
+            # Inherit the previous verified history boundary when migrating
+            # the generic rule stream into official knd-specific streams.
+            old_end = dt.date.fromisoformat(cursors[f"admrul|{version}"])
+        else:
+            old_end = today - dt.timedelta(days=7+int(state.get("cursor_days",0)))
+        old_start = old_end - dt.timedelta(days=6)
+        if load(source, version, old_start.isoformat(),
+                old_end.isoformat(), "historical", rule_kind):
+            cursors[key]=(old_start-dt.timedelta(days=1)).isoformat()
+        else:
+            cursors[key]=old_end.isoformat()
 
     state["collection_run"] = {
         "checked_at": utc_now(),
         "streams": len(results),
         "completed_windows": sum(int(x["complete"]) for x in results),
         "failed_windows": sum(int(not x["complete"]) for x in results),
+        "rule_kinds": {
+            label: {
+                "completed": sum(int(r["complete"]) for r in results
+                                 if r["rule_kind"] == kind),
+                "failed": sum(int(not r["complete"]) for r in results
+                              if r["rule_kind"] == kind)}
+            for kind,label in ADMIN_RULE_KINDS.items()},
         "recent_complete": all(x["complete"] for x in results
                                if x["stage"] == "recent"),
         "historical_complete": all(x["complete"] for x in results

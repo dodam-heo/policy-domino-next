@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Callable
 
-from .core import SOURCE_CONFIG, SOURCES, clean, date_string, document_key, official_url
+from .core import SOURCE_CONFIG, SOURCES, ADMIN_RULE_KINDS, clean, date_string, document_key, official_url
 
 API = "https://www.law.go.kr/DRF/"
 MAX_BYTES = 16_000_000
@@ -56,6 +56,9 @@ def parse_record(node: ET.Element, source: str) -> dict | None:
                 field(node, "법령구분", True) or cfg["type"])
     if source == "ordin" and not ministry:
         ministry = field(node, "지자체명", True)
+    if source == "admrul":
+        raw_type = field(node, "행정규칙종류", True)
+        law_type = ADMIN_RULE_KINDS.get(raw_type, raw_type or cfg["type"])
     return {
         "id": document_key(source, stable, serial), "source": source,
         "stable_id": stable, "serial": serial, "title": title,
@@ -81,6 +84,7 @@ class Coverage:
     pages: int
     complete: bool
     error: str = ""
+    rule_kind: str = ""
 
     def as_dict(self) -> dict:
         return vars(self).copy()
@@ -124,9 +128,12 @@ class LawAPI:
         return root
 
     def search_window(self, source: str, first: str, last: str,
-                      version: str = "1", max_pages: int = 25) -> tuple[list[dict], Coverage]:
+                      version: str = "1", max_pages: int = 25,
+                      rule_kind: str = "") -> tuple[list[dict], Coverage]:
         if source not in SOURCES:
             raise ValueError("Unsupported source")
+        if rule_kind and (source != "admrul" or rule_kind not in ADMIN_RULE_KINDS):
+            raise ValueError("Official knd filter is only for administrative rules")
         key = SOURCE_CONFIG[source]["date_filter"]
         seen: dict[str, dict] = {}
         reported: int | None = None
@@ -140,6 +147,8 @@ class LawAPI:
                 }
                 if source != "law":
                     params["nw"] = version
+                if rule_kind:
+                    params["knd"] = rule_kind
                 root = self.request("lawSearch.do", source, **params)
                 count_text = field(root, "totalCnt")
                 if not count_text.isdigit():
@@ -154,19 +163,21 @@ class LawAPI:
                 for node in matches:
                     rec = parse_record(node, source)
                     if rec and first <= rec["published_at"] <= last:
+                        if rule_kind:
+                            rec["law_type"] = ADMIN_RULE_KINDS[rule_kind]
                         seen[rec["id"]] = rec
                 pages = page
                 if count == 0 or page * 100 >= count or len(matches) < 100:
                     complete = len(seen) == count
                     msg = "" if complete else "Records differ from official totalCnt"
                     return list(seen.values()), Coverage(
-                        source, first, last, version, count, len(seen), pages, complete, msg)
+                        source, first, last, version, count, len(seen), pages, complete, msg, rule_kind)
             except Exception as exc:
                 error = type(exc).__name__ + ": " + str(exc)[:170]
                 break
         return list(seen.values()), Coverage(
             source, first, last, version, reported if reported is not None else -1,
-            len(seen), pages, False, error or "Official pagination limit reached")
+            len(seen), pages, False, error or "Official pagination limit reached", rule_kind)
 
     def detail(self, record: dict) -> ET.Element:
         source = record["source"]

@@ -43,7 +43,7 @@ jobs:
   # GitHub Pages deployment that is syncing or experiencing an outage.
   # UI-only pushes deploy fast; schedule/manual runs refresh data first.
   collect_and_refresh:
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[gov24-sync]')) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[gov24-sync]') || contains(github.event.head_commit.message, '[rules-sync]'))) }}
     needs: verify
     permissions:
       contents: write
@@ -57,7 +57,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Collect official records and process unexamined backlog with time budget
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || contains(github.event.head_commit.message, '[rules-sync]')
         env:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
         timeout-minutes: 17
@@ -66,7 +66,7 @@ jobs:
         env:
           GOV24_SERVICE_KEY: ${{ secrets.GOV24_SERVICE_KEY }}
         timeout-minutes: 5
-        run: python -m policy_domino gov24 --page-budget 3
+        run: python -m policy_domino gov24 --page-budget 10
       - name: Verify registered Gov24 key against real official API results
         if: github.event_name == 'push'
         run: |
@@ -85,7 +85,7 @@ jobs:
               raise SystemExit('Gov24 authentication or official service ingestion not yet successful.')
           PY
       - name: Incrementally review all verified changes with Gemini
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || contains(github.event.head_commit.message, '[rules-sync]')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-3.1-flash-lite

@@ -22,25 +22,44 @@ class CoverageTests(unittest.TestCase):
         today=dt.date(2026,11,10)
         calls=[]
         failed={"done":False}
-        def ingest(api, state, source, first, last, version):
-            calls.append((source, version, first, last))
-            if (source,version,last)==("admrul","1","2026-11-03") and not failed["done"]:
+        def ingest(api, state, source, first, last, version, *, rule_kind=""):
+            calls.append((source, version, rule_kind, first, last))
+            if ((source,version,rule_kind,last)==
+                ("admrul","1","3","2026-11-03") and not failed["done"]):
                 failed["done"]=True
                 return False
             return True
         self.assertFalse(collect_streams(None,state,today,ingest))
         cursors=state["backfill_end_dates"]
-        self.assertEqual(state["collection_run"]["streams"],10)
+        self.assertEqual(state["collection_run"]["streams"],30)
         self.assertEqual(state["collection_run"]["failed_windows"],1)
-        self.assertEqual(cursors["admrul|1"],"2026-11-03")
+        self.assertEqual(cursors["admrul|1|3"],"2026-11-03")
+        self.assertEqual(state["collection_run"]["rule_kinds"]["고시"]["failed"],1)
         self.assertEqual(cursors["law|1"],"2026-10-27")
         self.assertEqual(cursors["ordin|2"],"2026-10-27")
         self.assertTrue(collect_streams(None,state,today,ingest))
-        self.assertEqual(cursors["admrul|1"],"2026-10-27")
+        self.assertEqual(cursors["admrul|1|3"],"2026-10-27")
         self.assertEqual(cursors["law|1"],"2026-10-20")
         self.assertEqual(state["collection_run"]["failed_windows"],0)
-        self.assertTrue(any(x[:2]==("admrul","1") and x[3]=="2026-11-03"
-                            for x in calls))
+        self.assertTrue(any(x[:3]==("admrul","1","3") and
+                            x[4]=="2026-11-03" for x in calls))
+
+    def test_administrative_notice_categories_inherit_legacy_history_boundary(self):
+        state=new_state()
+        state["backfill_end_dates"]={"admrul|1":"2026-07-01",
+                                     "admrul|2":"2026-06-01"}
+        seen=[]
+        def ingest(api,state,source,first,last,version,*,rule_kind=""):
+            if source=="admrul" and rule_kind=="3":
+                seen.append((version,first,last))
+            return True
+        collect_streams(None,state,dt.date(2026,11,10),ingest)
+        self.assertIn(("1","2026-06-25","2026-07-01"),seen)
+        self.assertIn(("2","2026-05-26","2026-06-01"),seen)
+        self.assertEqual(state["backfill_end_dates"]["admrul|1|3"],
+                         "2026-06-24")
+        self.assertEqual(state["collection_run"]["rule_kinds"]["고시"]["completed"],4)
+        self.assertEqual(state["collection_run"]["streams"],30)
 
     def test_recent_and_old_pending_both_get_processing_turns(self):
         state=new_state()

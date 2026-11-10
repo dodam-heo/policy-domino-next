@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .gov24 import CATALOG, _explicit_law_basis
+from .gov24 import CATALOG, _explicit_law_basis, criteria_to_review
 
 
 def validate_public_service_candidates(payload: dict) -> list[str]:
@@ -54,12 +54,22 @@ def validate_public_service_candidates(payload: dict) -> list[str]:
                 proof, lead.get("law_title",""),lead.get("article",""))
             if evidence != (lead.get("match_tier"),lead.get("basis_quote")):
                 errors.append(loc+": legal basis is not the original public service citation")
+            targets=lead.get("review_targets", [])
+            if not isinstance(targets, list) or not targets or len(targets)>3:
+                errors.append(loc+": missing or oversized official service review targets")
+            elif targets != criteria_to_review(proof,change,lead.get("match_tier","")):
+                errors.append(loc+": service review target differs from official service and changed clause")
             found = lead.get("old_value_seen_in_service", [])
             if not isinstance(found, list) or len(found)>3:
                 errors.append(loc+": numeric candidate must be a bounded list")
                 continue
             combined = " ".join(proof.get("fields", {}).get(field, "") for
                                 field in ("선정기준","지원내용","지원대상"))
+            expected_old=list(dict.fromkeys(
+                t["old_value"] for t in targets
+                if isinstance(t,dict) and t.get("old_value")))[:3]
+            if found != expected_old:
+                errors.append(loc+": old service criteria must follow verified official field targets")
             for value in found:
                 if not isinstance(value, str) or value not in combined or (
                     value not in change.get("before","")):

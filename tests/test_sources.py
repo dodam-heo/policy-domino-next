@@ -30,6 +30,43 @@ class SourceExtractionTests(unittest.TestCase):
                 self.assertEqual(records[0]["id"], document_key(
                     src, records[0]["stable_id"], records[0]["serial"]))
 
+    def test_official_rule_kind_search_covers_all_six_categories_without_seed_data(self):
+        queries=[]
+        def fake(url):
+            args=parse_qs(urlparse(url).query)
+            queries.append(args)
+            return ("""<Search><totalCnt>1</totalCnt><admrul>
+                 <행정규칙ID>987</행정규칙ID>
+                 <행정규칙일련번호>1001</행정규칙일련번호>
+                 <행정규칙명>가상 시설 운영기준</행정규칙명>
+                 <행정규칙종류>고시</행정규칙종류>
+                 <발령일자>20261110</발령일자>
+                 <소관부처명>가상 중앙기관</소관부처명>
+                 </admrul></Search>""").encode()
+        api=LawAPI("test_oc",fake)
+        docs,audit=api.search_window(
+            "admrul","2026-11-10","2026-11-10",
+            version="1",rule_kind="3")
+        self.assertTrue(audit.complete)
+        self.assertEqual(audit.rule_kind,"3")
+        self.assertEqual(docs[0]["law_type"],"고시")
+        self.assertEqual(queries[0]["knd"],["3"])
+        self.assertEqual(queries[0]["nw"],["1"])
+        with self.assertRaises(ValueError):
+            api.search_window("law","2026-11-10","2026-11-10",rule_kind="3")
+        with self.assertRaises(ValueError):
+            api.search_window("admrul","2026-11-10","2026-11-10",rule_kind="99")
+
+    def test_regulation_category_comes_from_official_metadata_not_title(self):
+        from policy_domino.core import ADMIN_RULE_KINDS
+        self.assertEqual(set(ADMIN_RULE_KINDS.values()),
+                         {"훈령","예규","고시","공고","지침","기타"})
+        doc=ET.fromstring("""<admrul>
+            <행정규칙ID>1</행정규칙ID><행정규칙일련번호>2</행정규칙일련번호>
+            <행정규칙명>기준표</행정규칙명><행정규칙종류>고시</행정규칙종류>
+            <발령일자>20261110</발령일자></admrul>""")
+        self.assertEqual(parse_record(doc,"admrul")["law_type"],"고시")
+
     def test_official_api_page_limit_is_audited_not_silently_complete(self):
         def fake(url):
             return ("""<Search><totalCnt>250</totalCnt><law>

@@ -390,6 +390,10 @@ async function screenshotComparisonSafety(){
   assert.ok(text.includes("인용하는 조문이 제12조제2항에서 제12조제3항으로"));
   assert.ok(text.includes("종전 인용 조문"));
   assert.ok(text.includes("현행 인용 조문"));
+  const changes=flatten(node(ui,"detail")).filter(el=>
+    el.className==="highlight-detail" && el.children.some(x=>x.className==="highlight-comparison"));
+  assert.ok(changes.length>=1,"Core changes show short summary and collapse the before/after excerpts");
+  assert.ok(changes.every(x=>!x.open),"Before/after source excerpts must start collapsed");
   assert.ok(text.includes("정확한 변경 내용을 판단할 수 없습니다"));
   assert.ok(text.includes("재확인 대상"));
   assert.ok(!text.includes("대상·자격 기준에 관한 조문 문구"),
@@ -409,6 +413,13 @@ async function realServiceLeadDiscoveryPresentation(){
     old_value_seen_in_service:["10만원"],
     verification:"candidate_not_confirmed",
     review_question:"해당 공공서비스의 운영·선정 기준에 개정 조문이 적용되는지 확인",
+    review_targets:[{
+      field:"선정기준",
+      source_excerpt:"가구 소득과 지원기준 10만원을 비교",
+      old_value:"10만원",new_legal_value:"12만원",
+      review_question:"선정기준에 기재된 10만원을 개정 조문의 12만원과 대조",
+      verification:"source_field_and_legal_change_only",
+    }],
     source_url:"https://www.data.go.kr/data/15113968/openapi.do",
     service_url:"https://www.gov.kr/portal/service",
   }];
@@ -422,11 +433,15 @@ async function realServiceLeadDiscoveryPresentation(){
   await flush();
   const detail=node(ui,"detail");
   const text=textOf(detail);
-  assert.ok(text.includes("연결 가능한 공공서비스"));
+  assert.ok(text.includes("공공기관·서비스 적용기준 검토"));
   assert.ok(text.includes("가상광역시청 · 가상생활지원서비스"));
-  assert.ok(text.includes("후보 1건"));
-  assert.ok(text.includes("조치 의무나 시행 완료를 뜻하지 않습니다"));
+  assert.ok(text.includes("검토할 공공서비스 1건"));
+  assert.ok(text.includes("조치 의무나 반영 완료를 확정한 내용은 아닙니다"));
   assert.ok(text.includes("10만원"));
+  assert.ok(text.includes("선정기준 · 확인할 업무"));
+  assert.ok(text.includes("개정 조문 12만원"));
+  const lead=flatten(detail).find(el=>el.className.includes("service-criterion"));
+  assert.ok(lead,"The existing public service criterion is visible on expansion");
   const links=flatten(detail).filter(el=>el.tag==="a");
   assert.ok(links.some(a=>a.href==="https://www.gov.kr/portal/service"),
     "Only approved official Gov24 service links can be opened");

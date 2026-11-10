@@ -20,7 +20,7 @@ def record(source, stable, serial, date="2026-11-09", title="가상 절차기준
 class DummyAPI:
     def __init__(self,docs):
         self.docs=docs
-    def search_window(self,source,first,last,version):
+    def search_window(self,source,first,last,version,rule_kind=""):
         rows=[x for x in self.docs if x["source"]==source and
               first<=x["published_at"]<=last]
         return rows,Coverage(source,first,last,version,len(rows),len(rows),1,True)
@@ -134,6 +134,8 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(report["schema"],"policy-domino-next-v1")
             self.assertTrue(output.exists())
             self.assertEqual(report["quality"]["law"]["verified_changes"],1)
+            self.assertIn("rule_categories",report["quality"])
+            self.assertIn("고시",report["quality"]["rule_categories"])
             self.assertEqual(report["ai_progress"]["analyzed_events"], 0)
             self.assertGreaterEqual(report["ai_progress"]["verified_events"], 1)
             self.assertEqual(report["ai_progress"]["pending_events"],

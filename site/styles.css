@@ -257,3 +257,22 @@ a{color:var(--blue);text-underline-offset:3px}
 .public-service-basis{background:#f3f7f9;border-left:3px solid #aac7d6;
   padding:9px 11px;border-radius:4px;overflow-wrap:anywhere}
 .public-service-lead .agency-heading span{font-size:10px;white-space:nowrap}
+
+/* Compact change cards: summary first; excerpt/full source is opt-in. */
+.highlight-detail{margin-top:9px;border-top:1px solid #dce8ee;
+  padding-top:8px;color:#215d7a;font-size:11px;line-height:1.65}
+.highlight-detail summary{cursor:pointer;font-weight:760}
+.highlight-detail>p{margin:7px 0;color:#364e5b;font-weight:450;white-space:normal}
+.highlight-detail[open] .highlight-comparison{margin-top:10px}
+.highlight-description{overflow-wrap:anywhere}
+.service-criterion{border:1px solid #dce8ee;background:#fafcfd;
+  border-radius:7px;padding:11px 12px;margin:9px 0}
+.service-criterion>strong{color:#225c78;font-size:12px}
+.service-criterion>p{font-size:12px;margin:5px 0 0;line-height:1.65}
+.service-criterion-values{color:#164e68;font-weight:760}
+.service-source{margin-top:7px}
+.service-source summary{cursor:pointer;font-size:11px;font-weight:700;
+  color:#346e86}
+.service-source p{margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;
+  color:#455963;font-size:11px}
+.public-service-match-tier{font-size:11px;color:#416d7d}

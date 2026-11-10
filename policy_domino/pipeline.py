@@ -30,8 +30,11 @@ def windows(today: dt.date, cursor_days: int = 0):
 
 
 def ingest_window(api: LawAPI, state: dict, source: str, first: str, last: str,
-                  version: str, splits: int = 3) -> bool:
-    found, audit = api.search_window(source, first, last, version)
+                  version: str, splits: int = 3,
+                  rule_kind: str = "") -> bool:
+    found, audit = (api.search_window(source, first, last, version,
+                                      rule_kind=rule_kind)
+                    if rule_kind else api.search_window(source, first, last, version))
     for record in found:
         state["documents"][record["id"]] = record
     state["coverage"].append(audit.as_dict())
@@ -43,10 +46,11 @@ def ingest_window(api: LawAPI, state: dict, source: str, first: str, last: str,
     mid = a + (b - a) // 2
     if mid >= b:
         return False
-    left = ingest_window(api, state, source, first, mid.isoformat(), version, splits - 1)
+    left = ingest_window(api, state, source, first, mid.isoformat(), version,
+                         splits - 1, rule_kind=rule_kind)
     right = ingest_window(api, state, source,
                           (mid + dt.timedelta(days=1)).isoformat(), last,
-                          version, splits - 1)
+                          version, splits - 1, rule_kind=rule_kind)
     return left and right
 
 
@@ -163,6 +167,28 @@ def quality(state: dict) -> dict:
             "unavailable_history": counts["history_unavailable"] + counts["baseline_unavailable"],
         }
     from .coverage import pending_counts
+    from .core import ADMIN_RULE_KINDS
+    categories = {}
+    rule_docs = [d for d in docs.values()
+                 if d.get("source")=="admrul" and
+                 not d.get("reference_only")]
+    for kind in list(ADMIN_RULE_KINDS.values())+["미분류"]:
+        matches=[d for d in rule_docs if (
+            d.get("law_type", "행정규칙") == kind
+            if kind!="미분류" else
+            d.get("law_type", "행정규칙") not in ADMIN_RULE_KINDS.values())]
+        statuses=Counter(findings.get(d["id"], {}).get("status","queued")
+                         for d in matches)
+        categories[kind]={
+            "indexed":len(matches),
+            "changed":sum(bool(findings.get(d["id"], {}).get("changes"))
+                          for d in matches),
+            "pending":sum(v for k,v in statuses.items()
+                          if k not in TERMINAL),
+            "unavailable":sum(statuses[k] for k in (
+                "body_unavailable","history_unavailable",
+                "baseline_unavailable","partial_unresolved"))}
+    result["rule_categories"]=categories
     pending = pending_counts(state)
     result["analysis_status"] = {
         "indexed": sum(v["indexed"] for v in pending.values()),
@@ -197,7 +223,8 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
             prior = dt.datetime.fromisoformat(since)
             elapsed = dt.datetime.now(dt.timezone.utc) - prior
             due = (elapsed.total_seconds() >= 6 * 3600 or
-                   not state.get("collection_run", {}).get("recent_complete", False))
+                   not state.get("collection_run", {}).get("recent_complete", False) or
+                   "admrul|1|3" not in state.get("backfill_end_dates", {}))
         except (TypeError, ValueError):
             due = True
     if due:
@@ -401,7 +428,7 @@ def main(argv=None):
         credential = (os.getenv("GOV24_SERVICE_KEY", "").strip() or
                       os.getenv("DATA_GO_KR_KEY", "").strip())
         audit = collect_gov24(state, credential,
-                              pages_per_feed=max(1, min(args.page_budget, 5)))
+                              pages_per_feed=max(1, min(args.page_budget, 12)))
         write_json(args.state, state)
         print("Gov24 public-service collection:",
               json.dumps(audit, ensure_ascii=False))

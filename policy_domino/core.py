@@ -11,6 +11,9 @@ from urllib.parse import quote
 
 SCHEMA = "policy-domino-next-v1"
 SOURCES = ("law", "admrul", "ordin")
+# Official National Law Information API knd parameter, not a curated seed list.
+ADMIN_RULE_KINDS = {"1": "훈령", "2": "예규", "3": "고시",
+                    "4": "공고", "5": "지침", "6": "기타"}
 SOURCE_CONFIG = {
     "law": {
         "title": "법령명한글", "stable": "법령ID", "serial": "법령일련번호",

@@ -126,6 +126,10 @@ class Gov24Tests(unittest.TestCase):
         self.assertEqual(item["agency"],service["agency"])
         self.assertEqual(item["service_name"],service["service_name"])
         self.assertIn("50만원",item["old_value_seen_in_service"])
+        self.assertEqual(item["review_targets"][0]["field"],"선정기준")
+        self.assertEqual(item["review_targets"][0]["old_value"],"50만원")
+        self.assertEqual(item["review_targets"][0]["new_legal_value"],"70만원")
+        self.assertIn("선정기준",item["review_targets"][0]["review_question"])
         self.assertEqual(item["verification"],"candidate_not_confirmed")
         self.assertIn("S111",result["proofs"])
         public = {"events":[event],"public_service_proofs":result["proofs"],
@@ -135,11 +139,32 @@ class Gov24Tests(unittest.TestCase):
         forged["events"][0]["public_service_leads"][0]["agency"]="출처 없는 기관"
         self.assertTrue(validate_public_service_candidates(forged))
         forged=copy.deepcopy(public)
+        forged["events"][0]["public_service_leads"][0]["review_targets"][0]["source_excerpt"]="공식 자료에 없는 기준"
+        self.assertTrue(validate_public_service_candidates(forged))
+        forged=copy.deepcopy(public)
+        forged["events"][0]["public_service_leads"][0]["review_targets"][0]["new_legal_value"]="900만원"
+        self.assertTrue(validate_public_service_candidates(forged))
+        forged=copy.deepcopy(public)
         forged["events"][0]["public_service_leads"][0]["basis_quote"]="근거 없는 법령"
         self.assertTrue(validate_public_service_candidates(forged))
         forged=copy.deepcopy(public)
         forged["events"][0]["public_service_leads"][0]["verification"]="confirmed_action"
         self.assertTrue(validate_public_service_candidates(forged))
+
+    def test_application_procedure_is_a_distinct_public_service_review_target(self):
+        raw=record("S888")
+        raw["선정기준"]=""
+        raw["지원대상"]=""
+        raw["지원내용"]=""
+        raw["신청방법"]="가상 기관에 방문 신청"
+        state={"public_services":{"S888":normalize_record(raw)}}
+        event=policy_event()
+        discover_public_service_leads(state,[event])
+        target=event["public_service_leads"][0]["review_targets"][0]
+        self.assertEqual(target["field"],"신청방법")
+        self.assertEqual(target["source_excerpt"],"가상 기관에 방문 신청")
+        self.assertEqual(target["old_value"],"")
+        self.assertIn("제3조",target["review_question"])
 
     def test_title_only_basis_does_not_pretend_article_level_citation(self):
         raw=record("S777")
