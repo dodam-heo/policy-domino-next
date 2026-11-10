@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 from policy_domino.alioplus import (
-    ALIOPlusClient, ProgramSourceError, listing_detail_urls,\n    listing_business_titles, parse_detail)
+    ALIOPlusClient, ProgramSourceError, listing_detail_urls,
+    listing_business_titles, parse_detail)
 from policy_domino.contracts import ContractError, validate_public
 from policy_domino.core import new_state, SCHEMA
 from policy_domino.pipeline import render
@@ -146,17 +147,17 @@ class VerifiedProgramTests(unittest.TestCase):
 
 class PublicDirectoryTests(unittest.TestCase):
     def test_link_extractor_ignores_nonbusiness_or_pagination_ids(self):
-        listing = (('<li><a href="/business/bsnDetail.do?bsnSeq=2183&amp;'
-                    'bsnTyp=DET">사업</a></li><input name="pageNo" value="123"/>') +
+        listing = ('<li><a href="/business/bsnDetail.do?bsnSeq=2183&amp;'
+                   'bsnTyp=DET">사업</a></li><input name="pageNo" value="123"/>'
                    '<a href="/business/bsnDetail.do?bsnSeq=2183">중복</a>')
         self.assertEqual(listing_detail_urls(listing), [PROGRAM_URL])
         self.assertEqual(listing_detail_urls(
-            "<li onclick=\\\"fnDetail('2183','DET')\\\">사업</li>"), [PROGRAM_URL])
+            """<li onclick="fnDetail('2183','DET')">사업</li>"""), [PROGRAM_URL])
 
     def test_official_listing_title_excludes_detail_heading_categories(self):
-        listing = ('<li><a href="javascript:fnDetail(\\'2183\\', \\'DET\\');">'
-                   '<div class="tit">가상 장학지원 사업</div>'
-                   '<p>실제 공식 설명</p></a></li>')
+        listing = """<li><a href="javascript:fnDetail('2183','DET');">
+                     <div class="tit">가상 장학지원 사업</div>
+                     <p>실제 공식 설명</p></a></li>"""
         self.assertEqual(listing_business_titles(listing)[PROGRAM_URL],
                          "가상 장학지원 사업")
 
@@ -184,8 +185,8 @@ class PublicDirectoryTests(unittest.TestCase):
                 <div>사업 기간</div><p>상시</p>"""
         def transport(url):
             if "bsnByLifeList" in url:
-                return ('<a href="javascript:fnDetail(\\'2183\\', \\'DET\\');">'
-                        '<div class="tit">가상 장학지원 사업</div></a>')
+                return """<a href="javascript:fnDetail('2183','DET');">
+                          <div class="tit">가상 장학지원 사업</div></a>"""
             if "bsnDetail.do" in url:
                 return body
             raise OSError("Unknown path")
