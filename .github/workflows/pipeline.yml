@@ -29,47 +29,19 @@ jobs:
           python -m compileall -q policy_domino tests
           python -m unittest discover -s tests -p 'test_*.py' -v
           node tests/test_site.cjs
-      - name: Validate official ALIOPLUS session-based form pagination (nonblocking)
+      - name: Smoke-check live official public-program source (nonblocking)
         if: github.event_name == 'pull_request'
         continue-on-error: true
         timeout-minutes: 2
         run: |
           python - <<'PY'
-          import re
-          import urllib.request
-          import urllib.parse
-          import http.cookiejar
-          from policy_domino.alioplus import ALIOPlusClient, INDEX, listing_detail_urls
-          session = urllib.request.build_opener(
-              urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-          req = urllib.request.Request(INDEX,headers={
-              "User-Agent": "Mozilla/5.0 (compatible; PolicyDominoNext/0.2)"})
-          with session.open(req,timeout=15) as response:
-              index = response.read(1600000).decode("utf-8", "replace")
-              cookie = response.headers.get("Set-Cookie","")
-          path = re.search(r"/business/bsnByLifeList.do;jsessionid=([A-Za-z0-9.]+)",index)
-          base = INDEX if not path else INDEX+";jsessionid="+path.group(1)
-          params = {"pageNo":"2","typ":"life","schFstCateCd":"",
-                    "schScdCateCd":"","schTrdCateCd":"","schLifeCycle":"",
-                    "schSvcCate":"","schApbaId":"","schBsnNa":""}
-          print("SESSION",bool(path),"COOKIE",bool(cookie),
-                "first ids",listing_detail_urls(index)[:3])
-          for method in ("GET","POST"):
-              url=base+"?"+urllib.parse.urlencode(params)
-              request=urllib.request.Request(
-                  url, data=urllib.parse.urlencode(params).encode() if method=="POST" else None,
-                  headers={"Content-Type":"application/x-www-form-urlencoded",
-                           "User-Agent":"Mozilla/5.0 (compatible; PolicyDominoNext/0.2)"})
-              try:
-                  with session.open(request,timeout=15) as res:
-                      body=res.read(1600000).decode("utf-8","replace")
-                  found=listing_detail_urls(body)
-                  total=re.search(r'class="total"[^>]*>.*?<strong>([^<]+)',body,re.S)
-                  print("SESSION PAGE2",method, "ids",found[:5],
-                        "count",len(found),"reported",total.group(1) if total else "unknown",
-                        "is current page 2","<strong>2</strong>" in body)
-              except Exception as exc:
-                  print("SESSION PAGE2",method,"error",repr(exc))
+          from policy_domino.alioplus import ALIOPlusClient
+          state = {}
+          audit = ALIOPlusClient(delay_seconds=0).collect(state, max_details=2)
+          print("Official program source audit:", audit)
+          print("Independent official records:", len(state.get("official_programs", {})))
+          if audit["accepted"] == 0:
+              raise SystemExit("Live source incompatible: no official programs verified")
           PY
       - name: Validate existing official publication evidence
         run: python -m policy_domino.contracts site/data.json
