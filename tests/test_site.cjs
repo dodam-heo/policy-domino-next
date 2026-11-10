@@ -397,6 +397,43 @@ async function screenshotComparisonSafety(){
   console.log("PASS: real-style citation changes and incomplete source are distinct");
 }
 
+async function realServiceLeadDiscoveryPresentation(){
+  const event=sample("gov24",{date:"2026-11-10",impact:false,benefit:true});
+  event.public_service_lead_count=1;
+  event.public_service_leads=[{
+    service_id:"S101",service_name:"가상생활지원서비스",
+    agency:"가상광역시청",agency_type:"지방자치단체",
+    document_id:"source-gov24",article:"제3조",law_title:event.title,
+    match_tier:"official_clause_citation",
+    basis_quote:"「가상지원정책」 제3조에 따른 사업",
+    old_value_seen_in_service:["10만원"],
+    verification:"candidate_not_confirmed",
+    review_question:"해당 공공서비스의 운영·선정 기준에 개정 조문이 적용되는지 확인",
+    source_url:"https://www.data.go.kr/data/15113968/openapi.do",
+    service_url:"https://www.gov.kr/portal/service",
+  }];
+  const data={
+    schema:"policy-domino-next-v1",events:[event],
+    ai_progress:{indexed_documents:400},public_services_indexed:1000,
+    public_service_review_leads:1,
+    gov24_audit:{status:"collected_incrementally"},generated_at:"",
+  };
+  const ui=browser(false,"",data);
+  await flush();
+  const detail=node(ui,"detail");
+  const text=textOf(detail);
+  assert.ok(text.includes("연결 가능한 공공서비스"));
+  assert.ok(text.includes("가상광역시청 · 가상생활지원서비스"));
+  assert.ok(text.includes("후보 1건"));
+  assert.ok(text.includes("조치 의무나 시행 완료를 뜻하지 않습니다"));
+  assert.ok(text.includes("10만원"));
+  const links=flatten(detail).filter(el=>el.tag==="a");
+  assert.ok(links.some(a=>a.href==="https://www.gov.kr/portal/service"),
+    "Only approved official Gov24 service links can be opened");
+  assert.ok(node(ui,"institution-link-progress").textContent.includes(
+    "정부24 공공서비스 1,000건"));
+  console.log("PASS: actual Gov24 public-service evidence displayed as candidates");
+}
 async function noFabricatedImpact(){
   const only=sample("nothing",{impact:false,benefit:true});
   const ui=browser(false,"",{
@@ -412,5 +449,6 @@ async function noFabricatedImpact(){
 }
 Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
-  institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety()
+  institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
+  realServiceLeadDiscoveryPresentation()
 ]).catch(error=>{console.error(error);process.exitCode=1});

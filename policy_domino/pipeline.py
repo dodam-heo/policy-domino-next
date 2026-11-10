@@ -290,6 +290,11 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         cross_document_reviews=work_reviews,
         ai_reviews=validated_ai,
     )
+    # Public-service discovery is deliberately a separate evidence tier.
+    # A confirmed service name and statutory citation is a review lead,
+    # NOT proof that the agency must already change a program or system.
+    from .gov24 import discover_public_service_leads
+    gov24_links = discover_public_service_leads(state, events)
     data = {
         "schema": state["schema"],
         "generated_at": state.get("generated_at", ""),
@@ -309,6 +314,11 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         } for item in docs.values() if item.get("reference_only")),
             key=lambda x: x["id"]),
         "events": events,
+        "public_service_proofs": gov24_links["proofs"],
+        "gov24_audit": state.get("gov24_audit", {
+            "source":"gov24_public_services","status":"not_configured"}),
+        "public_services_indexed": len(state.get("public_services", {})),
+        "public_service_review_leads": gov24_links["total_candidates"],
         "relationships": edges,
         "cross_document_review_candidates": work_reviews,
         "program_dependencies": program_links,
@@ -369,8 +379,9 @@ def configured_law_oc() -> str:
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check"))
+    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24"))
     parser.add_argument("--limit", type=int, default=24)
+    parser.add_argument("--page-budget", type=int, default=2)
     parser.add_argument("--time-budget", type=float, default=670)
     parser.add_argument("--state", type=Path, default=STATE_FILE)
     parser.add_argument("--output", type=Path, default=DATA_FILE)
@@ -385,6 +396,15 @@ def main(argv=None):
                  max(1, min(args.limit, 150)),
                  max_seconds=max(120, min(args.time_budget, 840)))
         write_json(args.state, state)
+    if args.mode == "gov24":
+        from .gov24 import collect_gov24
+        credential = (os.getenv("GOV24_SERVICE_KEY", "").strip() or
+                      os.getenv("DATA_GO_KR_KEY", "").strip())
+        audit = collect_gov24(state, credential,
+                              pages_per_feed=max(1, min(args.page_budget, 5)))
+        write_json(args.state, state)
+        print("Gov24 public-service collection:",
+              json.dumps(audit, ensure_ascii=False))
     if args.mode == "ai-check":
         from .ai import assess_ai_run
         report = state.get("ai_run", {})

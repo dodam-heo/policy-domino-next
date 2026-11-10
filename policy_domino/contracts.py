@@ -507,6 +507,9 @@ def validate_public(payload: dict) -> dict:
     verify(covered_source_ids == expected_covered, "events",
            "officially changed source documents must form exactly one policy event")
 
+    from .gov24_contract import validate_public_service_candidates
+    errors.extend(validate_public_service_candidates(payload))
+
     for key in ("manual_institutions", "inferred_programs_count_as_confirmed",
                 "internal_compliance_status_known"):
         verify(payload.get("principles", {}).get(key) is False, "principles." + key,

@@ -26,7 +26,8 @@
       const valid = new URL(url);
       if (valid.protocol !== "https:" ||
           !["law.go.kr","www.law.go.kr","www.alioplus.go.kr",
-            "alioplus.go.kr"].includes(valid.hostname)) return null;
+            "alioplus.go.kr","gov.kr","www.gov.kr",
+            "data.go.kr","www.data.go.kr"].includes(valid.hostname)) return null;
       const a = create("a","official-link",label);
       a.href = valid.href;
       a.target = "_blank";
@@ -432,6 +433,41 @@
     append(section,drawer);
     return section;
   }
+  function renderPublicServices(event) {
+    const items=event.public_service_leads||[];
+    if(!items.length)return null;
+    const section=heading("연결 가능한 공공서비스 · 추가 확인 대상",
+      "정부24에 등록된 실제 공공서비스의 근거법령을 대조한 탐색 결과입니다. 해당 기관의 조치 의무나 시행 완료를 뜻하지 않습니다.");
+    const summary=create("p","section-counter",
+      "후보 "+num(event.public_service_lead_count||items.length)+"건 · "+
+      "공식 근거가 확인된 우선 후보 "+num(items.filter(x=>x.match_tier==="official_clause_citation").length)+"건");
+    append(section,summary);
+    const list=create("div","public-service-leads");
+    for(const item of items){
+      const card=create("details","agency-group public-service-lead");
+      const label=create("summary","agency-heading");
+      append(label,create("strong","",item.agency+" · "+item.service_name),
+        create("span","",item.match_tier==="official_clause_citation"?
+          "변경 조문 인용":"근거 법령명 일치"));
+      append(card,label);
+      const content=create("div","public-service-lead-body");
+      append(content,create("p","",
+        item.law_title+" "+item.article+" · "+item.review_question));
+      if(item.old_value_seen_in_service?.length)
+        append(content,create("p","",
+          "사업 기준에서 발견된 종전 값: "+item.old_value_seen_in_service.join(", ")+
+          " (변경 적용 여부는 미확인)"));
+      append(content,create("p","public-service-basis",
+        "공식 서비스의 근거: "+item.basis_quote));
+      append(content,link(item.service_url||item.source_url,
+                          item.service_url?"공식 서비스 안내":"정부24 공식 공공서비스 원천"));
+      append(card,content);
+      append(list,card);
+    }
+    append(section,list);
+    return section;
+  }
+
   function renderDetail() {
     const root=$("detail");root.replaceChildren();
     const event=state.events.find(e=>e.id===state.selected);
@@ -449,7 +485,7 @@
       event.effective_date ?
         create("p","effective","시행일 "+event.effective_date):null);
     append(root,head,renderCore(event),renderInstitutions(event),
-      renderEvidence(event),renderAI(event));
+      renderPublicServices(event),renderEvidence(event),renderAI(event));
   }
   function show(data) {
     if (data.schema !== "policy-domino-next-v1" ||
@@ -483,7 +519,11 @@
       "기관별 검토사항 "+num(progress.institutional_reviews)+"건"+
       " · 공공사업 인용 연결 "+num(progress.verified_program_links)+"건"+
       " · 관련 공식 규정 소관기관 연결 "+num(progress.referencing_public_rule_reviews)+"건"+
-      " · 공공사업 원천자료 "+num(progress.official_program_records)+"건";
+      " · 알리오 공공사업 원천자료 "+num(progress.official_program_records)+"건"+
+      " · 정부24 공공서비스 "+num(data.public_services_indexed||0)+"건"+
+      " · 검토 후보 "+num(data.public_service_review_leads||0)+"건"+
+      ((data.gov24_audit?.status==="not_configured")?
+        " (정부24 API 인증 미설정)":"");
     $("stat-events").textContent=num(stats.events);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);

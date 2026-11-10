@@ -48,7 +48,7 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
-    timeout-minutes: 32
+    timeout-minutes: 38
     steps:
       - uses: actions/checkout@v5
         with:
@@ -61,6 +61,11 @@ jobs:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
         timeout-minutes: 17
         run: python -m policy_domino run --limit 72 --time-budget 690
+      - name: Collect official nationwide Gov24 services and operating criteria
+        env:
+          GOV24_SERVICE_KEY: ${{ secrets.GOV24_SERVICE_KEY }}
+        timeout-minutes: 5
+        run: python -m policy_domino gov24 --page-budget 3
       - name: Incrementally review all verified changes with Gemini
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
