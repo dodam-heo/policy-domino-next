@@ -137,8 +137,8 @@ class _ListingTitles(HTMLParser):
         if tag == "a":
             href = props.get("href", "") + " " + props.get("onclick", "")
             matched = re.search(
-                r"fnDetail\\s*\\(\\s*['\\\"]?(\\d{1,12})['\\\"]?\\s*,"
-                r"\\s*['\\\"]?(?:DET|SCT)['\\\"]?", href, re.IGNORECASE)
+                r"fnDetail\s*\(\s*['\\"]?(\d{1,12})['\\"]?\s*,"
+                r"\s*['\\"]?(?:DET|SCT)['\\"]?", href, re.IGNORECASE)
             self.url = (canonical_url(DETAIL + "?bsnSeq=" + matched.group(1) +
                                       "&bsnTyp=DET") if matched else "")
             self.parts = []
