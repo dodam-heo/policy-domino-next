@@ -321,8 +321,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
             "verified_document_changes": verified_count,
             "verified_clauses": sum(len(event["changes"]) for event in events),
             "ai_analyzed_clauses": sum(
-                len({x.get("document_id", ""), x.get("article", "")}
-                    for x in event["ai_summaries"])
+                len({(x.get("document_id", ""), x.get("article", ""))
+                     for x in event["ai_summaries"]})
                 for event in events),
             "official_program_records": len(state.get("official_programs", {})),
             "verified_program_links": len(program_links),
