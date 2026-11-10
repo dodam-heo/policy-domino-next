@@ -348,7 +348,9 @@ def validate_public(payload: dict) -> dict:
             "document_id": ch["document_id"], "article": ch["article"]
         } for ch in highlight_changes(
             [c for c in changes_in_event if isinstance(c, dict)
-             and isinstance(c.get("meaning"), dict)])]
+             and isinstance(c.get("meaning"), dict)],
+            institution_reviews=event.get("institutional_reviews", []),
+            ai_summaries=event.get("ai_summaries", []))]
         verify(event.get("highlights") == expected_highlights, pos,
                "featured clauses must follow evidence-based relevance ranking")
         if changes_in_event:

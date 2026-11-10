@@ -123,142 +123,216 @@ def _large_clause_fragment(before: str, after: str) -> list[dict]:
              "score": _score_fragment(a,b), "offset": left}]
 
 
-def explain(before: str, after: str) -> dict:
-    """Describe *literal* changed phrases, distinguishing mechanical edits.
+# Match exact legal references separately from financial values.
+ARTICLE_REFERENCE = re.compile(
+    r"제\s*\d+\s*조(?:의\s*\d+)?(?:\s*제\s*\d+\s*항)?"
+    r"(?:\s*제\s*\d+\s*호)?"
+)
+ONLY_MARKER = re.compile(r"^(?:[①-⑳㉑-㊿]|[가-하]\s*[.)]|(?:제\s*)?\d+\s*[.)])$")
 
-    The preview strings must occur as source-aligned token runs. A future
-    AI-generated natural-language description belongs in a separate, verified
-    field instead of replacing official-source evidence.
-    """
-    ranked = []
-    # Huge published annexes may contain tens of thousands of repeated tokens.
-    # SequenceMatcher(autojunk=False) can become prohibitively slow there.
+
+def is_placeholder_clause(value: str) -> bool:
+    """An isolated paragraph marker is not evidence of complete legal text."""
+    return bool(ONLY_MARKER.fullmatch(str(value or "").strip()))
+
+
+def _literal_reference_update(before: str, after: str) -> tuple[str, str] | None:
+    old = ARTICLE_REFERENCE.findall(before)
+    new = ARTICLE_REFERENCE.findall(after)
+    if len(old) != len(new) or not old:
+        return None
+    differing = [(x, y) for x, y in zip(old, new) if x != y]
+    if len(differing) != 1:
+        return None
+    old_base = ARTICLE_REFERENCE.sub("<인용>", before)
+    new_base = ARTICLE_REFERENCE.sub("<인용>", after)
+    if re.sub(r"\s+", "", old_base) != re.sub(r"\s+", "", new_base):
+        return None
+    return differing[0]
+
+
+def _changed_numeric(before: str, after: str) -> tuple[str, str] | None:
+    old = set(NUMERIC.findall(before))
+    new = set(NUMERIC.findall(after))
+    a, b = sorted(old-new), sorted(new-old)
+    return (a[0], b[0]) if len(a) == len(b) == 1 else None
+
+
+def _changed_fragments(before: str, after: str) -> list[dict]:
     if len(before) + len(after) > 8000:
-        ranked = _large_clause_fragment(before, after)
-    else:
-        a, b = _tokens(before), _tokens(after)
-        for tag, i, j, k, m in difflib.SequenceMatcher(
-                None, a, b, autojunk=(len(a)+len(b) > 350)
-                ).get_opcodes():
-            if tag == "equal":
-                continue
-            old = _local_phrase(a, i, j)
-            new = _local_phrase(b, k, m)
-            if old == new:
-                continue
-            ranked.append({
-                "before": _abbreviate(old),
-                "after": _abbreviate(new),
-                "score": _score_fragment(old, new),
-                "offset": i,
-            })
+        return _large_clause_fragment(before, after)
+    a, b = _tokens(before), _tokens(after)
+    ranked = []
+    for tag, i, j, k, m in difflib.SequenceMatcher(
+            None, a, b, autojunk=(len(a)+len(b) > 350)
+            ).get_opcodes():
+        if tag == "equal":
+            continue
+        old, new = _local_phrase(a, i, j), _local_phrase(b, k, m)
+        if old == new:
+            continue
+        ranked.append({
+            "before": _abbreviate(old), "after": _abbreviate(new),
+            "score": _score_fragment(old, new), "offset": i,
+            "tag": tag,
+        })
     if not ranked:
-        # Rare case where tokenization erased only a whitespace adjustment.
-        ranked = [{"before": _abbreviate(before), "after": _abbreviate(after),
-                   "score": 0, "offset": 0}]
-    ranked.sort(key=lambda item: (-item["score"], item["offset"]))
-    best = ranked[0]
-    editorial = NON_CONTENT.sub("", before) == NON_CONTENT.sub("", after)
-    if editorial:
-        label = "띄어쓰기·표기 정비"
-        priority = 0
-    else:
-        # Decide meaning from the changed text plus its local statutory
-        # sentence; do not scan unrelated clauses in an omnibus instrument.
-        local_text = best["before"] + " " + best["after"]
-        raw = str(before) + " " + str(after)
-        label = "조문 내용 변경"
-        if NUMERIC.search(local_text):
-            has_money = bool(re.search(
-                r"\d[\d,.]*\s*(?:억\s*원|만원|원|%)", local_text))
-            has_money = has_money or bool(re.search(
-                r"지급액|지원금|기준액|요율|부담금", raw))
-            label = "금액·수치 기준" if has_money else "인원·기간·수치 기준"
-        else:
-            # A bounded complete sentence often contains the governing verb
-            # (e.g. 공고) even if the modified object is the newspaper.
-            context = raw[:900] if len(raw) < 900 else local_text
+        ranked = [{
+            "before": _abbreviate(before), "after": _abbreviate(after),
+            "score": 0, "offset": 0, "tag": "replace",
+        }]
+    return sorted(ranked, key=lambda row: (-row["score"], row["offset"]))
+
+
+def _subject_area(before: str, after: str, old_piece: str, new_piece: str) -> str:
+    """Do not infer a changed procedure from a keyword on only one side."""
+    for name, pattern in LABELS:
+        if name == "인용 법령·조문":
+            continue
+        if re.search(pattern, old_piece) and re.search(pattern, new_piece):
+            return name
+    if len(before)+len(after) < 3600:
+        similarity = difflib.SequenceMatcher(
+            None, _tokens(before), _tokens(after), autojunk=True).ratio()
+        # Only a near-identical rule offers enough common context to infer
+        # the operation whose words changed. Wholly replaced actors do not.
+        if similarity > 0.87:
             for name, pattern in LABELS:
-                if re.search(pattern, local_text):
-                    label = name
-                    break
-            if label == "조문 내용 변경":
-                for name, pattern in LABELS:
-                    if re.search(pattern, context):
-                        label = name
-                        break
-        priority = max((x["score"] for x in ranked), default=0)
-        if label != "조문 내용 변경":
-            priority += 15
+                if name != "인용 법령·조문" and (
+                        re.search(pattern, before[:1500]) and
+                        re.search(pattern, after[:1500])):
+                    return name
+    return "조문 내용 변경"
+
+def _source_fragmentary(before: str, after: str) -> bool:
+    old, new = before.strip(), after.strip()
+    return (is_placeholder_clause(old) and len(new) > 18 or
+            is_placeholder_clause(new) and len(old) > 18)
+
+
+def explain(before: str, after: str) -> dict:
+    """Evidence-bound comparison: do not mistake token substitutions for meaning."""
+    before, after = str(before or ""), str(after or "")
+    fragmentary = _source_fragmentary(before, after)
+    citation = _literal_reference_update(before, after) if not fragmentary else None
+    edits = _changed_fragments(before, after)
+    best = edits[0]
     old_quote, new_quote = best["before"], best["after"]
-    if editorial:
-        description = "띄어쓰기나 문장부호가 정비됐습니다."
+    editorial = NON_CONTENT.sub("", before) == NON_CONTENT.sub("", after)
+    kind, score = "text_revision", 55
+    if fragmentary:
+        kind, label, score = "source_check", "종전·현행 원문 확인 필요", -10
+        description = ("종전 또는 현행 조문이 항 번호만 수집되어 "
+                       "정확한 변경 내용을 판단할 수 없습니다.")
+        old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
+    elif editorial:
+        kind, label, score = "editorial", "표기 정비", 0
+        description = "띄어쓰기 또는 문장부호가 정비됐습니다."
+    elif citation:
+        kind, label, score = "citation", "인용 조문 변경", 18
+        old_quote, new_quote = citation
+        description = (f"이 조문에서 인용하는 조문이 {old_quote}에서 "
+                       f"{new_quote}으로 바뀌었습니다.")
     else:
-        nums_old = set(NUMERIC.findall(old_quote))
-        nums_new = set(NUMERIC.findall(new_quote))
-        removed, added = sorted(nums_old - nums_new), sorted(nums_new - nums_old)
-        if len(removed) == len(added) == 1 and label in {
-                "금액·수치 기준", "인원·기간·수치 기준"}:
-            description = (
-                f"{label}이 {removed[0]}에서 {added[0]}로 바뀌었습니다.")
-        elif (old_quote and new_quote and old_quote != new_quote and
-              max(len(old_quote), len(new_quote)) <= 38 and
-              not ("…" in old_quote + new_quote)):
-            description = (
-                f"{label}에 쓰인 표현이 ‘{old_quote}’에서 "
-                f"‘{new_quote}’로 바뀌었습니다.")
-        elif label == "조문 내용 변경":
-            description = (
-                "조문의 문구가 수정됐습니다. 변경 전후의 표현을 확인하세요.")
+        numeric = _changed_numeric(before, after)
+        area = _subject_area(before, after, old_quote, new_quote)
+        total = max(1, max(len(before), len(after)))
+        low_commonality = len(before)+len(after) < 3600 and (
+            difflib.SequenceMatcher(None, _tokens(before), _tokens(after),
+                                    autojunk=True).ratio() < 0.48)
+        broad = (low_commonality or
+                 (len(edits) >= 3 and
+                  sum(len(x["before"])+len(x["after"]) for x in edits)
+                  > 0.35 * total))
+        if numeric and not broad:
+            kind = "numeric"
+            old_quote, new_quote = numeric
+            label = ("금액·수치 기준" if re.search(
+                r"원|%|지급|소득|금액", old_quote+new_quote+area)
+                else "인원·기간·수치 기준")
+            description = f"{label}이 {old_quote}에서 {new_quote}로 변경됐습니다."
+            score = 105
+        elif broad:
+            kind, label, score = "rewrite", (
+                area if area != "조문 내용 변경" else "조문 내용 재구성"), 86
+            description = ("여러 문구가 함께 바뀌어, 특정 단어 하나만으로 "
+                           "개정 내용을 설명할 수 없습니다.")
+            old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
+        elif len(edits) == 1 and (not old_quote or not new_quote):
+            kind = "addition" if not old_quote else "removal"
+            label = "조문 문구 추가" if kind == "addition" else "조문 문구 삭제"
+            description = ("현행 조문에 문구가 추가됐습니다." if kind == "addition"
+                           else "종전 조문의 일부 문구가 삭제됐습니다.")
+            score = 68
+        elif len(edits) == 1 and old_quote and new_quote:
+            kind, label = "term_edit", area
+            if max(len(old_quote), len(new_quote)) <= 95 and (
+                    "…" not in old_quote+new_quote):
+                description = (f"종전 조문에는 ‘{old_quote}’, 현행 조문에는 "
+                               f"‘{new_quote}’ 문구가 각각 사용됐습니다.")
+            else:
+                description = "조문 문구가 수정됐습니다. 신구 문맥을 대조하세요."
+            score = 67 if area != "조문 내용 변경" else 60
         else:
-            description = f"{label}에 관한 조문 문구가 수정됐습니다."
+            kind = "multiple_edits"
+            label = area if area != "조문 내용 변경" else "여러 문구 변경"
+            description = (f"조문 안의 {len(edits)}곳에서 문구가 변경됐습니다. "
+                           "신구 문장과 원문을 함께 확인하세요.")
+            old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
+            score = 75
     return {
-        "label": label,
-        "description": description,
-        "before": best["before"],
-        "after": best["after"],
-        "editorial": editorial,
-        "priority": priority,
-        "edits_count": len(ranked),
+        "label": label, "description": description,
+        "before": old_quote, "after": new_quote,
+        "editorial": editorial and not fragmentary,
+        "priority": score, "edits_count": len(edits),
+        "change_kind": kind, "source_check_required": fragmentary,
     }
 
 
 def event_headline(changes: list[dict]) -> str:
-    """Count confirmed amendments, not unverified impacts or raw documents."""
+    """Count observed types instead of guessing program effects from keywords."""
     if not changes:
         return "공식 제정·폐지 확인"
-    from collections import Counter
     count = len(changes)
-    labels = Counter(ch["meaning"]["label"] for ch in changes
-                     if not ch["meaning"]["editorial"] and
-                     ch["meaning"]["label"] != "조문 내용 변경")
-    if labels:
-        top = labels.most_common(2)
-        short = " · ".join(f"{name} {size}건" for name, size in top)
-        return f"{count}개 조문 변경 · {short}"
-    if all(ch["meaning"]["editorial"] for ch in changes):
-        return f"{count}개 조문 표기·문장부호 정비"
-    return f"{count}개 조문 내용 변경"
+    ref = sum(x["meaning"]["change_kind"] == "citation" for x in changes)
+    typ = sum(x["meaning"]["change_kind"] == "editorial" for x in changes)
+    check = sum(x["meaning"]["change_kind"] == "source_check" for x in changes)
+    substantive = count - ref - typ - check
+    terms = [f"{count}개 조문에서 변경 확인"]
+    if substantive:
+        terms.append(f"내용 개정 {substantive}건")
+    if ref:
+        terms.append(f"인용 조문 수정 {ref}건")
+    if typ:
+        terms.append(f"표기 정비 {typ}건")
+    if check:
+        terms.append(f"원문 재확인 {check}건")
+    return " · ".join(terms)
 
 
-def highlight_changes(changes: list[dict], limit: int = 3) -> list[dict]:
-    """Preview distinct substantive categories before minor formatting edits."""
-    ranked = sorted(changes, key=lambda ch: (
-        -ch["meaning"]["priority"],
-        -len(ch.get("actual_edits") or []),
-        ch.get("document_title", ""), ch.get("article", ""),
+def highlight_changes(changes: list[dict], limit: int = 3, *,
+                      institution_reviews: list[dict] | None = None,
+                      ai_summaries: list[dict] | None = None) -> list[dict]:
+    """Prioritize source-backed public-agency effects and substantive changes."""
+    linked = {}
+    weights = {
+        "verified_program_citation": 55,
+        "explicit_changed_clause": 40,
+        "verified_official_rule_citation": 34,
+        "direct_regulated_institution": 24,
+    }
+    for review in institution_reviews or []:
+        key = (review.get("document_id"), review.get("article"))
+        linked[key] = max(linked.get(key, 0),
+                          weights.get(review.get("basis_tier"), 0))
+    reviewed = {(x.get("document_id"), x.get("article"))
+                for x in (ai_summaries or [])}
+    ranked = sorted(changes, key=lambda row: (
+        row["meaning"].get("source_check_required", False),
+        row["meaning"].get("change_kind") in ("citation", "editorial"),
+        -(row["meaning"]["priority"] +
+          linked.get((row["document_id"], row["article"]), 0) +
+          (15 if (row["document_id"], row["article"]) in reviewed else 0)),
+        row.get("document_title", ""), row.get("article", ""),
     ))
-    chosen, kinds = [], set()
-    for change in ranked:
-        if len(chosen) >= limit:
-            break
-        label = change["meaning"]["label"]
-        if label not in kinds and not change["meaning"]["editorial"]:
-            chosen.append(change)
-            kinds.add(label)
-    for change in ranked:
-        if len(chosen) >= limit:
-            break
-        if change not in chosen:
-            chosen.append(change)
-    return chosen
+    return ranked[:max(0, limit)]

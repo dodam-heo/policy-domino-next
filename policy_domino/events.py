@@ -371,7 +371,8 @@ def build_events(documents: dict, findings: dict, *,
             "highlights": [{
                 "document_id": ch["document_id"],
                 "article": ch["article"],
-            } for ch in highlight_changes(entries)],
+            } for ch in highlight_changes(
+                entries, institution_reviews=tasks, ai_summaries=ai_summaries)],
             "institutional_reviews": sorted(tasks, key=lambda x: (
                 x["institution"], x["program"], x["document_title"], x["article"])),
             "institution_count": len(agencies),

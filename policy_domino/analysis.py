@@ -8,6 +8,7 @@ from __future__ import annotations
 import difflib
 import re
 from .core import clean
+from .meaning import is_placeholder_clause
 
 AMOUNT = re.compile(r"(?<![\d,])\d[\d,]*(?:\.\d+)?\s*(?:억\s*원|만원|원|%|명|개월|일)")
 CITATION = re.compile(r"「([^」]{2,110})」\s*(제\s*\d+\s*조(?:의\s*\d+)?)?")
@@ -63,6 +64,10 @@ def compare(before: dict, after: dict, record: dict) -> dict:
             excluded.append({"article": article, "reason": "본문 잘림·불완전"})
             continue
         old_text, new_text = old["text"], new["text"]
+        if is_placeholder_clause(old_text) or is_placeholder_clause(new_text):
+            excluded.append({"article": article,
+                             "reason": "항 번호만 확보되어 신구 본문 대조 불가"})
+            continue
         if old_text == new_text:
             continue
         changed.append({

@@ -6,6 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 from .api import field, tag
 from .core import clean
+from .meaning import is_placeholder_clause
 
 CLAUSE_LIMIT = 15000
 BODY_TAGS = {"조문내용", "조내용", "항내용", "호내용", "목내용"}
@@ -21,7 +22,8 @@ def text(node: ET.Element) -> str:
 
 def take(value: str) -> dict:
     return {"text": value[:CLAUSE_LIMIT],
-            "complete": len(value) < CLAUSE_LIMIT,
+            "complete": len(value) < CLAUSE_LIMIT and
+                        not is_placeholder_clause(value),
             "sha256": hashlib.sha256(value.encode("utf8")).hexdigest()}
 
 

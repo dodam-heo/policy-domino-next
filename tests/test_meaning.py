@@ -7,6 +7,7 @@ from policy_domino.meaning import explain, event_headline, highlight_changes
 def item(name, old, new):
     meaning = explain(old, new)
     return {
+        "document_id": name,
         "document_title": name,
         "article": "제3조",
         "meaning": meaning,
@@ -48,7 +49,7 @@ class MeaningTests(unittest.TestCase):
             "제5조 관보, 2개 이상의 일간신문에 공고한다.",
             "제5조 관보，2개 이상의 일간신문에 공고한다.")
         self.assertTrue(only_typography["editorial"])
-        self.assertEqual(only_typography["label"], "띄어쓰기·표기 정비")
+        self.assertEqual(only_typography["label"], "표기 정비")
 
     def test_substantive_updates_win_over_formatting_and_diverse_categories(self):
         changes = [
@@ -62,7 +63,7 @@ class MeaningTests(unittest.TestCase):
                  "제7조 지원금액은 8만원이다."),
         ]
         headline = event_headline(changes)
-        self.assertIn("4개 조문 변경", headline)
+        self.assertIn("4개 조문에서 변경 확인", headline)
         self.assertNotIn("그 밖의 조문 변경 관련 변경", headline)
         featured = highlight_changes(changes, limit=3)
         self.assertEqual(len(featured), 3)
@@ -84,9 +85,60 @@ class MeaningTests(unittest.TestCase):
     def test_unclassified_rule_still_has_intelligible_description(self):
         result = explain("제2조 필요한 조치는 A에 따른다.",
                          "제2조 필요한 조치는 B에 따른다.")
-        self.assertTrue(result["description"].endswith("바뀌었습니다.") or
-                        result["description"].endswith("확인하세요."))
+        self.assertIn("종전 조문에는", result["description"])
+        self.assertIn("현행 조문에는", result["description"])
         self.assertNotIn("그 밖의 조문 변경", result["description"])
+
+    def test_real_reference_change_is_not_an_impact_summary(self):
+        result = explain("제12조제2항에", "제12조제3항에")
+        self.assertEqual(result["change_kind"], "citation")
+        self.assertEqual(result["label"], "인용 조문 변경")
+        self.assertEqual(result["before"], "제12조제2항")
+        self.assertEqual(result["after"], "제12조제3항")
+        self.assertIn("인용하는 조문", result["description"])
+        self.assertNotIn("인용 법령·조문에 쓰인 표현", result["description"])
+
+    def test_different_programs_are_not_described_as_equivalent(self):
+        result = explain("적극행정국민신청", "적극행정 보호지원단")
+        self.assertIn(result["change_kind"], ("rewrite", "multiple_edits"))
+        self.assertNotIn("신청·처리 절차", result["label"])
+        self.assertNotIn("신청·처리 절차", result["description"])
+        self.assertNotIn("표현이 ‘적극행정국민신청’에서", result["description"])
+        self.assertIn("적극행정국민신청", result["before"])
+        self.assertIn("적극행정 보호지원단", result["after"])
+
+    def test_number_only_preceding_body_is_not_a_verified_change(self):
+        from policy_domino.parser import take
+        from policy_domino.analysis import compare
+        old = "③"
+        new = ("지방자치단체의 장은 소속 공무원의 적극행정 노력을 "
+               "장려하고 보상할 수 있다.")
+        result = explain(old, new)
+        self.assertEqual(result["change_kind"], "source_check")
+        self.assertTrue(result["source_check_required"])
+        self.assertIn("판단할 수 없습니다", result["description"])
+        self.assertFalse(take(old)["complete"])
+        previous = {"status": "extracted", "clauses": {
+            "제13조": {"text": old, "complete": True, "sha256": "old"}}}
+        current = {"status": "extracted", "clauses": {
+            "제13조": {"text": new, "complete": True, "sha256": "new"}}}
+        compared = compare(previous, current, {"url": "https://www.law.go.kr"})
+        self.assertEqual(compared["status"], "partial_unresolved")
+        self.assertEqual(len(compared["excluded"]), 1)
+        self.assertEqual(compared["changes"], [])
+
+    def test_unverified_source_cannot_outrank_real_relevant_changes(self):
+        bad = item("가상지원규정", "③",
+                   "지방자치단체의 장은 적극행정 노력을 포상할 수 있다.")
+        cite = item("가상지원규정", "제12조제2항에", "제12조제3항에")
+        actual = item("가상지원규정", "제3조 지원금액은 10만원이다.",
+                      "제3조 지원금액은 12만원이다.")
+        bad["article"],cite["article"],actual["article"]="제13조","제10조","제3조"
+        choices = highlight_changes([cite,bad,actual], limit=2,
+            institution_reviews=[{"document_id":"가상지원규정","article":"제3조",
+                                  "basis_tier":"verified_program_citation"}])
+        self.assertEqual(choices[0]["article"],"제3조")
+        self.assertEqual(choices[1]["article"],"제10조")
 
     def test_no_early_100_character_chop_of_a_korean_legal_token(self):
         long_word = "가상복합지원자격심사위원회"

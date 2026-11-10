@@ -106,7 +106,7 @@ class PolicyEventModelTests(unittest.TestCase):
         d = doc("가상지원청과 그 소속기관 직제", "11", "12015")
         f = changed(d)
         event = build_events({d["id"]: d}, {d["id"]: f})[0]
-        self.assertIn("1개 조문 변경", event["headline"])
+        self.assertIn("1개 조문에서 변경 확인", event["headline"])
         self.assertNotIn("그 밖의 조문 변경 관련 변경", event["headline"])
         ch = event["changes"][0]
         self.assertTrue(ch["meaning"]["before"])

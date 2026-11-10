@@ -157,34 +157,51 @@
     section.className="detail-section core";
     const summary=create("div","core-summary");
     append(summary,create("strong","",event.headline),
-      create("p","",event.source_count>1 ?
-        "같은 공식 공포 식별자로 함께 개정된 "+num(event.source_count)+
-        "개 규정의 변경사항입니다. 아래에는 그중 주요 차이를 먼저 보여줍니다." :
-        "공식 자료에서 확인된 개정 내용을 요약했습니다."));
+      create("p","","원문에서 확인한 변경과 실제 업무 영향 검토 근거를 구분해 보여줍니다."));
     append(section,summary);
     if (event.changes?.length) {
+      const verifiedAi=new Map((event.ai_summaries||[])
+        .map(row=>[row.document_id+"|"+row.article,row]));
       const highlights=create("div","highlights");
       const featured=(event.highlights||[]).map(key=>
         (event.changes||[]).find(ch=>ch.document_id===key.document_id &&
           ch.article===key.article)).filter(Boolean);
       const shown=featured.length?featured:event.changes.slice(0,3);
       for (const change of shown) {
+        const meaning=change.meaning||{};
         const row=create("div","highlight");
+        if(meaning.source_check_required)row.className+=" highlight-caution";
         const lead=create("div","highlight-lead");
         append(lead,create("span","highlight-cat",
-            change.meaning?.label||"조문 내용 변경"),
+            meaning.label||"변경 조문"),
           create("span","highlight-doc",
             change.document_title+" · "+change.article));
-        append(row,lead,create("strong","highlight-description",
-          change.brief||"변경 전후의 문구를 비교해 확인하세요."));
-        if(change.meaning?.before || change.meaning?.after){
+        append(row,lead);
+        const ai=verifiedAi.get(change.document_id+"|"+change.article);
+        if(ai?.summary && !meaning.source_check_required) {
+          append(row,create("strong","highlight-description",ai.summary),
+            create("p","highlight-source-label",
+              "AI 보조 요약 · 원문 인용 검증 완료"));
+        } else {
+          append(row,create("strong","highlight-description",
+            meaning.description||change.brief||"원문 내용 확인 필요"));
+          if(meaning.source_check_required) {
+            append(row,create("p","highlight-warning",
+              "수집된 종전·현행 본문만으로는 실제 개정 내용을 단정할 수 없어 이 조문은 재확인 대상입니다."));
+          }
+        }
+        if(meaning.before || meaning.after) {
           const excerpts=create("div","highlight-comparison");
           const oldBox=create("div","highlight-old");
           const newBox=create("div","highlight-new");
-          append(oldBox,create("small","","변경 전"),
-            create("p","",change.meaning?.before||"없음"));
-          append(newBox,create("small","","변경 후"),
-            create("p","",change.meaning?.after||"없음"));
+          const oldLabel=meaning.change_kind==="citation"?"종전 인용 조문":
+            meaning.source_check_required?"확보된 종전 본문":"변경 전";
+          const newLabel=meaning.change_kind==="citation"?"현행 인용 조문":
+            meaning.source_check_required?"확보된 현행 본문":"변경 후";
+          append(oldBox,create("small","",oldLabel),
+            create("p","",meaning.before||"일치하는 발췌 없음"));
+          append(newBox,create("small","",newLabel),
+            create("p","",meaning.after||"일치하는 발췌 없음"));
           append(excerpts,oldBox,newBox);
           append(row,excerpts);
         }
@@ -192,7 +209,7 @@
       }
       if (event.changes.length>shown.length)
         append(highlights,create("p","section-help",
-          "나머지 "+num(event.changes.length-shown.length)+
+          "그 밖의 "+num(event.changes.length-shown.length)+
           "개 변경 조문은 아래 '공식 변경 전·후와 출처'에서 확인할 수 있습니다."));
       append(section,highlights);
     }

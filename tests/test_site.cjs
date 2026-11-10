@@ -213,6 +213,8 @@ async function verifiedNavigation(){
   assert.ok(text.includes("공식 변경 전·후와 출처"));
   assert.ok(text.includes("동시 개정된 법령 17건"));
   assert.ok(text.includes("AI 보조검토"));
+  assert.ok(text.includes("AI 보조 요약 · 원문 인용 검증 완료"),
+    "Verified AI clause summary should be on the main change card");
   assert.ok(text.includes("지급 기준 금액이 10만원에서 12만원으로 바뀌었습니다."),
     "Meaningful source-bound sentence must replace the fragmented raw arrow");
   assert.ok(text.includes("변경 전") && text.includes("변경 후"));
@@ -348,6 +350,53 @@ async function largeScopeFiltering(){
   assert.equal(node(ui,"list-count").textContent,"전체 2건 · 표시 2건");
   console.log("PASS: compact quick filters and evidence-based high-impact scope");
 }
+async function screenshotComparisonSafety(){
+  const event=sample("comparison",{date:"2026-11-12"});
+  const base=event.changes[0];
+  const marker={
+    ...base,article:"제13조",before:"③",
+    after:"지방자치단체의 장은 소속 공무원의 적극행정 노력을 장려하고 보상할 수 있다.",
+    category:"종전·현행 원문 확인 필요",
+    brief:"종전 또는 현행 조문이 항 번호만 수집되어 정확한 변경 내용을 판단할 수 없습니다.",
+    meaning:{
+      label:"종전·현행 원문 확인 필요",
+      description:"종전 또는 현행 조문이 항 번호만 수집되어 정확한 변경 내용을 판단할 수 없습니다.",
+      before:"③",
+      after:"지방자치단체의 장은 소속 공무원의 적극행정 노력을 장려하고 보상할 수 있다.",
+      source_check_required:true,change_kind:"source_check",
+      priority:-10,edits_count:1,editorial:false,
+    },
+  };
+  const citation={
+    ...base,article:"제10조",before:"제12조제2항에",after:"제12조제3항에",
+    category:"인용 조문 변경",
+    brief:"이 조문에서 인용하는 조문이 제12조제2항에서 제12조제3항으로 바뀌었습니다.",
+    meaning:{
+      label:"인용 조문 변경",
+      description:"이 조문에서 인용하는 조문이 제12조제2항에서 제12조제3항으로 바뀌었습니다.",
+      before:"제12조제2항",after:"제12조제3항",source_check_required:false,
+      change_kind:"citation",priority:18,edits_count:1,editorial:false,
+    },
+  };
+  event.changes=[citation,marker];
+  event.highlights=event.changes.map(ch=>({document_id:ch.document_id,article:ch.article}));
+  event.headline="2개 조문에서 변경 확인 · 인용 조문 수정 1건 · 원문 재확인 1건";
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[event],
+    ai_progress:{indexed_documents:1000},generated_at:"",
+  });
+  await flush();
+  const text=textOf(node(ui,"detail"));
+  assert.ok(text.includes("인용하는 조문이 제12조제2항에서 제12조제3항으로"));
+  assert.ok(text.includes("종전 인용 조문"));
+  assert.ok(text.includes("현행 인용 조문"));
+  assert.ok(text.includes("정확한 변경 내용을 판단할 수 없습니다"));
+  assert.ok(text.includes("재확인 대상"));
+  assert.ok(!text.includes("대상·자격 기준에 관한 조문 문구"),
+    "Incomplete official text must never be treated as a verified eligibility change");
+  console.log("PASS: real-style citation changes and incomplete source are distinct");
+}
+
 async function noFabricatedImpact(){
   const only=sample("nothing",{impact:false,benefit:true});
   const ui=browser(false,"",{
@@ -363,5 +412,5 @@ async function noFabricatedImpact(){
 }
 Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
-  institutionFilterNavigation(),largeScopeFiltering()
+  institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety()
 ]).catch(error=>{console.error(error);process.exitCode=1});
