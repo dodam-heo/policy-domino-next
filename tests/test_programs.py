@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from policy_domino.alioplus import (
-    ALIOPlusClient, ProgramSourceError, listing_detail_urls, parse_detail)
+    ALIOPlusClient, ProgramSourceError, listing_detail_urls,\n    listing_business_titles, parse_detail)
 from policy_domino.contracts import ContractError, validate_public
 from policy_domino.core import new_state, SCHEMA
 from policy_domino.pipeline import render
@@ -153,6 +153,13 @@ class PublicDirectoryTests(unittest.TestCase):
         self.assertEqual(listing_detail_urls(
             "<li onclick=\\\"fnDetail('2183','DET')\\\">사업</li>"), [PROGRAM_URL])
 
+    def test_official_listing_title_excludes_detail_heading_categories(self):
+        listing = ('<li><a href="javascript:fnDetail(\\'2183\\', \\'DET\\');">'
+                   '<div class="tit">가상 장학지원 사업</div>'
+                   '<p>실제 공식 설명</p></a></li>')
+        self.assertEqual(listing_business_titles(listing)[PROGRAM_URL],
+                         "가상 장학지원 사업")
+
     def test_extract_actual_field_names_from_official_like_html(self):
         document = ("""<html><h3>교육/연구 > 가상 장학지원 사업</h3>
           <div>기관명</div><div>가상 공사</div><div>사업소개</div>
@@ -177,8 +184,8 @@ class PublicDirectoryTests(unittest.TestCase):
                 <div>사업 기간</div><p>상시</p>"""
         def transport(url):
             if "bsnByLifeList" in url:
-                return ('<a href="/business/bsnDetail.do?bsnSeq=2183'
-                        '&amp;bsnTyp=DET">가상 사업</a>')
+                return ('<a href="javascript:fnDetail(\\'2183\\', \\'DET\\');">'
+                        '<div class="tit">가상 장학지원 사업</div></a>')
             if "bsnDetail.do" in url:
                 return body
             raise OSError("Unknown path")
