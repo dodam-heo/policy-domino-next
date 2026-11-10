@@ -54,9 +54,11 @@ def ingest_window(api: LawAPI, state: dict, source: str, first: str, last: str,
     return left and right
 
 
-def collect(api: LawAPI, state: dict, today: dt.date):
+def collect(api: LawAPI, state: dict, today: dt.date,
+            *, max_seconds: float | None = None):
     from .coverage import collect_streams
-    return collect_streams(api, state, today, ingest_window)
+    return collect_streams(api, state, today, ingest_window,
+                           max_seconds=max_seconds)
 
 
 def work_queue(state: dict, today: dt.date, limit: int) -> list[dict]:
@@ -85,10 +87,14 @@ def _annual_baseline(api: LawAPI, doc: dict) -> dict | None:
     old_title = doc["title"][:hit.start()] + hit.group().replace(
         str(year), str(year - 1), 1) + doc["title"][hit.end():]
     # Only the actual preceding-year title, dynamically derived.
-    root = api.request("lawSearch.do", "admrul", query=old_title,
-                       nw="1,2", display=100, page=1)
     from .api import nodes, parse_record
-    options = [parse_record(x, "admrul") for x in nodes(root, "admrul")]
+    options = []
+    for version in ("1", "2"):
+        # Official admrul nw accepts an INTEGER (1=current, 2=history).
+        # A comma-separated 1,2 is not a documented request value.
+        root = api.request("lawSearch.do", "admrul", query=old_title,
+                           nw=version, display=100, page=1)
+        options.extend(parse_record(x, "admrul") for x in nodes(root, "admrul"))
     options = [x for x in options if x and x["title"] == old_title and
                x["published_at"] < doc["published_at"]]
     return max(options, key=lambda x: x["published_at"]) if options else None
@@ -199,11 +205,13 @@ def quality(state: dict) -> dict:
         "blocked": sum(v["blocked"] for v in pending.values()),
     }
     run = state.get("collection_run", {})
-    result["coverage_incomplete"] = (run["failed_windows"]
+    result["coverage_incomplete"] = ((run["failed_windows"] +
+                                    run.get("deferred_streams",0))
          if "failed_windows" in run else
          sum(not x.get("complete", False) for x in state.get("coverage", [])))
     result["official_source_streams"] = run.get("streams", 0)
     result["backfill_window_failures"] = run.get("failed_windows", 0)
+    result["deferred_source_streams"] = run.get("deferred_streams", 0)
     return result
 
 
@@ -228,7 +236,9 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
         except (TypeError, ValueError):
             due = True
     if due:
-        collect(api, state, today)
+        source_budget=(max(45, min(420, max_seconds-240))
+                       if max_seconds is not None else None)
+        collect(api, state, today, max_seconds=source_budget)
 
     selected = work_queue(state, today, limit)
     analyzed = 0

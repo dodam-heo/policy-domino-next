@@ -27,7 +27,7 @@
       if(mode!=="all"&&mode!=="impact"&&event.kind!==mode)return false;
       const searchable=[
         event.title,event.headline,event.ministry,
-        ...(event.members||[]).map(x=>x.title),
+        ...(event.members||[]).flatMap(x=>[x.title,x.kind]),
         ...(event.changes||[]).flatMap(x=>[
           x.document_title,x.article,x.meaning?.label||x.category||"",
         ]),

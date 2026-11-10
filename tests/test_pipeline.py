@@ -106,6 +106,31 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(configured_law_oc(),"custom-public-oc")
 
 
+    def test_annual_notice_baseline_uses_two_documented_history_modes(self):
+        from policy_domino.pipeline import _annual_baseline
+        import xml.etree.ElementTree as ET
+        current=record("admrul","777","2027","2026-11-10",
+                       "가상 연례 운영기준 2027년도 고시")
+        class API:
+            def __init__(self):
+                self.modes=[]
+            def request(self,endpoint,target,**params):
+                self.modes.append(params["nw"])
+                if params["nw"]=="1":
+                    return ET.fromstring("<Search><totalCnt>0</totalCnt></Search>")
+                return ET.fromstring("""<Search><totalCnt>1</totalCnt><admrul>
+                    <행정규칙명>가상 연례 운영기준 2026년도 고시</행정규칙명>
+                    <행정규칙ID>900</행정규칙ID>
+                    <행정규칙일련번호>212</행정규칙일련번호>
+                    <발령일자>20251110</발령일자>
+                    <행정규칙종류>고시</행정규칙종류>
+                    </admrul></Search>""")
+        api=API()
+        previous=_annual_baseline(api,current)
+        self.assertEqual(api.modes,["1","2"])
+        self.assertEqual(previous["title"],"가상 연례 운영기준 2026년도 고시")
+        self.assertEqual(previous["law_type"],"고시")
+
     def test_round_robin_sources_without_manual_institution_registration(self):
         state=new_state()
         docs=[record("law",str(i),str(i)) for i in range(10)]

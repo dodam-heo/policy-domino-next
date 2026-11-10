@@ -449,6 +449,25 @@ async function realServiceLeadDiscoveryPresentation(){
     "정부24 공공서비스 1,000건"));
   console.log("PASS: actual Gov24 public-service evidence displayed as candidates");
 }
+async function officialNoticeCanBeFoundByKind(){
+  const e=sample("notice",{date:"2026-11-10"});
+  e.members=[{
+    id:"source-notice",title:"연례 공공기준표",
+    kind:"고시",url:"https://www.law.go.kr/행정규칙/연례공공기준표",
+  }];
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[e],
+    quality:{rule_categories:{고시:{indexed:1,changed:1,pending:0}}},
+    ai_progress:{indexed_documents:1},generated_at:"",
+  });
+  await flush();
+  node(ui,"search").oninput({target:{value:"고시"}});
+  assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,1);
+  assert.ok(textOf(node(ui,"items")).includes("고시"));
+  assert.ok(node(ui,"institution-link-progress").textContent.includes("고시 1건 색인"));
+  console.log("PASS: official notices are identifiable by source metadata");
+}
+
 async function noFabricatedImpact(){
   const only=sample("nothing",{impact:false,benefit:true});
   const ui=browser(false,"",{
@@ -465,5 +484,5 @@ async function noFabricatedImpact(){
 Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
-  realServiceLeadDiscoveryPresentation()
+  realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind()
 ]).catch(error=>{console.error(error);process.exitCode=1});

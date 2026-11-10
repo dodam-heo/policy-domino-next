@@ -7,13 +7,17 @@ separate processing turns. Failed windows never silently count as covered.
 from __future__ import annotations
 
 import datetime as dt
+import time
 from .core import SOURCES, ADMIN_RULE_KINDS, utc_now
+from collections import defaultdict, deque
 
 MAX_ATTEMPTS = 4
 DONE = frozenset({"compared", "no_text_change", "enactment", "repeal"})
 
 
-def collect_streams(api, state, today: dt.date, ingest_window) -> bool:
+def collect_streams(api, state, today: dt.date, ingest_window,
+                    *, max_seconds: float | None = None) -> bool:
+    started = time.monotonic()
     recent_first = (today - dt.timedelta(days=6)).isoformat()
     recent_last = today.isoformat()
     cursors = state.setdefault("backfill_end_dates", {})
@@ -51,7 +55,14 @@ def collect_streams(api, state, today: dt.date, ingest_window) -> bool:
                 for version in ("1", "2")
                 for kind in ADMIN_RULE_KINDS] +
                [("ordin", version, "") for version in ("1", "2")])
+    offset=int(state.get("collection_stream_offset", 0)) % len(streams)
+    streams=streams[offset:]+streams[:offset]
+    executed=0
     for source, version, rule_kind in streams:
+        if (max_seconds is not None and
+                time.monotonic() - started >= max_seconds):
+            break
+        executed+=1
         key = "|".join(filter(None, (source, version, rule_kind)))
         load(source, version, recent_first, recent_last, "recent", rule_kind)
         if key in cursors:
@@ -69,9 +80,13 @@ def collect_streams(api, state, today: dt.date, ingest_window) -> bool:
         else:
             cursors[key]=old_end.isoformat()
 
+    state["collection_stream_offset"] = (offset+executed) % len(streams)
+    deferred=len(streams)-executed
     state["collection_run"] = {
         "checked_at": utc_now(),
         "streams": len(results),
+        "deferred_streams": deferred,
+        "elapsed_seconds": round(time.monotonic()-started, 1),
         "completed_windows": sum(int(x["complete"]) for x in results),
         "failed_windows": sum(int(not x["complete"]) for x in results),
         "rule_kinds": {
@@ -81,14 +96,14 @@ def collect_streams(api, state, today: dt.date, ingest_window) -> bool:
                 "failed": sum(int(not r["complete"]) for r in results
                               if r["rule_kind"] == kind)}
             for kind,label in ADMIN_RULE_KINDS.items()},
-        "recent_complete": all(x["complete"] for x in results
-                               if x["stage"] == "recent"),
-        "historical_complete": all(x["complete"] for x in results
-                                   if x["stage"] == "historical"),
+        "recent_complete": deferred == 0 and all(
+            x["complete"] for x in results if x["stage"] == "recent"),
+        "historical_complete": deferred == 0 and all(
+            x["complete"] for x in results if x["stage"] == "historical"),
         "backfill_end_dates": dict(cursors),
     }
     state["last_collected_at"] = state["collection_run"]["checked_at"]
-    return all(row["complete"] for row in results)
+    return deferred == 0 and all(row["complete"] for row in results)
 
 
 def retry_due(attempt: dict, today: dt.date) -> bool:
@@ -164,6 +179,30 @@ def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
             attempts.get(d["id"], {}).get("count", 0),
             attempts.get(d["id"], {}).get("last_date", ""),
             d.get("published_at", "")))
+
+    # Every *official kind* of administrative rules receives a fair turn.
+    # Otherwise thousands of generic rules can starve newly discovered
+    # notices and guidelines while the source-level round robin looks fair.
+    # Preserve existing recency/oldest/retry ordering within each kind.
+    offset = int(state.get("rule_processing_rotation", 0))
+    for channel in ("recent", "backlog", "retry"):
+        by_kind = defaultdict(deque)
+        for doc in pools["admrul"][channel]:
+            kind = doc.get("law_type", "")
+            if kind not in ADMIN_RULE_KINDS.values():
+                kind = "미분류"
+            by_kind[kind].append(doc)
+        kinds = sorted(by_kind)
+        if not kinds:
+            continue
+        rotated = kinds[offset % len(kinds):] + kinds[:offset % len(kinds)]
+        woven = []
+        while any(by_kind.values()):
+            for kind in rotated:
+                if by_kind[kind]:
+                    woven.append(by_kind[kind].popleft())
+        pools["admrul"][channel] = woven
+    state["rule_processing_rotation"] = offset + 1
 
     chosen = []
     rhythm = ("recent", "backlog", "recent", "backlog", "retry")

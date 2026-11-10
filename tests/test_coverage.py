@@ -61,6 +61,44 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(state["collection_run"]["rule_kinds"]["고시"]["completed"],4)
         self.assertEqual(state["collection_run"]["streams"],30)
 
+    def test_incomplete_time_budget_defers_unchecked_categories_without_losing_cursors(self):
+        from unittest.mock import patch
+        state=new_state()
+        calls=[]
+        def ingest(api,state,source,first,last,version,*,rule_kind=""):
+            calls.append((source,version,rule_kind,first,last))
+            return True
+        # First official stream is checked; later ones must be deferred
+        # instead of falsely marking the full history as complete.
+        with patch("policy_domino.coverage.time.monotonic",
+                   side_effect=[0.0,0.1,0.7,0.8]):
+            ok=collect_streams(None,state,dt.date(2026,11,10),ingest,
+                               max_seconds=0.5)
+        self.assertFalse(ok)
+        self.assertEqual(state["collection_run"]["streams"],2)
+        self.assertEqual(state["collection_run"]["deferred_streams"],14)
+        self.assertFalse(state["collection_run"]["recent_complete"])
+        self.assertEqual(state["collection_stream_offset"],1)
+        self.assertEqual(len(calls),2)
+        previous=len(calls)
+        self.assertTrue(collect_streams(None,state,dt.date(2026,11,10),ingest))
+        self.assertEqual(state["collection_run"]["deferred_streams"],0)
+        self.assertNotEqual(calls[previous][0:3],("law","1",""))
+
+    def test_admrul_kinds_are_interleaved_in_comparison_queue(self):
+        state=new_state()
+        kinds=("고시","공고","지침","훈령","예규","기타")
+        for index,kind in enumerate(kinds):
+            for n in range(8):
+                item=document("admrul",index*100+n,"2026-11-09")
+                item["law_type"]=kind
+                state["documents"][item["id"]]=item
+        queue=fair_work_queue(state,dt.date(2026,11,10),12)
+        self.assertEqual(len(queue),12)
+        self.assertEqual({d["law_type"] for d in queue},set(kinds))
+        self.assertEqual(len({d["id"] for d in queue}),12)
+        self.assertEqual(state["rule_processing_rotation"],1)
+
     def test_recent_and_old_pending_both_get_processing_turns(self):
         state=new_state()
         state["documents"]={
