@@ -244,8 +244,8 @@ async function verifyRealFilters(){
   const unverifiedNodes=flattened(unverified.dom.get("detail"));
   assert.equal(unverifiedNodes.filter(x=>x.dataset.agencyFilter!==undefined).length,0);
   assert.ok(unverifiedNodes.some(x=>x.className==="agency-empty"&&
-    x.textContent.includes("아직 없습니다")),
-    "No proven program actions must show an honest empty result");
+    x.textContent.includes("아직 확인되지 않았습니다")),
+    "No verified public-program citation must show an honest pending result");
 
   ui.dom.get("backToList").onclick();
   assert.equal(ui.dom.get("layout").classList.contains("detail-open"),false);
