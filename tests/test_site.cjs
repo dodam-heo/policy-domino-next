@@ -16,6 +16,8 @@ assert.ok(html.includes("정책이 바뀌면, 무엇을 고쳐야 할까?"),"The
 assert.ok(style.includes(".site-header"),"The nav bar must be visibly styled");
 assert.ok(!app.includes("원천자료 수집·인용 대조가 더 필요합니다."));
 assert.ok(!app.includes("각각의 근거 수준은 구분해 보여줍니다."));
+assert.ok(!presenter.includes('".map(r=>r.institution)'),
+  "Frontend cannot infer impact from the count of cited institutions");
 for(const id of ["items","detail","mode-all","mode-new",
                  "mode-amended","mode-repealed","mode-impact",
                  "stat-events","stat-agencies","stat-actions",
@@ -413,6 +415,7 @@ async function largeScopeFiltering(){
   ];
   event.institution_count=5;
   event.review_count=5;
+  event.impact_level="high";
   const data={schema:"policy-domino-next-v1",
     events:[event,sample("solo",{date:"2026-11-11",impact:true})],
     ai_progress:{indexed_documents:200},generated_at:""};

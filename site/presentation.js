@@ -12,13 +12,9 @@
       event.institutional_reviews.length>0;
   }
   function highImpactScope(event) {
-    if(event.impact_level)return event.impact_level==="high";
-    if(Array.isArray(event.institutional_reviews))
-      return new Set(event.institutional_reviews
-        .filter(r=>["direct_regulated_institution","explicit_changed_clause",
-                    "verified_official_rule_citation","verified_program_citation"].includes(r.basis_tier))
-        .map(r=>r.institution).filter(Boolean)).size>=5;
-    return false; // Registry names alone are not verified impacts.
+    // The verified pipeline owns this classification. The browser must not
+    // silently upgrade citing agencies or directory names to high impact.
+    return event.impact_level==="high";
   }
   // Search names and effective years independently so re-titled annual
   // criteria remain discoverable without hard-coded example titles.
