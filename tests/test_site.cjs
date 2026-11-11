@@ -357,7 +357,7 @@ async function institutionFilterNavigation(){
   assert.ok(!textOf(results).includes("교육 지원 변경 대조"));
   assert.equal(agencyButtons().find(x=>x.dataset.institution==="가상복지공단")
     .getAttribute("aria-pressed"),"true");
-  assert.ok(textOf(detail).includes("1개 기관 · 변경 조문 검토 1건"));
+  assert.ok(textOf(detail).includes("1개 기관 · 검토사항 1건"));
 
   const agencySearch=pick(detail,"agency-filter-search");
   agencySearch.value="교육";
