@@ -288,31 +288,77 @@ def _source_fragmentary(before: str, after: str) -> bool:
 
 
 def _currency_table_changes(before: str, after: str) -> list[dict]:
-    """Match a uniquely identified household table using its literal columns.
+    """Align household amount tables only by matching official section titles.
 
-    Multiple identical table layouts are ambiguous; never pair them by order.
-    The unit is read from the source header, not inferred from bare numbers.
+    The same law can contain several visually identical seven-column tables
+    (income, eligibility, facility, etc.). Matching rows by position or amount
+    would falsely equate different programmes. A multi-table result is allowed
+    only when every heading gives an unambiguous one-to-one match.
     """
     pattern = re.compile(
         r"구\s*분(?P<header>[^()]{1,180}?)금\s*액\s*\(\s*"
         r"(?P<unit>원(?:\s*/\s*월)?)\s*\)\s*"
         r"(?P<values>\d[\d,]*(?:\s+\d[\d,]*)*)")
-    def tables(text):
-        result = []
+    clause_title = re.compile(r"제\s*\d+\s*조\s*\(([^)]{2,140})\)")
+    legacy_title = re.compile(
+        r"(?<!\d)\d+\.\s*([가-힣ㆍ·‧\s]{3,85})")
+
+    def latest_heading(text: str, position: int) -> str:
+        prefix = text[:position]
+        named = list(clause_title.finditer(prefix))
+        old = list(legacy_title.finditer(prefix))
+        matches = named + old
+        if not matches:
+            return ""
+        return max(matches, key=lambda m: m.start()).group(1).strip()
+
+    def tables(text: str) -> list[dict]:
+        rows = []
         for match in pattern.finditer(text):
             columns = re.findall(r"(\d+)\s*인\s*가구", match["header"])
             values = match["values"].split()
-            if (len(columns) >= 2 and len(columns) == len(values) and
-                len(set(columns)) == len(columns)):
-                result.append((columns, values, re.sub(r"\s+", "", match["unit"])))
-        return result
-    a, b = tables(before), tables(after)
-    if len(a) != 1 or len(b) != 1 or a[0][0] != b[0][0] or a[0][2] != b[0][2]:
+            if (len(columns) < 2 or len(columns) != len(values)
+                    or len(set(columns)) != len(columns)):
+                continue
+            heading = latest_heading(text, match.start())
+            rows.append({"columns":columns, "values":values,
+                         "unit":re.sub(r"\s+", "", match["unit"]),
+                         "heading":heading,
+                         "key":re.sub(r"[^가-힣a-zA-Z]", "", heading).lower()})
+        return rows
+
+    old_tables, new_tables = tables(before), tables(after)
+    if not old_tables or len(old_tables) != len(new_tables):
         return []
-    columns, old, unit = a[0]
-    new = b[0][1]
-    return [{"column": column + "인 가구", "before": x, "after": y, "unit": unit}
-            for column, x, y in zip(columns, old, new) if x != y]
+
+    if len(old_tables) == 1:
+        pairs = [(old_tables[0], new_tables[0])]
+    else:
+        def identity(table: dict) -> str:
+            # Require a substantial literal prefix of the source's actual
+            # section heading, not just a shared generic ending ("선정기준").
+            return table["key"][:6] if len(table["key"]) >= 6 else ""
+        old_ids = [identity(t) for t in old_tables]
+        new_ids = [identity(t) for t in new_tables]
+        if (not all(old_ids + new_ids)
+                or len(set(old_ids)) != len(old_ids)
+                or len(set(new_ids)) != len(new_ids)
+                or set(old_ids) != set(new_ids)):
+            return []
+        by_id = dict(zip(new_ids, new_tables))
+        pairs = [(row, by_id[identity(row)]) for row in old_tables]
+
+    changes = []
+    for a, b in pairs:
+        if a["columns"] != b["columns"] or a["unit"] != b["unit"]:
+            return []
+        title = b["heading"].strip() if len(pairs) > 1 else ""
+        for column, x, y in zip(a["columns"], a["values"], b["values"]):
+            if x != y:
+                label = (title + " · " if title else "") + column + "인 가구"
+                changes.append({"column":label, "before":x,
+                                "after":y, "unit":a["unit"]})
+    return changes
 
 
 def explain(before: str, after: str) -> dict:

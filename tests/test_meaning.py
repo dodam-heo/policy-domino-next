@@ -18,6 +18,42 @@ def item(name, old, new):
 
 
 class MeaningTests(unittest.TestCase):
+    def test_multiple_household_tables_align_only_by_section_identity(self):
+        # Four distinct eligibility criteria share the exact same seven-column
+        # layout; the old and new numbers must never cross table boundaries.
+        old = (
+            "1. 가상 기본생활 지원기준 구 분 1인가구 2인가구 "
+            "금액(원/월) 100,000 200,000 "
+            "2. 가상 주택이용 선정기준 구 분 1인가구 2인가구 "
+            "금액(원/월) 300,000 400,000 "
+        )
+        new = (
+            "제4조(가상 주택이용 수급자 선정기준) 구 분 1인가구 2인가구 "
+            "금액(원/월) 330,000 440,000 "
+            "제3조(가상 기본생활 지원기준) 구 분 1인가구 2인가구 "
+            "금액(원/월) 110,000 220,000 "
+        )
+        from policy_domino.meaning import _currency_table_changes
+        rows = _currency_table_changes(old, new)
+        self.assertEqual(len(rows), 4)
+        self.assertEqual([(x["before"], x["after"]) for x in rows],
+                         [("100,000", "110,000"), ("200,000", "220,000"),
+                          ("300,000", "330,000"), ("400,000", "440,000")])
+        self.assertIn("기본생활", rows[0]["column"])
+        self.assertIn("주택이용", rows[2]["column"])
+
+    def test_ambiguous_duplicate_table_titles_never_pair_values(self):
+        from policy_domino.meaning import _currency_table_changes
+        old = ("1. 중복사업 선정기준 구 분 1인가구 2인가구 "
+               "금액(원/월) 100,000 200,000 "
+               "2. 중복사업 운영기준 구 분 1인가구 2인가구 "
+               "금액(원/월) 300,000 400,000")
+        new = ("제3조(중복사업 선정기준) 구 분 1인가구 2인가구 "
+               "금액(원/월) 900,000 800,000 "
+               "제4조(중복사업 운영기준) 구 분 1인가구 2인가구 "
+               "금액(원/월) 700,000 600,000")
+        self.assertEqual(_currency_table_changes(old, new), [])
+
     def test_household_table_amounts_take_priority_over_changed_year_headers(self):
         old = "2026년 고시 제1호 구 분 1인가구 2인가구 금액(원/월) 1,000,000 2,000,000 부칙"
         new = "2027년 고시 제2호 구 분 1인가구 2인가구 금액(원/월) 1,100,000 2,200,000 부칙"
