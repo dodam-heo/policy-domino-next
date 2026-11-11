@@ -62,8 +62,21 @@ class SubmissionArchitectureTests(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("[state-migrate]", workflow)
         self.assertIn("python -m policy_domino migrate", workflow)
-        self.assertIn("choices=(\"run\", \"render\", \"ai\", \"ai-check\", \"gov24\", \"migrate\")",pipeline)
+        self.assertIn("choices=(\"run\", \"render\", \"ai\", \"ai-check\", \"gov24\", \"migrate\", \"reconcile\")",pipeline)
         self.assertIn("test ! -e data/state.json", workflow)
+
+    def test_official_change_reconciliation_and_annexes_have_failing_closed_guards(self):
+        workflow=(ROOT/".github/workflows/pipeline.yml").read_text(encoding="utf8")
+        recon=(ROOT/"policy_domino/reconciliation.py").read_text(encoding="utf8")
+        annex=(ROOT/"policy_domino/annexes.py").read_text(encoding="utf8")
+        self.assertIn("admrulOldAndNew",recon)
+        self.assertIn("reconciliation_windows",recon)
+        self.assertIn("authorized_law_pdf_url",annex)
+        self.assertIn("unresolved_annexes",annex)
+        self.assertIn("python -m policy_domino reconcile",workflow)
+        self.assertIn("pypdf>=5,<7",workflow)
+        self.assertIn("[reconcile-sync]",workflow)
+        self.assertIn("from policy_domino.core import load_state",workflow)
 
     def test_gov24_credential_can_be_checked_without_full_reindex(self):
         workflow=(ROOT/".github/workflows/pipeline.yml").read_text(encoding="utf-8")

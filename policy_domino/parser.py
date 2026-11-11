@@ -30,10 +30,15 @@ def take(value: str) -> dict:
 def parse_document(root: ET.Element) -> dict:
     out: dict[str, dict] = {}
     attachment_links = 0
+    pending_annex_links = []
     for el in root.iter():
         name = tag(el)
         if name in LINK_TAGS and text(el):
             attachment_links += 1
+            if name in ("별표서식PDF파일링크","별표서식파일링크",
+                        "첨부파일링크","별표파일링크"):
+                pending_annex_links.append({
+                    "tag":name,"href":text(el)[:750]})
         if name == "조문단위":
             number = field(el, "조문번호")
             branch = field(el, "조문가지번호")
@@ -73,8 +78,9 @@ def parse_document(root: ET.Element) -> dict:
                 label = ("별표 " if name == "별표단위" else "서식 ") + (number or str(len(out) + 1))
                 if branch not in ("", "0"):
                     label += "의" + branch
-                if title:
-                    label += " (" + title[:75] + ")"
+                # Stable annex identity is its official number, not title.
+                # Annual or amended table titles frequently change, while the
+                # same annex number remains the comparable legal location.
                 out[label] = take(value)
         if name in ("부칙", "부칙단위"):
             if name == "부칙" and any(tag(x) == "부칙단위" for x in el):
@@ -121,6 +127,7 @@ def parse_document(root: ET.Element) -> dict:
     return {
         "status": status, "clauses": out,
         "incomplete_keys": incomplete, "attachment_link_count": attachment_links,
+        "attachment_links":pending_annex_links,
         "body_sha256": hashlib.sha256(
             "|".join(k + v["sha256"] for k, v in sorted(out.items()))
             .encode("utf8")).hexdigest() if out else "",

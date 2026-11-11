@@ -137,6 +137,33 @@ class PipelineTests(unittest.TestCase):
         analyze_one(MissingType(),state,other)
         self.assertEqual(other["law_type"],"행정규칙")
 
+    def test_annual_newly_enacted_notice_compares_prior_official_year(self):
+        current=record("admrul","777","101","2026-07-29",
+                       "가상 지원 선정기준 2027년도")
+        current["revision"]="제정"
+        current["law_type"]="고시"
+        state=new_state()
+        state["documents"][current["id"]]=current
+        class OfficialAnnual(DummyAPI):
+            def __init__(self): super().__init__([current])
+            def request(self,endpoint,target,**params):
+                if params["nw"]=="1":
+                    return ET.fromstring("<Search><totalCnt>0</totalCnt></Search>")
+                return ET.fromstring("""<Search><totalCnt>1</totalCnt>
+                    <admrul><행정규칙명>가상 지원 선정기준 2026년도</행정규칙명>
+                    <행정규칙ID>776</행정규칙ID>
+                    <행정규칙일련번호>100</행정규칙일련번호>
+                    <발령일자>20250729</발령일자>
+                    <행정규칙종류>고시</행정규칙종류></admrul>
+                    </Search>""")
+            def history(self,doc): return []
+        result=analyze_one(OfficialAnnual(),state,current)
+        self.assertEqual(result["status"],"compared")
+        self.assertEqual(len(result["changes"]),1)
+        self.assertIn("30만원",result["changes"][0]["before"])
+        self.assertIn("40만원",result["changes"][0]["after"])
+        self.assertIn(result["baseline"]["id"],state["versions"])
+
     def test_annual_notice_baseline_uses_two_documented_history_modes(self):
         from policy_domino.pipeline import _annual_baseline
         import xml.etree.ElementTree as ET

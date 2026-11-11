@@ -209,7 +209,24 @@ def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
         pools["admrul"][channel] = woven
     state["rule_processing_rotation"] = offset + 1
 
-    chosen = []
+    # Guaranteed but bounded slots for records verified by a second
+    # independent official comparison feed. Never starve the standard queue.
+    priority = []
+    for key in state.get("reconciliation_priority_ids", []):
+        row = state.get("documents", {}).get(key)
+        if (row and not row.get("reference_only") and
+            state.get("findings", {}).get(key, {}).get("status") not in DONE
+            and retry_due(attempts.get(key, {}), today)
+            and attempts.get(key, {}).get("last_date") != today.isoformat()):
+            priority.append(row)
+    priority = priority[:max(1, limit // 3)]
+    priority_ids = {d["id"] for d in priority}
+    for source in SOURCES:
+        for channel in ("recent","backlog","retry"):
+            pools[source][channel] = [
+                row for row in pools[source][channel]
+                if row["id"] not in priority_ids]
+    chosen = list(priority)
     rhythm = ("recent", "backlog", "recent", "backlog", "retry")
     turn = 0
     while len(chosen) < max(0, limit):

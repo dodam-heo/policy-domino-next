@@ -116,7 +116,8 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
         if verified_type:
             doc["law_type"] = verified_type
             state["documents"][doc["id"]]["law_type"] = verified_type
-    after = parse_document(root)
+    from .annexes import enrich_annexes
+    after = enrich_annexes(root, parse_document(root))
     state["versions"][doc["id"]] = after
     base = {
         "event_id": doc["id"], "status": "",
@@ -157,7 +158,8 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
         state["documents"][prior["id"]] = {**prior, "reference_only": True}
     previous = state["versions"].get(prior["id"])
     if not previous:
-        previous = parse_document(api.detail(prior))
+        previous_root = api.detail(prior)
+        previous = enrich_annexes(previous_root,parse_document(previous_root))
         state["versions"][prior["id"]] = previous
     result = compare(previous, after, doc)
     result.update({
@@ -309,6 +311,11 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
             source_budget_seconds if collect_sources and due else 0),
         "time_seconds": round(time.monotonic()-started, 1),
     }
+    # Remove identifiers after analysis, preserving still-unexamined leads.
+    processed = {d["id"] for d in selected[:analyzed]}
+    if state.get("reconciliation_priority_ids"):
+        state["reconciliation_priority_ids"] = [
+            x for x in state["reconciliation_priority_ids"] if x not in processed]
     state["generated_at"] = utc_now()
     return state
 
@@ -439,9 +446,10 @@ def configured_law_oc() -> str:
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24", "migrate"))
+    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24", "migrate", "reconcile"))
     parser.add_argument("--limit", type=int, default=24)
     parser.add_argument("--page-budget", type=int, default=2)
+    parser.add_argument("--reconcile-windows",type=int,default=12)
     parser.add_argument("--time-budget", type=float, default=670)
     parser.add_argument("--analysis-only", action="store_true",
                         help="Revisit existing official documents without recrawling index")
@@ -455,6 +463,16 @@ def main(argv=None):
         # original state. Subsequent render uses the new state store.
         report = save_shards(args.state, state, SCHEMA)
         print("Official state shard migration:", json.dumps(report))
+    if args.mode == "reconcile":
+        from .reconciliation import reconcile_changed_rules
+        credential=configured_law_oc()
+        report=reconcile_changed_rules(
+            LawAPI(credential),state,dt.date.today(),
+            max_windows=max(1,min(args.reconcile_windows,60)),
+            max_seconds=max(30,min(args.time_budget,600)))
+        save_shards(args.state,state,SCHEMA)
+        print("Official historical rule reconciliation:",
+              json.dumps(report,ensure_ascii=False))
     if args.mode == "run":
         # The previous project's publicly configured official API OC is
         # "dori". It is an OC identifier, not a private API secret.

@@ -183,6 +183,54 @@ class LawAPI:
             source, first, last, version, reported if reported is not None else -1,
             len(seen), pages, False, error or "Official pagination limit reached", rule_kind)
 
+    def changed_rule_window(self, first: str, last: str,
+                            kind: str, max_pages: int = 20) -> tuple[list[dict], Coverage]:
+        """Independent official administrative-rule old/new comparison index.
+
+        This target is distinct from admrul: a missing document in one feed
+        can be discovered from the other, without annual title seeds.
+        """
+        if kind not in ADMIN_RULE_KINDS:
+            raise ValueError("Unsupported official rule category")
+        observed = {}
+        reported = None
+        pages = 0
+        error = ""
+        for page in range(1, max_pages+1):
+            try:
+                root = self.request("lawSearch.do", "admrulOldAndNew",
+                                    prmlYd=first.replace("-", "")+"~"+last.replace("-", ""),
+                                    knd=kind, page=page, display=100, sort="ddes")
+                n=field(root,"totalCnt")
+                if not n.isdigit():
+                    raise ApiError("Missing official old/new comparison totalCnt")
+                count=int(n)
+                if reported is not None and count!=reported:
+                    raise ApiError("Changing official comparison totalCnt")
+                reported=count
+                rows=nodes(root,"admrul")
+                if count and not rows:
+                    raise ApiError("Official comparison rows could not be parsed")
+                for el in rows:
+                    item=parse_record(el,"admrul")
+                    if item and first<=item["published_at"]<=last:
+                        item["law_type"]=ADMIN_RULE_KINDS[kind]
+                        observed[item["id"]]=item
+                pages=page
+                if count==0 or page*100>=count or len(rows)<100:
+                    complete=len(observed)==count
+                    return list(observed.values()),Coverage(
+                        "admrulOldAndNew",first,last,"both",count,len(observed),
+                        pages,complete,
+                        "" if complete else "Official comparison index/count mismatch",kind)
+            except Exception as exc:
+                error=type(exc).__name__+": "+str(exc)[:170]
+                break
+        return list(observed.values()),Coverage(
+            "admrulOldAndNew",first,last,"both",
+            reported if reported is not None else -1,len(observed),
+            pages,False,error or "Comparison page limit reached",kind)
+
     def detail(self, record: dict) -> ET.Element:
         source = record["source"]
         param = SOURCE_CONFIG[source]["detail_key"]
