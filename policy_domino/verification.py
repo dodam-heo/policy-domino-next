@@ -100,7 +100,17 @@ def main() -> None:
     if len(sys.argv) < 2:
         raise SystemExit("usage: python -m policy_domino.verification INPUT [OUTPUT]")
     source = Path(sys.argv[1])
-    result = audit(json.loads(source.read_text(encoding="utf-8")))
+    data = json.loads(source.read_text(encoding="utf-8"))
+    if data.get("distribution") == "split-v1":
+        base = source.parent
+        sources = json.loads((base / "sources.json").read_text(encoding="utf-8"))
+        data["documents"] = sources["documents"]
+        data["events"] = [
+            json.loads((base / "details" / (event["id"] + ".json")
+                       ).read_text(encoding="utf-8"))
+            for event in data.get("events", [])
+        ]
+    result = audit(data)
     if len(sys.argv) >= 3:
         Path(sys.argv[2]).write_text(
             json.dumps(result, ensure_ascii=False, indent=2) + "\n",

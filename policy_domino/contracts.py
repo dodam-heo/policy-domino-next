@@ -556,10 +556,81 @@ def validate_public(payload: dict) -> dict:
     }
 
 
+def validate_split_export(catalog_file: Path) -> dict:
+    """Verify every published detail is addressable and matches the list index.
+
+    render() applies validate_public to the full evidence graph BEFORE exporting
+    these compact files. This validates the actual deployable projection.
+    """
+    import re
+    folder = catalog_file.parent
+    catalog = json.loads(catalog_file.read_text(encoding="utf-8"))
+    if catalog.get("distribution") != "split-v1":
+        raise ContractError("Expected split-v1 public projection")
+    sources = json.loads((folder / "sources.json").read_text(encoding="utf-8"))
+    if sources.get("schema") != catalog.get("schema"):
+        raise ContractError("Source index and catalog use different schemas")
+    docs = sources.get("documents")
+    if not isinstance(docs, list) or len({d.get("id") for d in docs}) != len(docs):
+        raise ContractError("Source index must have unique document identities")
+    doc_ids = {d["id"] for d in docs}
+    summaries = catalog.get("events")
+    if not isinstance(summaries, list):
+        raise ContractError("Catalog has no events")
+    ids = set()
+    reviews = 0
+    for summary in summaries:
+        identity = summary.get("id", "")
+        if not re.fullmatch(r"event-[0-9a-f]{24}",identity) or identity in ids:
+            raise ContractError("Unsafe or duplicate event identity: "+str(identity))
+        ids.add(identity)
+        if summary.get("detail_path") != "./details/" + identity + ".json":
+            raise ContractError("Incorrect event detail path for "+identity)
+        file = folder / "details" / (identity + ".json")
+        detail = json.loads(file.read_text(encoding="utf-8"))
+        if detail.get("id") != identity:
+            raise ContractError("Event detail identity mismatch")
+        for key in ("title","published_at","kind","review_count",
+                    "institution_count","effective_date"):
+            if detail.get(key) != summary.get(key):
+                raise ContractError("Inconsistent event field: "+key+" "+identity)
+        if not set(detail.get("source_documents",[])) <= doc_ids:
+            raise ContractError("Event refers to missing official source: "+identity)
+        actions = detail.get("institutional_reviews",[])
+        if len(actions) != summary.get("review_count"):
+            raise ContractError("Institution review count mismatch")
+        institutions = {r.get("institution") for r in actions if r.get("institution")}
+        if sorted(institutions) != summary.get("agency_names",[]):
+            raise ContractError("Institution names mismatch")
+        from .events import is_office_title
+        if any(is_office_title(name) for name in institutions):
+            raise ContractError("Statutory officeholder is not an institution")
+        for changed in detail.get("changes",[]):
+            if not changed.get("source_url") or not changed.get("evidence"):
+                raise ContractError("Published change lacks official proof")
+        reviews += len(actions)
+    actual={p.name for p in (folder / "details").glob("*.json")}
+    expected={identity+".json" for identity in ids}
+    if actual != expected:
+        raise ContractError("Orphaned or missing event detail files")
+    if len(summaries) != catalog.get("detail_count"):
+        raise ContractError("Catalog detail count mismatch")
+    if (folder/"data.json").exists():
+        raise ContractError("Legacy combined JSON must not be deployed")
+    return {"indexed_source_documents":len(docs),
+            "verified_policy_events":len(ids),
+            "source_bound_institutional_reviews":reviews,
+            "distribution":"split-v1"}
+
+
 def main() -> None:
     path = Path(sys.argv[1])
-    print("Evidence contract passed:", validate_public(
-        json.loads(path.read_text(encoding="utf-8"))))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if raw.get("distribution") == "split-v1":
+        result = validate_split_export(path)
+    else:
+        result = validate_public(raw)
+    print("Evidence contract passed:", result)
 
 
 if __name__ == "__main__":
