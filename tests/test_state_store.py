@@ -140,6 +140,36 @@ class ShardedStateTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(
                     (folder/"content"/name).read_bytes()).hexdigest(),digest)
 
+    def test_comparison_text_reuses_exact_official_source_content(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/"data"/"state.json"
+            before="제3조(기준) 10만원"
+            after="제3조(기준) 12만원"
+            sha=lambda text:hashlib.sha256(text.encode()).hexdigest()
+            state=new_state()
+            state["versions"]={
+                "old":{"clauses":{"제3조":{"text":before,"complete":True,
+                                          "sha256":sha(before)}}},
+                "new":{"clauses":{"제3조":{"text":after,"complete":True,
+                                          "sha256":sha(after)}}},
+            }
+            state["findings"]={"new":{"status":"compared","changes":[{
+                "article":"제3조","before":before,"after":after,
+                "evidence":{"old_body_sha256":sha(before),
+                            "new_body_sha256":sha(after)}
+            }]}}
+            save_shards(path,state,SCHEMA)
+            raw=load_state(path)
+            self.assertEqual(raw,state)
+            folder=shard_dir(path)
+            import gzip
+            metadata=json.loads(gzip.decompress(
+                (folder/"meta_v2.json.gz").read_bytes()))
+            self.assertEqual(metadata["findings"]["new"]["changes"][0]["before"],
+                             {"$clause_text_ref":sha(before)})
+            self.assertEqual(metadata["findings"]["new"]["changes"][0]["after"],
+                             {"$clause_text_ref":sha(after)})
+
     def test_legacy_v1_shards_upgrade_without_dropping_contents(self):
         from policy_domino.state_store import _compressed_json, _bucket
         with tempfile.TemporaryDirectory() as root:

@@ -523,6 +523,9 @@ def main(argv=None):
         # Offline, non-destructive one-time conversion of a fully verified
         # original state. Subsequent render uses the new state store.
         report = save_shards(args.state, state, SCHEMA)
+        recovered = load_state(args.state)
+        if recovered != state:
+            raise SystemExit("Migration blocked: original state and migrated state differ")
         print("Official state shard migration:", json.dumps(report))
     if args.mode == "reconcile":
         from .reconciliation import reconcile_changed_rules

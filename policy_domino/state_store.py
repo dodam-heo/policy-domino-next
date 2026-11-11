@@ -105,7 +105,7 @@ def load_shards(state_path: Path, schema: str) -> dict:
     folder = shard_dir(state_path)
     manifest = _read_manifest(folder, schema)
     v2 = manifest["version"] == STORAGE_VERSION
-    state = _unpack(folder / "meta.json.gz")
+    state = _unpack(folder / ("meta_v2.json.gz" if v2 else "meta.json.gz"))
     if not isinstance(state, dict) or state.get("schema") != schema:
         raise ValueError("Invalid state shard metadata")
     records_base = folder / ("records_v2" if v2 else "records")
@@ -144,6 +144,23 @@ def load_shards(state_path: Path, schema: str) -> dict:
                     version["clauses"][key] = copy.deepcopy(blocks[digest])
                 elif isinstance(body, dict) and "text" in body:
                     raise ValueError("Undeduplicated clause in v2 record")
+        by_text_sha={}
+        for body in blocks.values():
+            if isinstance(body, dict) and isinstance(body.get("text"), str):
+                # Hashes from official extraction are SHA-256 of actual text.
+                fingerprint=hashlib.sha256(body["text"].encode("utf-8")).hexdigest()
+                by_text_sha[fingerprint]=body["text"]
+        for finding in state.get("findings", {}).values():
+            if not isinstance(finding, dict):
+                continue
+            for change in finding.get("changes", []):
+                for key in ("before", "after"):
+                    ref=change.get(key)
+                    if isinstance(ref, dict) and set(ref)=={"$clause_text_ref"}:
+                        digest=ref["$clause_text_ref"]
+                        if digest not in by_text_sha:
+                            raise ValueError("Missing official clause text for "+str(digest))
+                        change[key]=by_text_sha[digest]
     return state
 
 
@@ -189,7 +206,8 @@ def save_shards(state_path: Path, state: dict, schema: str) -> dict:
     folder = shard_dir(state_path)
     prior = (_read_manifest(folder, schema) if has_shards(state_path) else {})
     old_packs = prior.get("content_packs", []) if prior.get("version") == STORAGE_VERSION else []
-    known = set(_read_packs(folder, prior)) if old_packs else set()
+    original_blocks = _read_packs(folder, prior) if old_packs else {}
+    known = set(original_blocks)
 
     stored_state = state.copy()
     versions = state.get("versions", {})
@@ -203,7 +221,7 @@ def save_shards(state_path: Path, state: dict, schema: str) -> dict:
             version = raw_version.copy()
             clauses = {}
             for key, body in raw_version["clauses"].items():
-                if isinstance(body, dict) and "text" in body and "sha256" in body:
+                if isinstance(body, dict) and "text" in body:
                     digest = _fingerprint(body)
                     clauses[key] = {CLAUSE_REF: digest}
                     if digest not in known and digest not in pending:
@@ -214,6 +232,40 @@ def save_shards(state_path: Path, state: dict, schema: str) -> dict:
             version["clauses"] = clauses
             referenced[identity] = version
         stored_state["versions"] = referenced
+
+    # Findings reference exactly the same official clause texts, not another
+    # copy of every before/after article. Fall back to literal strings if an
+    # older finding cannot be proven to equal an official stored version.
+    by_text_sha = {}
+    for block in (*original_blocks.values(), *pending.values()):
+        if isinstance(block, dict) and isinstance(block.get("text"), str):
+            body = block["text"]
+            by_text_sha[hashlib.sha256(body.encode("utf-8")).hexdigest()] = body
+    if isinstance(state.get("findings"), dict):
+        stored_findings={}
+        for identity, raw_finding in state["findings"].items():
+            if not isinstance(raw_finding, dict) or not isinstance(raw_finding.get("changes"), list):
+                stored_findings[identity]=raw_finding
+                continue
+            finding=raw_finding.copy()
+            changes=[]
+            for raw_change in finding["changes"]:
+                if not isinstance(raw_change, dict):
+                    changes.append(raw_change)
+                    continue
+                change=raw_change.copy()
+                evidence=change.get("evidence") or {}
+                for key, proof_key in (("before","old_body_sha256"),
+                                       ("after","new_body_sha256")):
+                    text=change.get(key)
+                    digest=evidence.get(proof_key)
+                    if (isinstance(text,str) and isinstance(digest,str) and
+                            by_text_sha.get(digest)==text):
+                        change[key]={"$clause_text_ref":digest}
+                changes.append(change)
+            finding["changes"]=changes
+            stored_findings[identity]=finding
+        stored_state["findings"]=stored_findings
 
     new_packs = _write_new_packs(folder, pending)
     names = sorted(set(old_packs) | set(new_packs))
@@ -239,7 +291,7 @@ def save_shards(state_path: Path, state: dict, schema: str) -> dict:
                 expected.add(file)
         else:
             metadata[key] = value
-    _save_unchanged_aware(folder / "meta.json.gz", _compressed_json(metadata))
+    _save_unchanged_aware(folder / "meta_v2.json.gz", _compressed_json(metadata))
     manifest = {
         "schema": schema, "version": STORAGE_VERSION,
         "bucket_count": BUCKET_COUNT, "sharded": sharded,
@@ -266,6 +318,9 @@ def save_shards(state_path: Path, state: dict, schema: str) -> dict:
                 directory.rmdir()
         if not any(legacy.iterdir()):
             legacy.rmdir()
+    legacy_meta=folder / "meta.json.gz"
+    if legacy_meta.exists():
+        legacy_meta.unlink()
     if state_path.exists():
         state_path.unlink()
     return {
