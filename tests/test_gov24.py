@@ -288,6 +288,25 @@ class Gov24Tests(unittest.TestCase):
         self.assertNotIn(("100만원","180만원"),pairs)
         self.assertNotIn(("150만원","120만원"),pairs)
 
+    def test_title_only_law_name_without_actual_matching_criterion_is_not_a_link(self):
+        raw = record("OUTSIDE")
+        raw["법령"] = "가상 공공서비스 운영법"
+        raw["선정기준"] = "거주 50만원 이하"
+        raw["지원대상"] = "관내 거주자"
+        raw["지원내용"] = "주택임차 안내"
+        event = policy_event()
+        discover_public_service_leads(
+            {"public_services": {"OUTSIDE": normalize_record(raw)}}, [event])
+        self.assertEqual(event["public_service_lead_count"], 0)
+        # Source-aligned old criterion and wording create a traceable lead.
+        raw["선정기준"] = "소득 50만원 이하"
+        event = policy_event()
+        discover_public_service_leads(
+            {"public_services": {"OUTSIDE": normalize_record(raw)}}, [event])
+        self.assertEqual(event["public_service_lead_count"], 1)
+        self.assertEqual(event["public_service_leads"][0]["match_tier"],
+                         "official_rule_title")
+
     def test_title_only_basis_does_not_pretend_article_level_citation(self):
         raw=record("S777")
         raw["법령"]="가상 공공서비스 운영법"
