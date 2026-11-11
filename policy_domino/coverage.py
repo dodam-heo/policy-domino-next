@@ -157,6 +157,8 @@ def pending_counts(state, today: dt.date | None = None) -> dict:
 
 def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
     """A protected backlog share prevents newest-first permanent starvation."""
+    if limit <= 0:
+        return []
     cutoff = (today - dt.timedelta(days=21)).isoformat()
     attempts = state.get("attempts", {})
     pools = {source: {"recent": [], "backlog": [], "retry": []}
@@ -228,6 +230,20 @@ def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
             and attempts.get(key, {}).get("last_date") != today.isoformat()):
             priority.append(row)
     priority = priority[:max(1, limit // 3)]
+    # Publication order alone strands notices issued months before they take
+    # effect. Reserve a bounded share for upcoming official effective dates,
+    # across every source and subject, while keeping the historical lanes.
+    priority_ids = {d["id"] for d in priority}
+    horizon = (today + dt.timedelta(days=366)).isoformat()
+    upcoming = [row for queues in pools.values()
+                for rows in queues.values() for row in rows
+                if today.isoformat() < row.get("effective_date", "") <= horizon
+                and row["id"] not in priority_ids]
+    upcoming.sort(key=lambda row: (
+        not bool(re.search(r"기준|금액|요건|선정|수준", row.get("title", ""))),
+        row["effective_date"], attempts.get(row["id"], {}).get("count", 0),
+        row.get("published_at", ""), row["id"]))
+    priority.extend(upcoming[:min(max(1, limit // 6), limit-len(priority))])
     priority_ids = {d["id"] for d in priority}
     for source in SOURCES:
         for channel in ("recent","backlog","retry"):

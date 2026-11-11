@@ -146,6 +146,27 @@ class CoverageTests(unittest.TestCase):
         self.assertTrue(any(d["published_at"]=="2026-11-09" for d in queue))
         self.assertEqual(len(set(d["id"] for d in queue)),len(queue))
 
+    def test_upcoming_effective_notices_do_not_wait_behind_old_backlog(self):
+        state = new_state()
+        today = dt.date(2026, 11, 11)
+        for n in range(100):
+            row = document("admrul", n, "2026-05-01")
+            state["documents"][row["id"]] = row
+        upcoming = document("admrul", "upcoming", "2026-08-31")
+        upcoming["effective_date"] = "2027-01-01"
+        state["documents"][upcoming["id"]] = upcoming
+        queue = fair_work_queue(state, today, 12)
+        self.assertIn(upcoming["id"], {row["id"] for row in queue})
+        self.assertEqual(len(queue), 12)
+        self.assertEqual(len({row["id"] for row in queue}), 12)
+        self.assertTrue(any(row.get("published_at") == "2026-05-01"
+                            for row in queue))
+        self.assertEqual(fair_work_queue(state, today, 0), [])
+        state["attempts"][upcoming["id"]] = {
+            "count": 1, "last_date": today.isoformat()}
+        self.assertNotIn(upcoming["id"], {row["id"] for row in
+                         fair_work_queue(state, today, 12)})
+
     def test_retry_threshold_is_not_permanent_exclusion(self):
         from policy_domino.coverage import retry_due
         previous={"count":4,"last_date":"2026-11-08"}
