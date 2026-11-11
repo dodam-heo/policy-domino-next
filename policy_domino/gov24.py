@@ -262,7 +262,11 @@ def _title_only_criterion_match(service: dict, change: dict) -> bool:
         if not original:
             continue
         for old, _new in pairs:
-            for source in re.finditer(re.escape(old), original):
+            # A 50만원 revision must not match a 150만원 service criterion.
+            literal = r"(?<![\\d,.])" + r"\\s*".join(
+                re.escape(char) for char in old if not char.isspace()
+            ) + r"(?![\\d,.])"
+            for source in re.finditer(literal, original):
                 source_left = original[max(0, source.start()-55):source.start()]
                 source_words = set(re.findall(r"[가-힣]{2,}", source_left))
                 for legal in re.finditer(re.escape(old), before):
