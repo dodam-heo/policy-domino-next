@@ -69,6 +69,7 @@ def new_state() -> dict:
         "dependency_discovery": {}, "discovery_metrics": {},
         "official_programs": {}, "program_source_audit": {},
         "official_institutions": {}, "official_institution_audit": {},
+        "official_local_institutions": {}, "official_local_audit": {},
         "errors": [], "generated_at": "",
     }
 

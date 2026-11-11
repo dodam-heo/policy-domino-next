@@ -61,3 +61,86 @@ def collect_institutions(state:dict,transport=None)->dict:
                 "error":type(exc).__name__+":"+str(exc)[:120]}
     state["official_institution_audit"]=report
     return report
+
+
+# 지방공사·공단은 중앙 ALIO 명부에 포함되지 않는다.
+# 지방공기업의 공식 원천은 행정안전부 클린아이 설립현황이다.
+CLEANEYE_URL="https://www.cleaneye.go.kr/siteGuide/pubCompStatus.do"
+
+class _InstitutionTable(__import__("html.parser",fromlist=["HTMLParser"]).HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.rows=[]
+        self.row=None
+        self.cell=None
+        self.collect=False
+    def handle_starttag(self,tag,attrs):
+        if tag=="tr":
+            self.row=[]
+        elif tag in ("td","th") and self.row is not None:
+            self.cell=[]
+        elif tag=="br" and self.cell is not None:
+            self.cell.append(", ")
+    def handle_data(self,data):
+        if self.cell is not None:
+            self.cell.append(data)
+    def handle_endtag(self,tag):
+        if tag in ("td","th") and self.cell is not None:
+            self.row.append(" ".join("".join(self.cell).split()))
+            self.cell=None
+        elif tag=="tr" and self.row is not None:
+            if self.row:self.rows.append(self.row)
+            self.row=None
+
+def parse_local_registry(html:str) -> dict:
+    """Parse publisher-labelled 기관명 columns; never infer an institution from a keyword."""
+    import hashlib
+    parser=_InstitutionTable()
+    parser.feed(html)
+    valid_header=any("기관명" in " ".join(r) for r in parser.rows)
+    if not valid_header:
+        raise ValueError("Official CleanEye institution column absent")
+    found={}
+    for row in parser.rows:
+        if not row or "기관명" in row[-1] or len(row[-1])<5:
+            continue
+        # Only institution-name cells in the official establishment table,
+        # never the region, count, class, or unverified footer narrative.
+        names=re.split(r"[,，、]|(?:\s{2,})",row[-1])
+        for item in names:
+            name=" ".join(item.split()).strip()
+            if not (5<=len(name)<=100 and
+                    re.search(r"공사|공단|상수도|하수도|공영개발|사업소|교통공사",name)):
+                continue
+            if any(word in name for word in ("총계","소계","기관명","유형","분류")):
+                continue
+            code=hashlib.sha256(name.encode("utf8")).hexdigest()[:18]
+            found[code]={"id":code,"agency":name,"source":"cleaneye_establishment",
+                         "source_url":CLEANEYE_URL}
+    if len(found)<30:
+        raise ValueError("Official CleanEye rows too few to trust")
+    return found
+
+def collect_local_institutions(state:dict, transport=None)->dict:
+    try:
+        if transport:
+            raw=transport(CLEANEYE_URL)
+        else:
+            request=Request(CLEANEYE_URL,headers={
+                "User-Agent":"PolicyDominoNext/1.0"})
+            with urlopen(request,timeout=18) as response:
+                if not response.geturl().startswith(
+                        "https://www.cleaneye.go.kr/siteGuide/"):
+                    raise ValueError("Untrusted CleanEye redirect")
+                raw=response.read(3_000_001)
+        if len(raw)>3_000_000:raise ValueError("CleanEye page too large")
+        parsed=parse_local_registry(raw.decode("utf8","replace"))
+        state["official_local_institutions"]=parsed
+        audit={"source":"cleaneye","status":"collected",
+               "count":len(parsed),"coverage":"extracted establishment table; not verified exhaustive"}
+    except (OSError,ValueError,TypeError,UnicodeError) as exc:
+        audit={"source":"cleaneye","status":"refresh_failed",
+               "count":len(state.get("official_local_institutions",{})),
+               "error":type(exc).__name__+":"+str(exc)[:120]}
+    state["official_local_audit"]=audit
+    return audit

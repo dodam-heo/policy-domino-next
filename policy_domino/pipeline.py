@@ -417,6 +417,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         row[key] += 1
     for institution in state.get("official_institutions",{}).values():
         register_agency(institution.get("agency",""),"official_registry")
+    for institution in state.get("official_local_institutions",{}).values():
+        register_agency(institution.get("agency",""),"official_registry")
     for program in state.get("official_programs", {}).values():
         register_agency(program.get("agency", ""), "alioplus_programs")
     for service in state.get("public_services", {}).values():
@@ -451,6 +453,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "agency_directory": agency_directory,
         "agency_directory_audit": agency_directory_audit,
         "official_institution_audit": state.get("official_institution_audit",{}),
+        "official_local_audit": state.get("official_local_audit",{}),
         "gov24_audit": state.get("gov24_audit", {
             "source":"gov24_public_services","status":"not_configured"}),
         "public_services_indexed": len(state.get("public_services", {})),
@@ -576,10 +579,12 @@ def main(argv=None):
         print("Gov24 public-service collection:",
               json.dumps(audit, ensure_ascii=False))
     if args.mode == "institutions":
-        from .agency_registry import collect_institutions
+        from .agency_registry import collect_institutions, collect_local_institutions
         audit=collect_institutions(state)
+        local_audit=collect_local_institutions(state)
         save_shards(args.state,state,SCHEMA)
-        print("Official institution directory:",json.dumps(audit,ensure_ascii=False))
+        print("Official institution directory:",json.dumps(
+            {"alio":audit,"cleaneye":local_audit},ensure_ascii=False))
     if args.mode == "ai-check":
         from .ai import assess_ai_run
         report = state.get("ai_run", {})
