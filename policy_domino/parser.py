@@ -93,7 +93,8 @@ def parse_document(root: ET.Element) -> dict:
                 if label in out:
                     label += " " + str(len(out))
                 out[label] = take(value)
-    if not out:
+    if not any(k.startswith("제") or k == "본문" for k in out):
+        # Supplements and annexes do not replace an unnumbered rule body.
         # Flat administrative rules sometimes have only body-level text.
         flat = []
         for node in root.iter():
@@ -117,14 +118,18 @@ def parse_document(root: ET.Element) -> dict:
                     out[key] = take(entire[match.start():stop])
             else:
                 out["본문"] = take(entire)
+    image_count = sum(len(re.findall(r"<img\b", node.text or "", re.I))
+                      for node in root.iter())
     incomplete = [k for k, v in out.items() if not v["complete"]]
     if not out:
         status = "attachment_only" if attachment_links else "body_missing"
-    elif incomplete or attachment_links:
+    elif incomplete or attachment_links or image_count:
         status = "partial"
     else:
         status = "extracted"
     return {
+        "image_placeholder_count": image_count,
+        "extraction_schema": 2,
         "status": status, "clauses": out,
         "incomplete_keys": incomplete, "attachment_link_count": attachment_links,
         "attachment_links":pending_annex_links,

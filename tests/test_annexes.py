@@ -3,7 +3,8 @@ import unittest
 import xml.etree.ElementTree as ET
 from policy_domino.parser import parse_document
 from policy_domino.annexes import (
-    authorized_law_pdf_url, enrich_annexes, normalize_legacy_annex_keys
+    authorized_law_pdf_url, enrich_annexes, normalize_legacy_annex_keys,
+    extract_hwpx_text
 )
 from policy_domino.analysis import compare
 
@@ -37,6 +38,63 @@ class AnnexIntegrationTests(unittest.TestCase):
         self.assertIn("120만원",change["changes"][0]["after"])
         self.assertEqual(len(urls),2)
         self.assertTrue(after["annex_evidence"]["별표 1"]["pdf_sha256"])
+
+    def test_flat_notice_body_and_root_pdf_survive_supplementary_provisions(self):
+        def notice(amount, seq):
+            return ET.fromstring("""<행정규칙>
+              <조문내용>1. 선정기준은 표와 같다.&lt;img id="1"&gt;&lt;/img&gt;</조문내용>
+              <부칙><부칙내용>이 고시는 다음 해부터 시행한다.</부칙내용></부칙>
+              <첨부파일><첨부파일명>연간 기준(전문).pdf</첨부파일명>
+              <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=""" + seq + """</첨부파일링크>
+              <첨부파일명>연간 기준(전문).hwpx</첨부파일명>
+              <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=999</첨부파일링크>
+              </첨부파일></행정규칙>""")
+        old, new = notice("100", "11"), notice("120", "12")
+        self.assertIn("본문", parse_document(new)["clauses"])
+        urls = []
+        def download(url):
+            urls.append(url)
+            return b"%PDF official test"
+        before = enrich_annexes(old, parse_document(old), downloader=download,
+                               pdf_extractor=lambda _: "선정기준 100만원")
+        after = enrich_annexes(new, parse_document(new), downloader=download,
+                              pdf_extractor=lambda _: "선정기준 120만원")
+        result = compare(before, after, {"url": "https://www.law.go.kr"})
+        self.assertEqual(len(result["changes"]), 1)
+        self.assertEqual(result["changes"][0]["article"], "첨부 전문")
+        self.assertEqual(len(urls), 2)
+        self.assertFalse(any("999" in url for url in urls))
+        self.assertTrue(after["annex_evidence"]["첨부 전문"]["pdf_sha256"])
+
+    def test_hwpx_only_official_notice_extracts_table_cells(self):
+        import io
+        import zipfile
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("Contents/section0.xml", """<section xmlns:hp="urn:test">
+              <hp:p><hp:t>가구원 수별 선정기준</hp:t></hp:p>
+              <hp:tbl><hp:tr><hp:tc><hp:t>4인</hp:t></hp:tc>
+              <hp:tc><hp:t>100만원</hp:t></hp:tc></hp:tr></hp:tbl></section>""")
+        blob = buffer.getvalue()
+        self.assertIn("4인 100만원", extract_hwpx_text(blob))
+        root = ET.fromstring("""<행정규칙><첨부파일>
+          <첨부파일명>지원기준.hwpx</첨부파일명>
+          <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=20</첨부파일링크>
+          </첨부파일></행정규칙>""")
+        result = enrich_annexes(root, parse_document(root),
+                               hwpx_downloader=lambda _: blob)
+        self.assertIn("100만원", result["clauses"]["첨부 전문"]["text"])
+        self.assertEqual(result["annex_evidence"]["첨부 전문"]["source"],
+                         "law_go_kr_official_hwpx")
+
+    def test_unresolved_inline_image_table_remains_partial(self):
+        root = ET.fromstring("""<행정규칙><조문내용>
+            선정기준은 다음 표와 같다. &lt;img id="30"&gt;&lt;/img&gt;
+            </조문내용></행정규칙>""")
+        result = enrich_annexes(root, parse_document(root))
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["unresolved_annexes"][0]["reason"],
+                         "image_table_unresolved")
 
     def test_unextractable_annex_fails_closed(self):
         root=ET.fromstring("""<행정규칙><별표단위><별표번호>4</별표번호>

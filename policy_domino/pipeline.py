@@ -170,7 +170,8 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
     from .annexes import normalize_legacy_annex_keys
     previous = state["versions"].get(prior["id"])
     missing_pdf = bool(previous and previous.get("attachment_link_count")
-                       and (previous.get("status") != "extracted"))
+                       and (previous.get("status") != "extracted" or
+                            previous.get("extraction_schema") != 2))
     if not previous or missing_pdf:
         previous_root = api.detail(prior)
         previous = enrich_annexes(

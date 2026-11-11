@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import zipfile
+import xml.etree.ElementTree as ET
 import re
 import urllib.parse
 import urllib.request
@@ -26,10 +28,10 @@ def authorized_law_pdf_url(href: str) -> str:
     absolute = urllib.parse.urljoin("https://www.law.go.kr/", href)
     try:
         parsed = urllib.parse.urlparse(absolute)
-        if (parsed.scheme != "https" or
+        if (parsed.scheme not in ("http", "https") or
             parsed.hostname not in ("www.law.go.kr","law.go.kr") or
             parsed.username or parsed.password or
-            parsed.path != "/LSW/flDownload.do"):
+            parsed.path not in ("/LSW/flDownload.do", "/flDownload.do")):
             return ""
         args = urllib.parse.parse_qs(parsed.query)
         seq = args.get("flSeq", [""])[0]
@@ -40,7 +42,7 @@ def authorized_law_pdf_url(href: str) -> str:
         return ""
 
 
-def fetch_official_pdf(href: str) -> bytes:
+def fetch_official_file(href: str, magic: bytes) -> bytes:
     url=authorized_law_pdf_url(href)
     if not url:
         raise ValueError("Only official law.go.kr PDF download URLs are allowed")
@@ -60,9 +62,36 @@ def fetch_official_pdf(href: str) -> bytes:
         content=response.read(MAX_ATTACHMENT_BYTES+1)
     if len(content)>MAX_ATTACHMENT_BYTES:
         raise ValueError("Official PDF exceeds size limit")
-    if not content.startswith(b"%PDF"):
-        raise ValueError("Official attachment was not a PDF")
+    if not content.startswith(magic):
+        raise ValueError("Official attachment format mismatch")
     return content
+
+
+def fetch_official_pdf(href: str) -> bytes:
+    return fetch_official_file(href, b"%PDF")
+
+
+def fetch_official_hwpx(href: str) -> bytes:
+    return fetch_official_file(href, b"PK")
+
+
+def extract_hwpx_text(blob: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+        sections = [item for item in archive.infolist()
+                    if re.fullmatch(r"Contents/section\d+\.xml", item.filename)]
+        if not sections or len(sections) > 100 or sum(
+                item.file_size for item in sections) > 20_000_000:
+            raise ValueError("HWPX section size/count invalid")
+        chunks = []
+        for item in sorted(sections, key=lambda x: int(re.search(
+                r"section(\d+)", x.filename).group(1))):
+            root = ET.fromstring(archive.read(item))
+            chunks.extend(clean("".join(node.itertext())) for node in root.iter()
+                          if tag(node) == "t" and "".join(node.itertext()).strip())
+        value = clean(" ".join(chunks))
+        if not value or len(value) > MAX_TEXT:
+            raise ValueError("HWPX text empty or excessive")
+        return value
 
 
 def extract_digital_pdf_text(pdf: bytes) -> str:
@@ -114,7 +143,9 @@ def enrich_annexes(root, parsed: dict, *,
                    downloader=fetch_official_pdf,
                    pdf_extractor=extract_digital_pdf_text,
                    previous_snapshot: dict | None = None,
-                   max_downloads: int = 4) -> dict:
+                   max_downloads: int = 4,
+                   hwpx_downloader=fetch_official_hwpx,
+                   hwpx_extractor=extract_hwpx_text) -> dict:
     """Materialize missing annex bodies from official PDF links; retain audit."""
     result=dict(parsed)
     clauses=dict(result.get("clauses",{}))
@@ -168,6 +199,75 @@ def enrich_annexes(root, parsed: dict, *,
             processed+=1
         except Exception as exc:
             failures.append({"annex":label,"reason":type(exc).__name__})
+    # Notices often embed tables as <img> and attach the whole legal text
+    # as a root-level PDF, without any 별표단위 nodes. Pair each sibling link
+    # with its actual filename; do not try HWP/HWPX as if they were PDFs.
+    root_pdfs = []
+    root_hwpx = []
+    for parent in root.iter():
+        filename = ""
+        for child in parent:
+            if tag(child) == "첨부파일명":
+                filename = clean("".join(child.itertext()))
+            elif tag(child) == "첨부파일링크":
+                href = clean("".join(child.itertext()))
+                if filename.lower().endswith(".pdf"):
+                    root_pdfs.append(href)
+                elif filename.lower().endswith(".hwpx"):
+                    root_hwpx.append(href)
+    root_pdfs = list(dict.fromkeys(root_pdfs))
+    # A single official PDF has an unambiguous whole-document identity.
+    # Multiple PDFs require explicit mapping, never arbitrary ordinal pairing.
+    if len(root_pdfs) == 1:
+        label = "첨부 전문"
+        approved = authorized_law_pdf_url(root_pdfs[0])
+        if not approved:
+            failures.append({"annex": label, "reason": "official_pdf_not_available"})
+        elif not (label in clauses and clauses[label].get("complete")):
+            if processed >= max_downloads:
+                failures.append({"annex": label, "reason": "deferred_pdf_budget"})
+            else:
+                try:
+                    blob = downloader(approved)
+                    clause = take(pdf_extractor(blob))
+                    if not clause["complete"]:
+                        raise ValueError("Full-text PDF incomplete")
+                    clauses[label] = clause
+                    provenance[label] = {
+                        "source": "law_go_kr_official_pdf", "url": approved,
+                        "pdf_sha256": hashlib.sha256(blob).hexdigest(),
+                        "text_sha256": clause["sha256"],
+                    }
+                    processed += 1
+                except Exception as exc:
+                    failures.append({"annex": label, "reason": type(exc).__name__})
+    elif len(root_pdfs) > 1:
+        failures.append({"annex": "첨부 전문", "reason": "ambiguous_multiple_pdfs"})
+    if not root_pdfs and len(set(root_hwpx)) == 1:
+        label = "첨부 전문"
+        approved = authorized_law_pdf_url(root_hwpx[0])
+        if not approved:
+            failures.append({"annex": label, "reason": "official_hwpx_not_available"})
+        elif not (label in clauses and clauses[label].get("complete")):
+            if processed >= max_downloads:
+                failures.append({"annex": label, "reason": "deferred_hwpx_budget"})
+            else:
+                try:
+                    blob = hwpx_downloader(approved)
+                    clause = take(hwpx_extractor(blob))
+                    if not clause["complete"]:
+                        raise ValueError("Full-text HWPX incomplete")
+                    clauses[label] = clause
+                    provenance[label] = {
+                        "source": "law_go_kr_official_hwpx", "url": approved,
+                        "file_sha256": hashlib.sha256(blob).hexdigest(),
+                        "text_sha256": clause["sha256"],
+                    }
+                    processed += 1
+                except Exception as exc:
+                    failures.append({"annex": label, "reason": type(exc).__name__})
+    if result.get("image_placeholder_count") and "첨부 전문" not in provenance:
+        failures.append({"annex": "본문 표", "reason": "image_table_unresolved"})
     result["clauses"]=clauses
     result["annex_evidence"]=provenance
     result["unresolved_annexes"]=failures
