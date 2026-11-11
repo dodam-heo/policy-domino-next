@@ -1,0 +1,33 @@
+name: Capture NEXT Actual Website Demo
+on:
+  push:
+    branches: [video-demo-capture-20261111]
+  workflow_dispatch:
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser recording dependencies
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install ffmpeg
+          command -v google-chrome || command -v google-chrome-stable
+      - name: Record live website interactions
+        shell: bash
+        run: |
+          export CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable)"
+          node tools/capture_demo.cjs
+      - name: Upload demo recording
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-actual-website-capture
+          path: captures/
+          if-no-files-found: warn
+          retention-days: 2
