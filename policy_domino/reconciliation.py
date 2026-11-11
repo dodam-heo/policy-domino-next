@@ -38,9 +38,11 @@ def _query(api, first: str, last: str, kind: str, splits: int = 4):
     a, ar, ok1 = _query(api, first, mid.isoformat(), kind, splits-1)
     b, br, ok2 = _query(api,
                       (mid+dt.timedelta(days=1)).isoformat(),last,kind,splits-1)
-    merged = {doc["id"]: doc for doc in records}
-    merged.update({doc["id"]: doc for doc in a})
-    merged.update({doc["id"]: doc for doc in b})
+    def identity(doc):
+        return (doc.get("comparison_id"),doc.get("comparison_serial"))
+    merged = {identity(doc): doc for doc in records}
+    merged.update({identity(doc): doc for doc in a})
+    merged.update({identity(doc): doc for doc in b})
     return list(merged.values()), [audit.as_dict()]+ar+br,ok1 and ok2
 
 
@@ -62,6 +64,11 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
     audits = state.setdefault("reconciliation_windows", {})
     documents = state.setdefault("documents", {})
     newly_identified = []
+    canonical_by_name_date = {}
+    for rec in documents.values():
+        if rec.get("source")=="admrul":
+            canonical_by_name_date.setdefault(
+                (rec.get("title"),rec.get("published_at")),[]).append(rec)
     while (examined < min(max_windows,len(windows)) and
            time.monotonic() - start < max_seconds):
         first, last, kind = windows[index]
@@ -74,7 +81,29 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
                 "rule_kind":kind,"complete":False,
                 "error":type(exc).__name__+": "+str(exc)[:120]}],False
         missing=[]
-        for doc in records:
+        unresolved=[]
+        for candidate in records:
+            possible=canonical_by_name_date.get(
+                (candidate["title"],candidate["published_at"]),[])
+            if len(possible)==1 and possible[0].get("law_type") in (
+                    ADMIN_RULE_KINDS[kind],"행정규칙"):
+                doc=possible[0]
+            else:
+                try:
+                    doc=api.resolve_changed_rule(candidate)
+                except Exception:
+                    doc=None
+            if not doc:
+                unresolved.append({
+                    "comparison_serial":candidate["comparison_serial"],
+                    "title":candidate["title"],
+                    "published_at":candidate["published_at"]})
+                continue
+            canonical_by_name_date.setdefault(
+                (doc["title"],doc["published_at"]),[])
+            if all(x["id"] != doc["id"] for x in canonical_by_name_date[
+                    (doc["title"],doc["published_at"])]):
+                canonical_by_name_date[(doc["title"],doc["published_at"])].append(doc)
             if doc["id"] not in documents:
                 discovered += 1
                 missing.append(doc["id"])
@@ -94,7 +123,9 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
             "first":first,"last":last,
             "indexed_count":len(records),"newly_discovered":len(missing),
             "missing_document_ids":missing[:40],
-            "complete":complete,
+            "unresolved_canonical_records":len(unresolved),
+            "unresolved_comparison_records":unresolved[:10],
+            "complete":complete and not unresolved,
             "attempted_pages":len(pages),
             "errors":[x.get("error","") for x in pages
                       if x.get("error")][:5],

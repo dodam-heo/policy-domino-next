@@ -22,9 +22,15 @@ class FakeAPI:
         self.calls=[]
     def changed_rule_window(self,first,last,kind,max_pages=20):
         self.calls.append((first,last,kind))
-        results=[official_doc(1)] if kind=="3" else []
+        results=[{
+            "source":"admrulOldAndNew","title":official_doc(1)["title"],
+            "comparison_id":"C1","comparison_serial":"X1",
+            "published_at":"2026-10-29","rule_kind":"3","law_type":"고시",
+        }] if kind=="3" else []
         return results,Coverage("admrulOldAndNew",first,last,"both",
                                 len(results),len(results),1,True,rule_kind=kind)
+    def resolve_changed_rule(self,candidate):
+        return official_doc(1)
 
 
 class ReconciliationTests(unittest.TestCase):
@@ -62,26 +68,56 @@ class ReconciliationTests(unittest.TestCase):
         self.assertTrue(any(not v["complete"] for v in
                             state["reconciliation_windows"].values()))
 
-    def test_official_index_request_never_invents_a_document(self):
+    def test_comparison_api_requires_independent_canonical_identity(self):
         from urllib.parse import parse_qs,urlparse
         requests=[]
         def transport(url):
             params=parse_qs(urlparse(url).query)
             requests.append(params)
+            if params["target"]==["admrulOldAndNew"]:
+                return ("""<Search><totalCnt>1</totalCnt><oldAndNew>
+                  <신구법ID>90001</신구법ID>
+                  <신구법일련번호>70001</신구법일련번호>
+                  <신구법명>가상 지원기준 고시</신구법명>
+                  <발령일자>20261020</발령일자>
+                  </oldAndNew></Search>""").encode("utf-8")
             return ("""<Search><totalCnt>1</totalCnt><admrul>
              <행정규칙ID>1200</행정규칙ID>
              <행정규칙일련번호>2001</행정규칙일련번호>
              <행정규칙명>가상 지원기준 고시</행정규칙명>
              <발령일자>20261020</발령일자>
+             <행정규칙종류>고시</행정규칙종류>
              </admrul></Search>""").encode("utf-8")
         api=LawAPI("example",transport)
-        docs,audit=api.changed_rule_window("2026-10-01","2026-10-31","3")
+        candidates,audit=api.changed_rule_window("2026-10-01","2026-10-31","3")
         self.assertTrue(audit.complete)
-        self.assertEqual(docs[0]["law_type"],"고시")
+        self.assertEqual(candidates[0]["source"],"admrulOldAndNew")
+        self.assertNotIn("id",candidates[0])
+        doc=api.resolve_changed_rule(candidates[0])
+        self.assertEqual(doc["source"],"admrul")
+        self.assertEqual(doc["stable_id"],"1200")
+        self.assertEqual(doc["serial"],"2001")
+        self.assertNotEqual(doc["serial"],candidates[0]["comparison_serial"])
         self.assertEqual(requests[0]["target"],["admrulOldAndNew"])
         self.assertEqual(requests[0]["knd"],["3"])
         self.assertEqual(requests[0]["prmlYd"],["20261001~20261031"])
-        self.assertNotIn("nw",requests[0])
+        self.assertEqual(requests[1]["target"],["admrul"])
+        self.assertEqual(requests[1]["prmlYd"],["20261020~20261020"])
+
+    def test_unresolvable_comparison_record_is_audited_not_invented(self):
+        class Unresolved(FakeAPI):
+            def resolve_changed_rule(self,candidate):
+                return None
+        state=new_state()
+        result=reconcile_changed_rules(
+            Unresolved(),state,dt.date(2026,11,10),
+            earliest=dt.date(2026,10,20),max_windows=6,max_seconds=30)
+        self.assertEqual(result["new_documents"],0)
+        self.assertEqual(len(state["documents"]),0)
+        self.assertTrue(any(
+            x.get("unresolved_canonical_records")
+            for x in state["reconciliation_windows"].values()))
+
 
 if __name__=="__main__":
     unittest.main()

@@ -185,11 +185,7 @@ class LawAPI:
 
     def changed_rule_window(self, first: str, last: str,
                             kind: str, max_pages: int = 20) -> tuple[list[dict], Coverage]:
-        """Independent official administrative-rule old/new comparison index.
-
-        This target is distinct from admrul: a missing document in one feed
-        can be discovered from the other, without annual title seeds.
-        """
+        """Separate comparison INDEX. Its 신구법 IDs are NOT admrul IDs."""
         if kind not in ADMIN_RULE_KINDS:
             raise ValueError("Unsupported official rule category")
         observed = {}
@@ -198,9 +194,10 @@ class LawAPI:
         error = ""
         for page in range(1, max_pages+1):
             try:
-                root = self.request("lawSearch.do", "admrulOldAndNew",
-                                    prmlYd=first.replace("-", "")+"~"+last.replace("-", ""),
-                                    knd=kind, page=page, display=100, sort="ddes")
+                root = self.request(
+                    "lawSearch.do", "admrulOldAndNew",
+                    prmlYd=first.replace("-", "")+"~"+last.replace("-", ""),
+                    knd=kind, page=page, display=100, sort="ddes")
                 n=field(root,"totalCnt")
                 if not n.isdigit():
                     raise ApiError("Missing official old/new comparison totalCnt")
@@ -208,28 +205,83 @@ class LawAPI:
                 if reported is not None and count!=reported:
                     raise ApiError("Changing official comparison totalCnt")
                 reported=count
-                rows=nodes(root,"admrul")
+                # Official comparison schema is 신구법명 / 신구법일련번호 /
+                # 신구법ID, NOT 행정규칙명 / 행정규칙일련번호.
+                rows=[]
+                for row in root.iter():
+                    if row is root:
+                        continue
+                    children={tag(c) for c in row}
+                    if {"신구법명","신구법일련번호"} <= children:
+                        rows.append(row)
                 if count and not rows:
                     raise ApiError("Official comparison rows could not be parsed")
-                for el in rows:
-                    item=parse_record(el,"admrul")
-                    if item and first<=item["published_at"]<=last:
-                        item["law_type"]=ADMIN_RULE_KINDS[kind]
-                        observed[item["id"]]=item
+                for row in rows:
+                    title=field(row,"신구법명",True)
+                    series=field(row,"신구법일련번호",True)
+                    comparison_id=field(row,"신구법ID",True)
+                    issued=date_string(field(row,"발령일자",True))
+                    if not title or not series or not comparison_id or not issued:
+                        continue
+                    if first<=issued<=last:
+                        # Not a canonical law document. Resolve against
+                        # the normal administrative-rule index below.
+                        observed[(comparison_id,series)]={
+                            "source":"admrulOldAndNew",
+                            "title":title,
+                            "comparison_id":comparison_id,
+                            "comparison_serial":series,
+                            "published_at":issued,
+                            "law_type":ADMIN_RULE_KINDS[kind],
+                            "rule_kind":kind,
+                        }
                 pages=page
                 if count==0 or page*100>=count or len(rows)<100:
                     complete=len(observed)==count
-                    return list(observed.values()),Coverage(
-                        "admrulOldAndNew",first,last,"both",count,len(observed),
-                        pages,complete,
-                        "" if complete else "Official comparison index/count mismatch",kind)
+                    return list(observed.values()), Coverage(
+                        "admrulOldAndNew",first,last,"both",
+                        count,len(observed),pages,complete,
+                        "" if complete else "Comparison index/count mismatch",kind)
             except Exception as exc:
-                error=type(exc).__name__+": "+str(exc)[:170]
+                error=type(exc).__name__+": "+str(exc)[:150]
                 break
-        return list(observed.values()),Coverage(
+        return list(observed.values()), Coverage(
             "admrulOldAndNew",first,last,"both",
             reported if reported is not None else -1,len(observed),
             pages,False,error or "Comparison page limit reached",kind)
+
+    def resolve_changed_rule(self, candidate: dict) -> dict | None:
+        """Match a comparison-index entry to an independently verified
+        canonical administrative-rule ID, title, date and official kind.
+        """
+        if candidate.get("source") != "admrulOldAndNew":
+            raise ValueError("Expected an official comparison-index candidate")
+        issued=candidate["published_at"]
+        kind=candidate["rule_kind"]
+        matches={}
+        for version in ("1","2"):
+            root=self.request("lawSearch.do","admrul",
+                              query=candidate["title"],nw=version,knd=kind,
+                              prmlYd=issued.replace("-","")+"~"+issued.replace("-",""),
+                              display=100,page=1,sort="ddes")
+            count=field(root,"totalCnt")
+            if not count.isdigit():
+                raise ApiError("Official canonical document index totalCnt missing")
+            if int(count)>100:
+                raise ApiError("Ambiguous canonical document search requires pagination")
+            for row in nodes(root,"admrul"):
+                doc=parse_record(row,"admrul")
+                if (doc and doc["title"]==candidate["title"] and
+                    doc["published_at"]==issued and
+                    (doc["law_type"]==ADMIN_RULE_KINDS[kind] or
+                     doc["law_type"]=="행정규칙")):
+                    doc["law_type"]=ADMIN_RULE_KINDS[kind]
+                    matches[doc["id"]]=doc
+        # Same title/date can legitimately have multiple serial numbers.
+        # Ambiguity is not permission to select an arbitrary official ID.
+        if len(matches)!=1:
+            return None
+        return next(iter(matches.values()))
 
     def detail(self, record: dict) -> ET.Element:
         source = record["source"]
