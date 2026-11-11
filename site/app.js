@@ -28,6 +28,7 @@
       if (valid.protocol !== "https:" ||
           !["law.go.kr","www.law.go.kr","www.alioplus.go.kr",
             "alioplus.go.kr","gov.kr","www.gov.kr",
+            "plus.gov.kr","www.plus.gov.kr",
             "data.go.kr","www.data.go.kr"].includes(valid.hostname)) return null;
       const a = create("a","official-link",label);
       a.href = valid.href;
@@ -371,6 +372,56 @@
     if(start+limit<source.length)append(line,create("span","","…"));
     return line;
   }
+  // Connect only the same source document and changed clause; titles alone
+  // cannot establish a reliable agency-to-amendment link.
+  function linkedChanges(item,event) {
+    if(!item.document_id||!item.article)return [];
+    return (event.changes||[]).filter(change=>
+      change.document_id===item.document_id &&
+      change.article===item.article &&
+      !change.meaning?.source_check_required);
+  }
+  function linkedChangeCard(item,event) {
+    const matches=linkedChanges(item,event);
+    if(!matches.length)return null;
+    const section=create("details","linked-changes");
+    section.open=true;
+    append(section,create("summary","",
+      "연결된 변경 근거 "+num(matches.length)+"개"));
+    const renderChange=change=>{
+      const row=create("div","linked-change");
+      append(row,create("strong","linked-change-title",
+        [change.document_title,change.article,change.meaning?.label||change.category]
+          .filter(Boolean).join(" · ")));
+      if(change.brief)
+        append(row,create("p","linked-change-summary",compact(change.brief,180)));
+      const meaning=change.meaning||{};
+      const focus=Array.isArray(meaning.focus)?meaning.focus:[];
+      if(focus.length) {
+        append(row,sourceDiffPreview({...change,meaning:{...meaning,focus:focus.slice(0,1)}}));
+        if(focus.length>1) {
+          const more=create("details","linked-change-more");
+          append(more,create("summary","",
+            "변경 전·후 주요 전체 보기 · 나머지 "+num(focus.length-1)+"곳"),
+            sourceDiffPreview({...change,meaning:{...meaning,focus:focus.slice(1)}}));
+          append(row,more);
+        }
+      } else if(meaning.before||meaning.after) {
+        append(row,sourceDiffPreview(change));
+      }
+      append(row,link(change.source_url,"공식 법령 원문"));
+      return row;
+    };
+    for(const change of matches.slice(0,2))append(section,renderChange(change));
+    if(matches.length>2) {
+      const more=create("details","linked-change-more");
+      append(more,create("summary","",
+        "다른 연결 근거 "+num(matches.length-2)+"건 더 보기"));
+      for(const change of matches.slice(2))append(more,renderChange(change));
+      append(section,more);
+    }
+    return section;
+  }
   function reviewCard(review,event) {
     const card=create("div","review-card");
     const type={
@@ -384,6 +435,7 @@
     append(card,create("p","review-task",review.task));
     if (review.program && review.change)
       append(card,create("div","review-change",compact(review.change,150)));
+    append(card,linkedChangeCard(review,event));
     if (review.ai?.work_impact || review.ai?.question) {
       const suggestion=create("details","ai-inline");
       append(suggestion,create("summary","","AI 업무 영향 추가 검토"));
@@ -479,7 +531,7 @@
         append(group,top);
         const cards=[
           ...entry.reviews.map(review=>reviewCard(review,event)),
-          ...entry.services.map(service=>serviceLeadCard(service))
+          ...entry.services.map(service=>serviceLeadCard(service,event))
         ];
         for(const card of cards.slice(0,2))append(group,card);
         if(cards.length>2){
@@ -622,7 +674,7 @@
     append(section,drawer);
     return section;
   }
-  function serviceLeadCard(item) {
+  function serviceLeadCard(item,event) {
     const card=create("details","review-card service-review-lead");
     const title=create("summary","service-review-heading");
     append(title,create("strong","",item.service_name),
@@ -631,7 +683,8 @@
     append(card,title);
     const content=create("div","public-service-lead-body");
     append(content,create("p","",
-      "개정 근거: "+item.law_title+" "+item.article));
+      "개정 근거: "+item.law_title+" "+item.article),
+      linkedChangeCard(item,event));
     for(const target of item.review_targets||[]) {
       const box=create("div","service-criterion");
       append(box,create("strong","",target.field+" · 검토할 기준"),
