@@ -46,11 +46,11 @@ class MeaningTests(unittest.TestCase):
         from policy_domino.meaning import _currency_table_changes
         old = ("1. 중복사업 선정기준 구 분 1인가구 2인가구 "
                "금액(원/월) 100,000 200,000 "
-               "2. 중복사업 운영기준 구 분 1인가구 2인가구 "
+               "2. 중복사업 선정절차 구 분 1인가구 2인가구 "
                "금액(원/월) 300,000 400,000")
         new = ("제3조(중복사업 선정기준) 구 분 1인가구 2인가구 "
                "금액(원/월) 900,000 800,000 * 다음 기준 "
-               "제4조(중복사업 운영기준) 구 분 1인가구 2인가구 "
+               "제4조(중복사업 선정절차) 구 분 1인가구 2인가구 "
                "금액(원/월) 700,000 600,000")
         self.assertEqual(_currency_table_changes(old, new), [])
 

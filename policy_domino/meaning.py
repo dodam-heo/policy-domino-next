@@ -337,7 +337,7 @@ def _currency_table_changes(before: str, after: str) -> list[dict]:
         def identity(table: dict) -> str:
             # Require a substantial literal prefix of the source's actual
             # section heading, not just a shared generic ending ("선정기준").
-            return table["key"][:6] if len(table["key"]) >= 6 else ""
+            return table["key"][:5] if len(table["key"]) >= 5 else ""
         old_ids = [identity(t) for t in old_tables]
         new_ids = [identity(t) for t in new_tables]
         if (not all(old_ids + new_ids)
