@@ -46,6 +46,9 @@ class Gov24Tests(unittest.TestCase):
         self.assertEqual(event["public_service_lead_count"], 25)
         self.assertEqual(len(event["public_service_leads"]), 25)
         self.assertEqual(len(result["proofs"]), 25)
+        self.assertEqual(validate_public_service_candidates({
+            "events": [event], "public_service_proofs": result["proofs"],
+        }), [])
 
     def test_official_schema_normalization_preserves_real_service_and_issuer(self):
         entry = normalize_record(record("S0001"))
