@@ -34,6 +34,10 @@ def audit(data: dict) -> dict:
         for review in event.get("institutional_reviews", [])
         if is_office_title(review.get("institution", ""))
     })
+    directory_offices = sorted({
+        str(row.get("agency")) for row in data.get("agency_directory", [])
+        if is_office_title(row.get("agency", ""))
+    })
     total = len(documents)
     reviewed = sum(count for status, count in statuses.items()
                    if status in FINISHED)
@@ -82,6 +86,7 @@ def audit(data: dict) -> dict:
         "official_public_services_indexed": data.get("public_services_indexed", 0),
         "public_service_review_candidates": data.get("public_service_review_leads", 0),
         "officeholders_misclassified_as_agencies": offices,
+        "officeholders_in_public_directory": directory_offices,
         "explanation": (
             "The official index and existing proof links were checked. "
             "External nationwide source exhaustiveness and all possible "
@@ -102,8 +107,9 @@ def main() -> None:
             encoding="utf-8")
     print("Production completeness and linkage audit:",
           json.dumps(result, ensure_ascii=False))
-    if result["officeholders_misclassified_as_agencies"]:
-        raise SystemExit("Invalid affected institutions: statutory officeholders found.")
+    if (result["officeholders_misclassified_as_agencies"] or
+            result["officeholders_in_public_directory"]):
+        raise SystemExit("Invalid public institution: statutory officeholders found.")
 
 
 if __name__ == "__main__":

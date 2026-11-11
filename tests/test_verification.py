@@ -36,6 +36,19 @@ class CompletenessAuditTests(unittest.TestCase):
                          ["행정안전부장관"])
         self.assertEqual(report["source_bound_institutional_review_rows"], 2)
 
+    def test_officeholders_in_directory_are_reported(self):
+        report = audit({
+            "documents": [], "events": [],
+            "agency_directory": [
+                {"agency": "행정안전부장관"},
+                {"agency": "국토교통부"},
+                {"agency": "교육감"},
+                {"agency": "국민권익위원회"},
+            ],
+        })
+        self.assertEqual(report["officeholders_in_public_directory"],
+                         ["교육감", "행정안전부장관"])
+
 
 if __name__ == "__main__":
     unittest.main()

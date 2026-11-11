@@ -392,10 +392,13 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     gov24_links = discover_public_service_leads(state, events)
     # Institution directory is a factual source index, not an impact finding.
     # Each counter is obtained from retained official records, never examples.
+    # A statutory officeholder is not a public institution. This applies
+    # independently to the factual directory as well as the impact engine.
+    from .events import is_office_title
     directory = {}
     def register_agency(name: str, key: str):
         name = str(name or "").strip()
-        if not name:
+        if not name or is_office_title(name):
             return
         row = directory.setdefault(name, {
             "agency": name, "alioplus_programs": 0, "gov24_services": 0})
