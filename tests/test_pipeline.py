@@ -222,6 +222,25 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(state["analysis_run"]["collection_requested"])
         self.assertEqual(state["analysis_run"]["source_budget_seconds"],150)
 
+    def test_content_addressed_migration_preserves_entire_public_event_projection(self):
+        from policy_domino.core import SCHEMA
+        from policy_domino.state_store import save_shards
+        previous=record("law","202", "102", "2026-11-08")
+        current=record("law","202", "103", "2026-11-09")
+        state=new_state()
+        run_once(state,DummyAPI([previous,current]),dt.date(2026,11,9),
+                 limit=2,max_seconds=120)
+        with tempfile.TemporaryDirectory() as folder:
+            folder=Path(folder)
+            original=render(state,folder/"old.json")
+            path=folder/"state.json"
+            save_shards(path,state,SCHEMA)
+            converted=load_state(path)
+            self.assertEqual(converted,state)
+            recovered=render(converted,folder/"new.json")
+            self.assertEqual(recovered,original)
+            self.assertEqual(recovered["events"],original["events"])
+
     def test_end_to_end_persistence_and_unseeded_change(self):
         original=record("law","1","10","2026-11-08")
         new=record("law","1","11","2026-11-09")

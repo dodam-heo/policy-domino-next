@@ -170,6 +170,21 @@ class ShardedStateTests(unittest.TestCase):
             self.assertEqual(metadata["findings"]["new"]["changes"][0]["after"],
                              {"$clause_text_ref":sha(after)})
 
+    def test_corrupt_immutable_pack_is_rejected_not_silently_accepted(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/"data"/"state.json"
+            content="제1조(공식) 확인된 원문"
+            state=new_state()
+            state["versions"]={"v1":{"clauses":{"제1조":{
+                "text":content,"complete":True,
+                "sha256":hashlib.sha256(content.encode()).hexdigest()}}}}
+            save_shards(path,state,SCHEMA)
+            packed=next((shard_dir(path)/"content").glob("*.json.gz"))
+            payload=packed.read_bytes()
+            packed.write_bytes(payload[:-1]+bytes([payload[-1]^1]))
+            with self.assertRaisesRegex(ValueError,"digest mismatch"):
+                load_state(path)
+
     def test_early_v2_metadata_layout_is_recovered_before_canonical_save(self):
         with tempfile.TemporaryDirectory() as root:
             path=Path(root)/"data"/"state.json"
