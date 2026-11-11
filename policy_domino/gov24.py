@@ -67,7 +67,7 @@ def normalize_record(raw: dict, *, allow_missing_agency: bool = False) -> dict:
     agency_type = _safe_text(raw.get("소관기관유형"), 80)
     if not service_id or not name or (not agency and not allow_missing_agency):
         raise Gov24SourceError("service ID, name and public agency are required")
-    if re.search(r"민간업체|민간기업|사기업", agency_type):
+    if re.search(r"민간|사기업|사립|개인사업", agency_type):
         raise Gov24SourceError("private provider cannot be an impacted public institution")
     values = {field: _safe_text(raw.get(field)) for field in FIELDS}
     basis = " ".join(v for k, v in values.items()
