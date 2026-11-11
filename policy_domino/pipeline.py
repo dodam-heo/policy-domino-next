@@ -129,8 +129,14 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
     revision = doc.get("revision", "")
     if "폐지" in revision:
         return dict(base, status="repeal", reason="공식 폐지문 확인; 새 의무 생성 없음")
-    if "제정" in revision and "개정" not in revision:
-        return dict(base, status="enactment", reason="공식 신규 제정 본문 확보")
+    # Annual standards may be formally issued as a new notice each year.
+    # Search the preceding official edition before marking them as a
+    # stand-alone enactment with no comparable previous criteria.
+    annual_rule=(doc.get("source")=="admrul" and
+                 bool(YEAR_TITLE.search(doc.get("title",""))))
+    is_new=("제정" in revision and "개정" not in revision)
+    if is_new and not annual_rule:
+        return dict(base,status="enactment",reason="공식 신규 제정 본문 확보")
     prior = _prior_from_catalog(state, doc)
     history_error = ""
     try:
@@ -150,6 +156,9 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
         except Exception as exc:
             history_error += " annual: " + str(exc)[:100]
     if not prior:
+        if is_new:
+            return dict(base,status="enactment",
+                        reason="전년도 공식 동일 기준이 확인되지 않은 신규 고시")
         return dict(base, status="history_unavailable" if history_error else
                     "baseline_unavailable",
                     reason=history_error or "이전 공식 개정 이력 미확보")
