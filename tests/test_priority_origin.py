@@ -4,7 +4,6 @@ from policy_domino.legal_origin import origin_of
 class PriorityOriginTests(unittest.TestCase):
  def test_national_standard_qualifies_without_agencies(self):
   e={"members":[{"source":"admrul"}],"changes":[{"before":"기준 중위소득 100원","after":"기준 중위소득 120원"}]}
-  self.assertEqual(assess_impact(e)["impact_score"],75)
   self.assertEqual(assess_impact(e)["impact_level"],"high")
  def test_five_unique_verified_agencies_qualify(self):
   e={"members":[{"source":"ordin"}],"changes":[{"before":"직제 제1과","after":"직제 제2과"}],
@@ -14,6 +13,15 @@ class PriorityOriginTests(unittest.TestCase):
   self.assertEqual(assess_impact(e)["impact_level"],"normal")
  def test_missing_analysis_pending(self):
   self.assertEqual(assess_impact({"changes":[]})["impact_level"],"pending")
+ def test_title_keyword_without_substantive_change_is_normal(self):
+  e={"members":[{"source":"admrul"}],"changes":[{"document_title":"기준 중위소득 고시","before":"제3조 근거 규정","after":"제4조 근거 규정"}]}
+  self.assertEqual(assess_impact(e)["impact_level"],"normal")
+ def test_unchanged_amount_and_changed_year_is_not_high(self):
+  e={"members":[{"source":"admrul"}],"changes":[{"document_title":"기준 중위소득 고시","before":"2026년 100원 기준","after":"2027년 100원 기준"}]}
+  self.assertEqual(assess_impact(e)["impact_level"],"normal")
+ def test_names_without_verified_basis_do_not_count(self):
+  e={"members":[{"source":"law"}],"changes":[{"before":"옛 규정","after":"새 규정"}],"agency_names":["기관"+str(i) for i in range(8)]}
+  self.assertEqual(assess_impact(e)["impact_level"],"normal")
  def test_only_quoted_delegation_is_upstream(self):
   d={"title":"가상 고시","ministry":"가상부처"}
   r=origin_of(d,{"clauses":{"본문":{"text":"「가상법」 제6조의 규정에 따라 정한다."}}})

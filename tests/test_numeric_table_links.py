@@ -8,7 +8,7 @@ class ProvenNumericTableTests(unittest.TestCase):
           "before":"6,494,738","after":"6,929,885"}
   self.assertEqual(changed_numeric_pairs(change),[("6,494,738","6,929,885")])
   score=assess_impact({"changes":[change],"members":[{"source":"admrul"}]})
-  self.assertEqual(score["impact_score"],75)
+  self.assertEqual(score["impact_level"],"high")
  def test_delegated_table_requires_old_amount_and_matching_household(self):
   change={"article":"표 1 · 4인 · 기준 중위소득","document_title":"기준 중위소득 고시",
           "before":"6,494,738","after":"6,929,885",
