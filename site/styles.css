@@ -179,6 +179,29 @@ a{color:var(--blue);text-underline-offset:3px}
 .review-task{font-size:13px;font-weight:660;margin:8px 0;line-height:1.65}
 .review-change{border-left:3px solid #c8dfed;padding-left:10px;color:#526f81;
   font-size:12px;line-height:1.6}
+
+/* A review must show the particular official amendment it depends on. */
+.linked-changes{margin-top:12px;border-top:1px solid #d9e6ed;padding-top:9px}
+.linked-changes>summary{cursor:pointer;font-size:12px;font-weight:800;color:#1b6686}
+.linked-changes[open]>summary{margin-bottom:10px}
+.linked-change{padding:9px 0;border-top:1px solid #e8eff3}
+.linked-change:first-of-type{border-top:none}
+.linked-change-title{display:block;font-size:12px;line-height:1.65;color:#264b60;
+  overflow-wrap:anywhere}
+.linked-change-summary{font-size:12px;line-height:1.65;margin:7px 0;color:#496978}
+.linked-change .highlight-comparison{margin:9px 0}
+.linked-change .source-diff-preview{margin-top:8px}
+.linked-change-more{margin:8px 0;padding:8px 10px;border:1px solid #d7e7ee;
+  border-radius:7px;background:#f9fcfd}
+.linked-change-more>summary{cursor:pointer;font-size:11px;color:#276785;font-weight:750}
+.linked-change-more[open]>summary{margin-bottom:8px}
+.review-card .ai-inline{margin:12px 0 0;padding:10px 12px;border:1px solid #e5dcf4;
+  border-radius:7px;background:#f9f6ff}
+.review-card .ai-inline>summary{cursor:pointer;font-size:12px;font-weight:760;
+  color:#60428e}
+.review-card .ai-inline>p{font-size:12px;line-height:1.7;color:#51466b;
+  margin:8px 0 0;overflow-wrap:anywhere}
+
 .proof{margin-top:9px;padding-top:6px;border-top:1px solid #edf1f4}
 .proof summary{cursor:pointer;color:#39718e;font-size:11px;font-weight:750}
 .proof p{font-size:12px;color:var(--muted);line-height:1.7;margin:9px 0;
