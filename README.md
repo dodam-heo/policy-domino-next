@@ -29,7 +29,7 @@ state.findings
    ↓ ai.py (optional Gemini)      [확인된 기관·조문·사업에 대한 근거 제한 AI 보조검토]
    ↓ contracts.py                [법령 분리·기관 연결·인용·AI 요약 모두 재검증]
    ↓ pipeline.render()
-site/data.json → presentation.js → app.js → index.html
+site/catalog.json + site/sources.json(검색 시) + site/details/<event-id>.json(클릭 시) → presentation.js → app.js → index.html
 ```
 
 **문서(document)**는 원천 수집·검증 기록이고 **정책 사건(event)**은 사용자에게 보여주는 법령별 변경 단위다. **서로 다른 법령은 공포번호·공포일·법령 종류가 같아도 병합하지 않는다.** 동일한 일괄 공포의 이력은 원천 메타데이터로 유지하되, 개별 법령의 신구 조문·기관별 검토사항·정부24 공공서비스 후보는 그 법령의 변경 조문으로만 연결한다. 신규·개정·폐지 사실과 신구 비교가 확인되지 않은 색인 항목은 변경 사건으로 게시하지 않는다.
@@ -67,7 +67,7 @@ Python 3.12+, Node.js. 외부 Python 패키지 설치 없이 실행 가능. 단�
 python -m unittest discover -s tests -p 'test_*.py' -v
 python -m policy_domino render
 node tests/test_site.cjs
-python -m policy_domino.contracts site/data.json
+python -m policy_domino.contracts site/catalog.json
 
 # 공식 수집과 비교 (AI 호출 없이)
 python -m policy_domino run --limit 20
@@ -157,7 +157,7 @@ Gemini는 문서별로 첫 3개 조문만 보고 종료하는 대신 **모든 �
 - 법제처의 공식 원천과 조문 원문을 계속 수집하지만, **수집 색인 전체가 신구 대조·기관 영향 분석 완료된 것은 아니다**.
 - 알리오플러스 기관별 사업은 현재 **첫 페이지 일부 상세자료만** 수집하며 전국 기관의 실제 사업·내부 운영 규정을 포괄하지 않는다. 정확한 조문 인용이 없더라도 실제 영향을 받는 업무가 있을 수 있다.
 - 관련 법령 인용만으로 실제 사업 수정 의무를 확정하지 않으며, 공공기관의 조치 완료 여부를 관측하는 엔진은 미구현이다.
-- 공개 데이터는 아직 단일 JSON이므로 지연 조회·증분 DB 저장은 개발 과제다.
+- 공개 사이트는 단일 대용량 JSON을 사용하지 않는다. 정책 목록은 `catalog.json`, 미분석 공식자료 검색은 필요할 때 `sources.json`, 원문과 기관별 영향은 정책 클릭 시 개별 `details/<event-id>.json`을 로드한다. 전체 수집·영향분석 완전성 검증은 별도 미완료 과제다.
 - 테스트에 나오는 정책·기관은 합성 예제이며, 구 프로젝트의 표시 결과는 현재 분석 데이터로 복사하거나 가져오지 않는다.
 
 자세한 설계는 [아키텍처](docs/ARCHITECTURE.md), [기관·사업 근거 계약](docs/PROGRAM_EVIDENCE.md), [품질 기준](docs/ENGINEERING_STANDARD.md)을 참고한다.
@@ -165,7 +165,7 @@ Gemini는 문서별로 첫 3개 조문만 보고 종료하는 대신 **모든 �
 ### 운영 시 공식 원천 증분 갱신
 
 - 공식 변경자료 신규 수집은 `Policy Domino NEXT - Single Production Pipeline`의 **workflow_dispatch** 또는 정기 실행으로 진행한다. 단순 UI 변경 push는 저장된 공식 자료만 다시 표시한다.
-- 수집 파이프라인은 `LAW_OC`가 설정되지 않으면 공개 식별자 `dori`를 사용한다. 공식 원천과 분석 상태는 변경된 조각만 재커밋할 수 있도록 `data/state/manifest.json` 및 `data/state/records/*/*.json.gz`의 **원천별 분할·압축 저장소**에 보존한다. 기존 `data/state.json`은 최초 실행 시 그대로 읽어 이관한 뒤 제거한다. 정규화된 검증 결과만 `site/data.json`으로 공개한다.
+- 수집 파이프라인은 `LAW_OC`가 설정되지 않으면 공개 식별자 `dori`를 사용한다. 공식 원천과 분석 상태는 변경된 조각만 재커밋할 수 있도록 `data/state/manifest.json`, `data/state/records_v2/*/*.json.gz`, `data/state/content/*.json.gz`의 **조문 해시 중복 제거·불변 콘텐츠 팩 및 증분 압축 저장소**에 보존한다. 기존 `data/state.json`은 최초 실행 시 그대로 읽어 이관한 뒤 제거한다. 정규화된 검증 결과만 `site/data.json`으로 공개한다.
 - 최초 색인 성공과 조문 신구 검증 성공은 서로 다른 상태이다. 새 수집 뒤에는 공식 행정규칙의 고시/공고/지침별 색인 변화, 신구 검증 완료 건수, 미완료 원인 및 저장 파일 변경을 확인한다.
 
 

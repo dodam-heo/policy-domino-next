@@ -36,7 +36,7 @@ LawAPI official IDs / promulgation number / date / instrument type
                               │
                    contracts.validate_public()
                               │
-                   pipeline.render() → site/data.json
+                   pipeline.render() → site/catalog.json + site/sources.json + site/details/*.json
                               │
                 presentation.js / app.js / index.html
 ```
@@ -99,9 +99,9 @@ Gemini 호출은 자료 수집과 분리된 백엔드 작업이며 기본 요청
 
 ## 7. 공개 계약 및 운영 테스트
 
-`data/state/manifest.json` + `data/state/meta.json.gz` + `data/state/records/<종류>/<버킷>.json.gz`: 수집 이력·버전 원문·조문 비교·정부24 공공서비스·AI 초안 등을 논리적으로는 한 상태로 읽되 Git에는 키별 SHA 버킷으로 나누어 저장하는 내부 원천. 버킷은 작은 결정론적 gzip 파일이며 변경이 없는 버킷은 재커밋하지 않는다. 구식 `data/state.json`은 최초 성공적 분할 저장 후 제거한다.
+`data/state/manifest.json` + `data/state/meta_v2.json.gz` + `data/state/records_v2/<종류>/<버킷>.json.gz` + `data/state/content/<콘텐츠 해시>.json.gz`: 수집·판본 참조·신구 결과·정부24 서비스·AI 검토를 분리 저장한다. 동일한 원문 조문은 해시로 재사용하고 새로운 내용만 불변 팩에 추가한다. 기존 v1 원문은 읽어서 동일성 검증 후 이관한다. 버킷은 작은 결정론적 gzip 파일이며 변경이 없는 버킷은 재커밋하지 않는다. 구식 `data/state.json`은 최초 성공적 분할 저장 후 제거한다.
 
-`site/data.json`: 현재 원천으로부터 매번 생성한 `events[]`와 검증근거 `documents[]`, `relationships[]`, `program_dependencies[]`.
+`site/catalog.json`: 경량 정책 변경 목록. `site/sources.json`: 공식자료 검색용 메타데이터(검색 시 로드). `site/details/event-<id>.json`: 개별 변경 근거·기관별 분석(클릭 시 로드). 전체 원천·근거 계약은 내보내기 직전 메모리상에서 검증하고, 정적 배포 데이터의 ID와 기관 연결을 다시 검증한다. 대용량 통합 JSON은 생성하거나 배포하지 않는다.
 
 `contracts.py`는 **사건 하나에 실제 변경 문서가 정확히 한 건만 포함되는지**, 모든 변경 조문과 기관 검토 항목이 그 문서의 조문과 연결되는지, 조문 SHA·사업 인용·AI 보조검토 근거가 맞는지 원문 데이터와 대조한다. 하나의 조문이 관련 없는 정책 사건에 포함되거나 원천 근거 없이 기관명이 추가되면 배포가 차단된다.
 
@@ -158,7 +158,7 @@ GitHub Actions는 단일 워크플로에서 **검증, 수집/AI, 단일 사이�
 2. 알리오플러스는 현재 첫 목록 페이지 일부만 수집한다. 전체 중앙·지방 공공부문 사업 커버리지로 오해하면 안 된다.
 3. 현재 연결되는 것은 직접 규율기관·명시 수행주체·공식 인용 사업 중심이다. 규범의 변경이 여러 기관에 **암묵적으로** 파급되는 관계를 빠짐없이 판정하는 전국 단위 모델은 아직 완성되지 않았다.
 4. 실제 기관 후속 조치 완료·미완료는 공식 실행 근거가 없으므로 판단하지 않는다.
-5. 장기적으로 사이트에 큰 `documents[]` 원문이 동봉되는 문제는 증분 데이터 저장과 상세 지연 조회로 개선해야 한다. 현재 구현을 대규모 실시간 운영 플랫폼으로 표기하지 않는다.
+5. 대용량 `documents[]` 동봉 문제는 목록·검색색인·상세 지연 조회로 분리했다. 다만 GitHub Pages 정적 배포는 실시간 DB/API 서비스가 아니며, 전국 원천 수집과 영향분석의 완전성 역시 아직 입증되지 않았다.
 
 이 아키텍처의 목적은 이전 화면의 데이터를 재사용하는 것이 아니라 **공식 원천에서 정책 사건과 기관 업무 영향을 새롭게 생성할 수 있는 재현 가능한 소프트웨어**를 만드는 것이다.
 
