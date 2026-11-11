@@ -18,8 +18,6 @@ def validate_public_service_candidates(payload: dict) -> list[str]:
         if not isinstance(leads, list):
             errors.append(f"events[{i}].public_service_leads must be a list")
             continue
-        if len(leads) > 15:
-            errors.append(f"events[{i}] too many displayed candidate leads")
         if event.get("public_service_lead_count", 0) < len(leads):
             errors.append(f"events[{i}] candidate count too small")
         changes = {(x.get("document_id"), x.get("article")): x
