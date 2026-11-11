@@ -379,10 +379,17 @@ a{color:var(--blue);text-underline-offset:3px}
   .agency-directory-entry{align-items:flex-start;flex-direction:column;gap:3px}
   .agency-directory-entry span{text-align:left}}
 
-/* Official policy provenance panel */
+/* The title should lead straight into the substantive policy changes. */
   .item-issuer{font-size:.78rem;color:#5d6c7c;margin:4px 0}
-  .origin-proof{margin:10px 0;padding:12px;border:1px solid #cdd9e7;border-radius:10px}
-  .origin-proof p{margin:4px 0;font-size:.86rem;line-height:1.5}
+  .detail-issuer{font-size:12px;color:#536d7b;margin:2px 0 4px}
+  .origin-evidence{margin:12px 0 0;border-top:1px solid #dce8ee;padding-top:10px}
+  .origin-evidence>summary{cursor:pointer;color:#245d78;font-size:12px;font-weight:730}
+  .origin-evidence>.official-link{display:inline-block;margin:9px 0}
+  .origin-basis{margin:9px 0;border-top:1px solid #edf2f5;padding-top:8px;font-size:12px}
+  .origin-basis span{margin-right:8px}
+  .origin-citations{margin-top:7px}
+  .origin-citations>summary{cursor:pointer;color:#386b7f}
+  .origin-citations>p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
 
 
 
