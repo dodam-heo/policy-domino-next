@@ -1,6 +1,6 @@
 import hashlib
 import unittest
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from policy_domino.parser import parse_document
 from policy_domino.annexes import (
     authorized_law_pdf_url, enrich_annexes, normalize_legacy_annex_keys,

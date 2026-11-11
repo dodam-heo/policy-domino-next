@@ -34,6 +34,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
       - name: Verify official event and impact engine
         run: |
           python -m compileall -q policy_domino tests
@@ -65,6 +67,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
       - name: Install bounded official PDF text extraction
         run: python -m pip install 'pypdf>=5,<7'
       - name: Migrate legacy state to Git-safe shards without network or data loss
@@ -189,6 +193,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
       - name: Build public event data from current official records
         run: python -m policy_domino render
       - name: Enforce verified source contract before publishing

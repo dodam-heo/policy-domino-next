@@ -5,6 +5,7 @@ review questions, but may NEVER create a verified downstream obligation.
 Each output is independently checked against literal source excerpts.
 """
 from __future__ import annotations
+from .http_security import open_official
 
 import hashlib
 import json
@@ -306,7 +307,7 @@ def call_model(packet: dict, *, key: str, model: str = DEFAULT_MODEL,
             headers={"x-goog-api-key": key, "Content-Type": "application/json",
                      "User-Agent": "PolicyDominoNext/2.0"}, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=40) as response:
+            with open_official(request, allowed_hosts={"generativelanguage.googleapis.com"}, timeout=40) as response:
                 if response.status != 200:
                     raise _http_error(response.status)
                 raw = response.read(240_000)

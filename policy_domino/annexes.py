@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import io
 import zipfile
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 import re
 import urllib.parse
 import urllib.request

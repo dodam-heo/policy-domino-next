@@ -37,6 +37,7 @@
 ```bash
 git clone https://github.com/dodam-heo/policy-domino-next.git
 cd policy-domino-next
+python -m pip install -r requirements.txt
 python -m policy_domino render
 python -m http.server 8000 --bind 127.0.0.1 --directory site
 ```
@@ -48,7 +49,7 @@ python -m http.server 8000 --bind 127.0.0.1 --directory site
 기존 데이터로 화면을 보는 것과 외부 API로 최신 자료를 수집하는 것은 별도 작업입니다. 신규 수집에는 인터넷 연결이 필요합니다. PDF 별표 텍스트 추출을 사용할 때는 다음 패키지를 설치합니다.
 
 ```bash
-python -m pip install "pypdf>=5,<7"
+python -m pip install -r requirements.txt
 ```
 
 | 환경변수 | 용도 |
@@ -153,7 +154,7 @@ GitHub Actions 워크플로는 하나(`.github/workflows/pipeline.yml`)이며, *
 
 ## 운영·테스트
 
-Python 3.12+, Node.js. 저장된 데이터 렌더링은 외부 Python 패키지 없이 실행 가능하며, 공식 PDF 별표 추출에는 pypdf가 필요하다. 단일 GitHub Actions 워크플로 `.github/workflows/pipeline.yml`.
+Python 3.12+, Node.js. requirements.txt의 defusedxml과 pypdf를 설치한 뒤 실행한다. 단일 GitHub Actions 워크플로 `.github/workflows/pipeline.yml`.
 
 ```bash
 python -m unittest discover -s tests -p 'test_*.py' -v

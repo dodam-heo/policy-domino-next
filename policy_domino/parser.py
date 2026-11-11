@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from .api import field, tag
 from .core import clean
 from .meaning import is_placeholder_clause

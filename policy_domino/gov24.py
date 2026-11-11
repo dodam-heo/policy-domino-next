@@ -9,6 +9,7 @@ criteria and explicit regulatory references. A connection candidate is NOT
 a confirmed institutional action, and it is never presented as one.
 """
 from __future__ import annotations
+from .http_security import open_official
 
 import hashlib
 import json
@@ -134,7 +135,7 @@ class Gov24Client:
                 url, headers={"User-Agent": "PolicyDominoNext/1.0",
                               "Accept": "application/json"})
             try:
-                with urllib.request.urlopen(request, timeout=20) as response:
+                with open_official(request, allowed_hosts={"api.odcloud.kr"}, timeout=20) as response:
                     if urllib.parse.urlparse(response.geturl()).hostname != "api.odcloud.kr":
                         raise Gov24SourceError("unapproved official API redirect")
                     body = response.read(2_000_001)

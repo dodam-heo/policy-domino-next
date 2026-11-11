@@ -1,11 +1,13 @@
 """Official Law Information API client; no third-party search or seed catalogue."""
 from __future__ import annotations
+from .http_security import open_official
 
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 from dataclasses import dataclass
 from typing import Callable
 
@@ -119,7 +121,7 @@ class LawAPI:
                                  if self.deadline is not None else 25)
                     if remaining <= 0:
                         raise ApiError("Official API time budget exhausted")
-                    with urllib.request.urlopen(req, timeout=min(25, remaining)) as response:
+                    with open_official(req, allowed_hosts={"www.law.go.kr", "law.go.kr"}, timeout=min(25, remaining)) as response:
                         data = response.read(MAX_BYTES + 1)
                     break
                 except (OSError, urllib.error.URLError) as exc:
@@ -132,7 +134,7 @@ class LawAPI:
             raise ApiError("Official API response exceeded size limit")
         try:
             root = ET.fromstring(data)
-        except ET.ParseError as exc:
+        except (ET.ParseError, DefusedXmlException) as exc:
             raise ApiError("Malformed official XML") from exc
         if tag(root).lower() in ("html", "error"):
             raise ApiError("Official API returned an error page")

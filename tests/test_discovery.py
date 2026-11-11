@@ -1,5 +1,5 @@
 import unittest
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 
 from policy_domino.analysis import connect_changes
 from policy_domino.core import document_key,new_state

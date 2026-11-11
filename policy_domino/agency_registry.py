@@ -4,9 +4,10 @@ This is a factual institution index. Actual policy impacts still require
 article-by-article and operational-source evidence.
 """
 from __future__ import annotations
+from .http_security import open_official
 import json
 import re
-from urllib.request import Request,urlopen
+from urllib.request import Request
 
 ROOT="https://www.alioplus.go.kr"
 LIST_URL=ROOT+"/organization/organByTypeList.do?schApbaGb=APBA&pageNo=1"
@@ -40,7 +41,7 @@ def collect_institutions(state:dict,transport=None)->dict:
                     headers={"User-Agent":"PolicyDominoNext/1.0",
                              "Referer":LIST_URL,
                              "Content-Type":"application/x-www-form-urlencoded"})
-        with urlopen(req,timeout=18) as response:
+        with open_official(req, allowed_hosts={"www.alioplus.go.kr"}, timeout=18) as response:
             if not response.geturl().startswith(ROOT+"/"):
                 raise ValueError("Untrusted institution directory redirect")
             raw=response.read(2_000_001)
@@ -176,7 +177,7 @@ def collect_local_institutions(state:dict,transport=None)->dict:
             else:
                 req=Request(url,headers={"User-Agent":"PolicyDominoNext/1.0",
                                          "Accept":"text/html"})
-                with urlopen(req,timeout=9) as response:
+                with open_official(req, allowed_hosts={"www.cleaneye.go.kr", "cleaneye.go.kr"}, timeout=9) as response:
                     from urllib.parse import urlparse
                     parsed_url=urlparse(response.geturl())
                     if (parsed_url.scheme!="https" or

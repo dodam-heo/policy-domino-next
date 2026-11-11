@@ -1,5 +1,5 @@
 import unittest
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from urllib.parse import parse_qs, urlparse
 
 from policy_domino.api import LawAPI, nodes, parse_record
@@ -152,8 +152,8 @@ class SourceExtractionTests(unittest.TestCase):
 
     def test_untrusted_document_size_is_marked_incomplete(self):
         body = "제4조(기준)" + "A"*15001
-        root=ET.Element("Root")
-        ET.SubElement(root,"조문내용").text=body
+        root=ET.fromstring("<Root><조문내용/></Root>")
+        root[0].text=body
         data=parse_document(root)
         self.assertEqual(data["status"],"partial")
         self.assertFalse(data["clauses"]["제4조"]["complete"])

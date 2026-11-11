@@ -5,6 +5,7 @@ complete register of central/local government programs. No result is counted
 as coverage merely because an HTML page was downloaded.
 """
 from __future__ import annotations
+from .http_security import open_official
 
 import html
 import re
@@ -185,7 +186,7 @@ class ALIOPlusClient:
             return self.transport(url)
         request = urllib.request.Request(url, headers={
             "User-Agent": "PolicyDominoNext/0.2 (bounded public program research)"})
-        with urllib.request.urlopen(request, timeout=12) as response:
+        with open_official(request, allowed_hosts={"www.alioplus.go.kr"}, timeout=12) as response:
             if (urlparse(response.geturl()).hostname != "www.alioplus.go.kr" or
                 urlparse(response.geturl()).scheme != "https"):
                 raise ProgramSourceError("Unapproved portal redirect")

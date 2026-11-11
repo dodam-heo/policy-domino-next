@@ -1,7 +1,7 @@
 import datetime as dt
 import tempfile
 import unittest
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from pathlib import Path
 
 from policy_domino.api import Coverage
@@ -25,11 +25,10 @@ class DummyAPI:
               first<=x["published_at"]<=last]
         return rows,Coverage(source,first,last,version,len(rows),len(rows),1,True)
     def detail(self,doc):
-        root=ET.Element("Root")
-        clause=ET.SubElement(root,"조문단위")
-        ET.SubElement(clause,"조문번호").text="3"
+        root=ET.fromstring("<Root><조문단위><조문번호>3</조문번호><조문내용/></조문단위></Root>")
+        clause=root[0]
         amount="30만원" if doc["serial"].endswith("0") else "40만원"
-        ET.SubElement(clause,"조문내용").text="제3조(기준) 지급액은 "+amount+"이다."
+        clause.find("조문내용").text="제3조(기준) 지급액은 "+amount+"이다."
         return root
     def history(self,doc):
         return [x for x in self.docs if x["source"]==doc["source"] and
@@ -166,7 +165,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_annual_notice_baseline_uses_two_documented_history_modes(self):
         from policy_domino.pipeline import _annual_baseline
-        import xml.etree.ElementTree as ET
+        from defusedxml import ElementTree as ET
         current=record("admrul","777","2027","2026-11-10",
                        "가상 연례 운영기준 2027년도 고시")
         class API:
