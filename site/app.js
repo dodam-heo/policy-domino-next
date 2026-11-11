@@ -631,7 +631,7 @@
     const count=(data.collection_run||{}).failed_windows||0;
     $("analysis-coverage").textContent=
       "공식 판본 "+num(audit.indexed??progress.indexed_documents)+"건"+
-      " · 신구 차이 확인 "+num(audit.checked??progress.verified_document_changes)+"건"+
+      " · 신구 차이 확인 "+num(progress.verified_document_changes??audit.checked)+"건"+
       " · 수집·분석 현황 펼치기";
     $("analysis-diagnostics").textContent=
       "공식 문서 "+num(audit.indexed??progress.indexed_documents)+"건 중"+
