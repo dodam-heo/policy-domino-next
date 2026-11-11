@@ -591,6 +591,30 @@
     append(root,head,renderCore(event),
       renderInstitutions(event),renderEvidence(event),renderAI(event));
   }
+  function renderAgencyDirectory(query) {
+    const root=$("agency-directory-results");
+    root.replaceChildren();
+    const term=String(query||"").trim().toLocaleLowerCase("ko-KR");
+    root.hidden=!term;
+    if(!term)return;
+    const results=(state.data?.agency_directory||[]).filter(row=>
+      String(row.agency||"").toLocaleLowerCase("ko-KR").includes(term));
+    if(!results.length) {
+      append(root,create("p","empty","해당 이름의 공식기관 명부 기록이 없습니다."));
+      return;
+    }
+    for(const agency of results.slice(0,20)) {
+      const row=create("div","directory-entry");
+      append(row,create("strong","",agency.agency),
+        create("span","",
+          "알리오 사업 "+num(agency.alioplus_programs)+"건 · 정부24 서비스 "+
+          num(agency.gov24_services)+"건"));
+      append(root,row);
+    }
+    if(results.length>20)
+      append(root,create("p","section-help",
+        "상위 20개 기관만 표시합니다. 기관명을 더 구체화하세요."));
+  }
   function show(data) {
     if (data.schema !== "policy-domino-next-v1" ||
         !Array.isArray(data.events)) throw Error("정책 변경 사건 데이터가 없습니다.");
@@ -606,6 +630,10 @@
     const audit=(data.quality||{}).analysis_status||{};
     const count=(data.collection_run||{}).failed_windows||0;
     $("analysis-coverage").textContent=
+      "공식 판본 "+num(audit.indexed??progress.indexed_documents)+"건"+
+      " · 신구 차이 확인 "+num(audit.checked??progress.verified_document_changes)+"건"+
+      " · 수집·분석 현황 펼치기";
+    $("analysis-diagnostics").textContent=
       "공식 문서 "+num(audit.indexed??progress.indexed_documents)+"건 중"+
       " 신구·제정·폐지 확인 "+num(audit.checked??progress.verified_document_changes)+"건"+
       " · 아직 미분석 "+num(audit.unexamined)+"건"+
@@ -614,6 +642,9 @@
       (count?" · 원천 수집 미완료 구간 "+num(count)+"개":"");
     const checked=run.checked_at?String(run.checked_at).replace("T"," ").slice(0,16)+" UTC":"미실행";
     $("ai-review-progress").textContent=
+      "AI 정책 변경 설명 "+num(progress.analyzed_events)+"건"+
+      " · 추가 분석 대상 "+num(progress.pending_events)+"건";
+    $("ai-diagnostics").textContent=
       "AI 검토 완료 "+num(analyzed)+" / 변경 조문 "+num(total)+"건"+
       " · 최근 실행 "+checked+
       " · 요청 "+num(run.attempted)+"회, 신규 결과 "+num(run.generated)+"건"+
@@ -623,7 +654,7 @@
     const notices=rules["고시"];
     const unclassified=rules["미분류"];
     const noticeEnd=(data.collection_run?.backfill_end_dates||{})["admrul|2|3"];
-    $("institution-link-progress").textContent=
+    $("institution-diagnostics").textContent=
       (notices?"고시 "+num(notices.indexed)+"건 색인 · 변경 확인 "+
         num(notices.changed)+"건 · 분석 대기 "+num(notices.pending)+"건 · ":"")+
       (unclassified?.indexed?"행정규칙 종류 미확인 "+num(unclassified.indexed)+"건 · ":"")+
@@ -633,10 +664,20 @@
       " · 관련 공식 규정 소관기관 연결 "+num(progress.referencing_public_rule_reviews)+"건"+
       " · 알리오 공공사업 원천자료 "+num(progress.official_program_records)+"건"+
       " · 정부24 공공서비스 "+num(data.public_services_indexed||0)+"건"+
-      " · 검토 후보 "+num(data.public_service_review_leads||0)+"건"+
-      ((data.gov24_audit?.status==="not_configured")?
-        " (정부24 API 인증 미설정)":"");
-    $("stat-events").textContent=num(audit.indexed ?? data.documents?.length ?? 0);
+      " · 검토 후보 "+num(data.public_service_review_leads||0)+"건";
+    const register=data.agency_directory_audit||{};
+    const gov24=data.gov24_audit||{};
+    $("institution-link-progress").textContent=
+      "알리오플러스 공공사업 "+num(progress.official_program_records)+"건"+
+      " / 운영기관 "+num(register.alioplus_agencies)+"곳 · 정부24 공공서비스 "+
+      num(data.public_services_indexed)+"건 / 운영기관 "+
+      num(register.gov24_agencies)+"곳. 기관 명부 등재와 정책별 영향 연결은 별개이며, "+
+      (gov24.status==="collected_incrementally"?
+        "정부24 수집은 증분 진행 중입니다.":
+        gov24.status==="not_configured"?
+        "정부24 API 인증이 설정되지 않았습니다.":
+        "정부24 최신 전체 갱신 여부는 확인되지 않았습니다.");
+    $("stat-events").textContent=num(audit.indexed??progress.indexed_documents??data.documents?.length??0);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);
 
@@ -670,6 +711,8 @@
     state.visible=60;
     renderList();
   };
+  $("agency-directory-search").oninput=ev=>
+    renderAgencyDirectory(ev.target.value);
   $("more").onclick=()=>{state.visible+=60;renderList();};
   $("backToList").onclick=()=>back();
   window.addEventListener("popstate",()=>{
