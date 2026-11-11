@@ -479,8 +479,8 @@ async function realServiceLeadDiscoveryPresentation(){
   const links=flatten(detail).filter(el=>el.tag==="a");
   assert.ok(links.some(a=>a.href==="https://www.gov.kr/portal/service"),
     "Only approved official Gov24 service links can be opened");
-  assert.ok(node(ui,"institution-link-progress").textContent.includes(
-    "정부24 공공서비스 1,000건"));
+  assert.ok(!html.includes("institution-link-progress"),
+    "Verbose source diagnostics belong to the audit, not the banner");
   console.log("PASS: actual Gov24 public-service evidence displayed as candidates");
 }
 async function indexedNoticesAreSearchableWithoutFakingImpact(){
