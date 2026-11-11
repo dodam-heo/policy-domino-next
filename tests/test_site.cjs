@@ -686,6 +686,7 @@ async function splitDistributionLoadsOnlyClickedDetail(){
   assert.equal(ui.fetchCalls.filter(x=>x==="./details/lazy-two.json").length,0);
   assert.ok(textOf(node(ui,"detail")).includes("가상공공기관"),
     "Selected detail must be hydrated from the separate verified file");
+  node(ui,"mode-all").onclick(); // Full-index search is intentionally scoped to 전체.
   node(ui,"search").oninput({target:{value:"2027년도 신규"}});
   await flush();
   assert.equal(ui.fetchCalls.filter(x=>x==="./sources.json").length,1,
