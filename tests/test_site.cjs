@@ -201,7 +201,7 @@ async function verifiedNavigation(){
   node(ui,"agency-directory-close").onclick();
   assert.equal(node(ui,"agency-directory-modal").hidden,true);
   assert.ok(html.includes("정책 변경 목록"));
-  assert.ok(html.includes("공포·발령일 최신순"));
+  assert.ok(html.includes("영향도 큼 우선 · 점수순 · 동점 최신순"));
   assert.ok(!html.includes("급여·지원기준"));
   assert.ok(!html.includes("filter-grid"));
   assert.ok(html.includes("법령명·정책명·소관기관 검색"));
