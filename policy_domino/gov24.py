@@ -275,6 +275,13 @@ def changed_numeric_pairs(change: dict) -> list[tuple[str, str]]:
         new_unit=re.search(unit,y)
         if not old_unit or not new_unit or old_unit.group()!=new_unit.group():
             continue
+        if len(old)>1:
+            left_old=before[max(0,a.start()-18):a.start()]
+            left_new=after[max(0,b.start()-18):b.start()]
+            if (len(left_old.strip())<3 or len(left_new.strip())<3 or
+                difflib.SequenceMatcher(
+                    None,left_old,left_new,autojunk=False).ratio()<0.88):
+                continue
         context_before=(before[max(0,a.start()-36):a.start()]+"|"+
                         before[a.end():a.end()+30])
         context_after=(after[max(0,b.start()-36):b.start()]+"|"+
