@@ -12,14 +12,10 @@ button,input{font:inherit}button{cursor:pointer}
 a{color:var(--blue);text-underline-offset:3px}
 :focus-visible{outline:3px solid #7db9d2;outline-offset:2px}
 [hidden]{display:none!important}
-.topbar{background:#0c2a40;color:#fff}
-.top-inner{max-width:1390px;margin:0 auto;padding:14px 24px;
-  display:flex;align-items:center;justify-content:space-between;gap:20px}
-.brand{font-weight:800;letter-spacing:.09em;font-size:15px}
-.brand strong{color:#8fd5e8}.brand span{font-weight:700;color:#d1eaf1;
-  font-size:10px;border:1px solid #50768d;padding:2px 5px;border-radius:3px}
-.brand-sub{font-size:12px;color:#c1d4de}
-.intro{max-width:1390px;padding:29px 24px 24px;margin:auto;
+.home-banner{color:inherit;text-decoration:none;cursor:pointer}
+.home-banner:hover h1{color:var(--blue)}
+.home-banner:focus-visible{outline-offset:-3px;border-radius:12px}
+.intro{max-width:1390px;padding:10px 24px 24px;margin:auto;
   display:flex;justify-content:space-between;align-items:center;gap:25px}
 .eyebrow{font-size:12px;color:var(--blue);font-weight:800;margin:0 0 7px}
 .intro h1{font-size:clamp(22px,2.7vw,32px);line-height:1.3;
@@ -235,7 +231,6 @@ a{color:var(--blue);text-underline-offset:3px}
   .agency-filter-results .section-counter{margin:8px 0 10px}
 }
 @media(max-width:850px){
-  .top-inner{padding:12px 15px}.brand-sub{display:none}
   .intro{padding:21px 15px 16px;display:block}
   .intro h1{font-size:24px}
   .intro-copy>p:last-child{font-size:12px}
@@ -249,7 +244,8 @@ a{color:var(--blue);text-underline-offset:3px}
   .detail-panel{display:none}
   .layout.detail-open .list-panel{display:none}
   .layout.detail-open .detail-panel{display:block}
-  body.detail-active .topbar,body.detail-active .intro{display:none}
+  body.detail-active .intro{padding:12px 15px}
+  body.detail-active .intro .summary{display:none}
   .mobile-back{display:block;position:sticky;top:0;z-index:8;background:#fff;
     padding:9px 14px;border-bottom:1px solid var(--line)}
   .mobile-back button{border:0;background:none;color:var(--blue);
