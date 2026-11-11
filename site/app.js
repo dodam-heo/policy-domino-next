@@ -578,6 +578,29 @@
       }
       append(section,refs);
     }
+    // Supporting legal provenance belongs in the collapsed official-source archive.
+    const origin=event.origin||{};
+    const bases=Array.isArray(origin.upper_bases)?origin.upper_bases:[];
+    const original=origin.url||event.members?.[0]?.url;
+    if(original||bases.length) {
+      const refs=create("details","origin-evidence");
+      append(refs,create("summary","","발령·상위법 근거 확인"));
+      append(refs,link(original,"개정 법령 원문"));
+      for(const base of bases){
+        const row=create("div","origin-basis");
+        append(row,create("span","",
+          [base.title,base.article].filter(Boolean).join(" · ")),
+          link(base.source_url,"상위 법령 원문"));
+        if(base.quote){
+          const quotation=create("details","origin-citations");
+          append(quotation,create("summary","","인용 조문 보기"),
+            create("p","",base.quote));
+          append(row,quotation);
+        }
+        append(refs,row);
+      }
+      append(section,refs);
+    }
     return section;
   }
   function renderAI(event) {
@@ -667,24 +690,9 @@
     append(meta,pill(view.category(event),"type "+event.kind),
       create("span","",event.published_at||""));
     const origin=event.origin||{};
-    const provenance=create("div","origin-proof");
-    append(provenance,
-      create("p","", "소관·발령기관 · "+(origin.issuer||event.ministry||"확인 중")),
-      create("p","","이번 변경의 출발점 · "+
-        [origin.instrument_type||event.members?.[0]?.kind||"",
-         origin.instrument||event.title,origin.number||""].filter(Boolean).join(" · ")));
-    const upper=Array.isArray(origin.upper_bases)?origin.upper_bases:[];
-    if(upper.length) {
-      append(provenance,create("p","","공식 원문의 위임 근거 · "+
-        upper.slice(0,3).map(x=>x.title+" "+x.article).join(" / ")));
-      const more=create("details","origin-citations");
-      append(more,create("summary","","상위 근거 원문 인용 보기"));
-      for(const source of upper)
-        append(more,create("p","",source.quote),link(source.source_url,"공식 법령 원문"));
-      append(provenance,more);
-    }
-    append(provenance,link(origin.url||event.members?.[0]?.url,"이번 변경 규범 공식 원문"));
-    append(head,meta,create("h2","",event.title),provenance,
+    const issuer=origin.issuer||event.ministry||"";
+    append(head,meta,create("h2","",event.title),
+      issuer ? create("p","detail-issuer","소관·발령기관 · "+issuer) : null,
       event.effective_date ?
         create("p","effective","시행일 "+event.effective_date):null);
     append(root,head,renderCore(event),
