@@ -123,7 +123,12 @@ jobs:
       - name: Enforce public source and impact evidence contract
         run: python -m policy_domino.contracts site/data.json
       - name: Persist verified collection results
+        if: ${{ !cancelled() }}
         run: |
+          # Retain completed stages even if a later upstream API fails.
+          # Evidence validation still gates every persisted snapshot.
+          python -m policy_domino render
+          python -m policy_domino.contracts site/data.json
           git config user.name policy-domino-next-bot
           git config user.email policy-domino-next-bot@users.noreply.github.com
           # Canonical state is sharded and gzip-compressed. Stage both the
