@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import datetime as dt
 import time
+import re
 from .core import SOURCES, ADMIN_RULE_KINDS, utc_now
 from collections import defaultdict, deque
 
 MAX_ATTEMPTS = 4
 DONE = frozenset({"compared", "no_text_change", "enactment", "repeal"})
+ANNUAL_RULE_TITLE = re.compile(r"(19|20)\d{2}\s*년(?:도)?")
 
 
 def collect_streams(api, state, today: dt.date, ingest_window,
@@ -163,7 +165,13 @@ def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
         if doc.get("reference_only") or doc.get("source") not in pools:
             continue
         key = doc["id"]
-        if state.get("findings", {}).get(key, {}).get("status") in DONE:
+        status=state.get("findings", {}).get(key, {}).get("status")
+        annual_recheck=(
+            status == "enactment" and
+            doc.get("source") == "admrul" and
+            bool(ANNUAL_RULE_TITLE.search(doc.get("title",""))) and
+            key not in state.get("annual_recheck_completed_ids",[]))
+        if status in DONE and not annual_recheck:
             continue
         attempt = attempts.get(key, {})
         if not retry_due(attempt, today):

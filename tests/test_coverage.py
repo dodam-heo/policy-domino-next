@@ -61,6 +61,20 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(state["collection_run"]["rule_kinds"]["고시"]["completed"],4)
         self.assertEqual(state["collection_run"]["streams"],30)
 
+    def test_existing_annual_enactment_gets_one_official_prior_year_recheck(self):
+        doc={"id":"admrul|101|2027","source":"admrul",
+             "title":"가상 2027년도 운영기준","revision":"제정",
+             "published_at":"2026-07-29","serial":"2027",
+             "stable_id":"101","reference_only":False}
+        state=new_state()
+        state["documents"]={doc["id"]:doc}
+        state["findings"]={doc["id"]:{"status":"enactment"}}
+        queue=fair_work_queue(state,dt.date(2026,11,10),limit=4)
+        self.assertEqual(len(queue),1)
+        self.assertEqual(queue[0]["id"],doc["id"])
+        state["annual_recheck_completed_ids"]=[doc["id"]]
+        self.assertEqual(fair_work_queue(state,dt.date(2026,11,10),4),[])
+
     def test_historical_backfill_uses_multiweek_blocks_for_all_sources(self):
         state=new_state()
         queries=[]

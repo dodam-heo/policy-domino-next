@@ -83,15 +83,48 @@ def extract_digital_pdf_text(pdf: bytes) -> str:
     return result
 
 
+def normalize_legacy_annex_keys(version: dict) -> dict:
+    """Migrate old parser keys with annex titles to stable official numbers.
+
+    This does not alter any legal text or invent a comparison. Collisions
+    are deliberately left unresolved to prevent merging distinct evidence.
+    """
+    clauses = version.get("clauses", {})
+    updated = {}
+    for old_key, entry in clauses.items():
+        fixed = re.sub(
+            r"^((?:별표|서식) \d+(?:의\d+)?) \([^)]{1,180}\)$",
+            r"\1", old_key)
+        if fixed in updated and old_key != fixed:
+            # Cannot prove which duplicate snapshot is the correct annex.
+            fixed = old_key
+        updated[fixed] = entry
+    normalized = dict(version)
+    normalized["clauses"] = updated
+    normalized["incomplete_keys"] = [k for k,v in updated.items()
+                                     if not v.get("complete",False)]
+    normalized["body_sha256"] = (
+        hashlib.sha256("|".join(k+v["sha256"] for k,v in
+                               sorted(updated.items())).encode("utf-8")).hexdigest()
+        if updated else "")
+    return normalized
+
+
 def enrich_annexes(root, parsed: dict, *,
                    downloader=fetch_official_pdf,
-                   pdf_extractor=extract_digital_pdf_text) -> dict:
+                   pdf_extractor=extract_digital_pdf_text,
+                   previous_snapshot: dict | None = None,
+                   max_downloads: int = 4) -> dict:
     """Materialize missing annex bodies from official PDF links; retain audit."""
     result=dict(parsed)
     clauses=dict(result.get("clauses",{}))
-    provenance={}
+    previous_snapshot=normalize_legacy_annex_keys(previous_snapshot or {})
+    provenance=dict(previous_snapshot.get("annex_evidence",{}))
     failures=[]
     processed=0
+    for old_label, evidence in provenance.items():
+        if old_label not in clauses and old_label in previous_snapshot.get("clauses",{}):
+            clauses[old_label]=previous_snapshot["clauses"][old_label]
     for node in root.iter():
         kind=tag(node)
         if kind not in ("별표단위","서식단위"):
@@ -115,6 +148,9 @@ def enrich_annexes(root, parsed: dict, *,
                        if authorized_law_pdf_url(x)), "")
         if not approved:
             failures.append({"annex":label,"reason":"official_pdf_not_available"})
+            continue
+        if processed >= max_downloads:
+            failures.append({"annex":label,"reason":"deferred_pdf_budget"})
             continue
         try:
             blob=downloader(approved)

@@ -3,7 +3,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from policy_domino.parser import parse_document
 from policy_domino.annexes import (
-    authorized_law_pdf_url, enrich_annexes
+    authorized_law_pdf_url, enrich_annexes, normalize_legacy_annex_keys
 )
 from policy_domino.analysis import compare
 
@@ -59,6 +59,44 @@ class AnnexIntegrationTests(unittest.TestCase):
                     "//evil.example/LSW/flDownload.do?flSeq=123",
                     "file:///etc/passwd"):
             self.assertFalse(authorized_law_pdf_url(url), url)
+
+    def test_old_stored_legal_annex_title_is_normalized_not_restored(self):
+        legacy={
+            "status":"extracted",
+            "clauses":{"별표 1 (2026년도 자격표)":{
+                "text":"소득기준 100만원","complete":True,
+                "sha256":"old"}},
+            "incomplete_keys":[],
+        }
+        same=normalize_legacy_annex_keys(legacy)
+        self.assertIn("별표 1",same["clauses"])
+        self.assertNotIn("별표 1 (2026년도 자격표)",same["clauses"])
+        self.assertEqual(same["clauses"]["별표 1"]["text"],"소득기준 100만원")
+
+    def test_annex_fetch_budget_retains_unresolved_followup(self):
+        root=ET.fromstring("""<행정규칙>
+          <별표단위><별표번호>1</별표번호>
+            <별표서식PDF파일링크>/LSW/flDownload.do?flSeq=10</별표서식PDF파일링크>
+          </별표단위>
+          <별표단위><별표번호>2</별표번호>
+            <별표서식PDF파일링크>/LSW/flDownload.do?flSeq=11</별표서식PDF파일링크>
+          </별표단위></행정규칙>""")
+        calls=[]
+        def downloader(url):
+            calls.append(url)
+            return b"%PDF"
+        first=enrich_annexes(root,parse_document(root),
+                  downloader=downloader,pdf_extractor=lambda b:"기준액 100만원",
+                  max_downloads=1)
+        self.assertEqual(first["status"],"partial")
+        self.assertEqual(first["unresolved_annexes"][0]["reason"],
+                         "deferred_pdf_budget")
+        second=enrich_annexes(root,parse_document(root),previous_snapshot=first,
+                  downloader=downloader,pdf_extractor=lambda b:"기준액 100만원",
+                  max_downloads=1)
+        self.assertEqual(second["status"],"extracted")
+        self.assertEqual(len(second["clauses"]),2)
+        self.assertEqual(len(calls),2)
 
     def test_inline_annex_is_preserved_and_not_fetched(self):
         root=ET.fromstring("""<행정규칙><별표단위><별표번호>1</별표번호>

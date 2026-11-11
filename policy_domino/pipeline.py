@@ -117,7 +117,9 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
             doc["law_type"] = verified_type
             state["documents"][doc["id"]]["law_type"] = verified_type
     from .annexes import enrich_annexes
-    after = enrich_annexes(root, parse_document(root))
+    after = enrich_annexes(
+        root, parse_document(root),
+        previous_snapshot=state["versions"].get(doc["id"]))
     state["versions"][doc["id"]] = after
     base = {
         "event_id": doc["id"], "status": "",
@@ -165,11 +167,18 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
     # Keep both official versions, but do not treat baseline as a new change.
     if prior["id"] not in state["documents"]:
         state["documents"][prior["id"]] = {**prior, "reference_only": True}
+    from .annexes import normalize_legacy_annex_keys
     previous = state["versions"].get(prior["id"])
-    if not previous:
+    missing_pdf = bool(previous and previous.get("attachment_link_count")
+                       and (previous.get("status") != "extracted"))
+    if not previous or missing_pdf:
         previous_root = api.detail(prior)
-        previous = enrich_annexes(previous_root,parse_document(previous_root))
+        previous = enrich_annexes(
+            previous_root,parse_document(previous_root),
+            previous_snapshot=previous)
         state["versions"][prior["id"]] = previous
+    else:
+        previous = normalize_legacy_annex_keys(previous)
     result = compare(previous, after, doc)
     result.update({
         "event_id": doc["id"],
@@ -291,6 +300,15 @@ def run_once(state: dict, api: LawAPI, today: dt.date, limit: int = 24,
                 "changes": [], "excluded": [], "review_candidates": [],
                 "reason": type(exc).__name__ + ": " + str(exc)[:160],
             }
+        if (doc.get("source") == "admrul" and
+            YEAR_TITLE.search(doc.get("title","")) and
+            "제정" in doc.get("revision","") and
+            state.get("findings",{}).get(doc["id"],{}).get("status")
+                in ("compared","partial_compared","enactment",
+                    "no_text_change","partial_unresolved")):
+            done=state.setdefault("annual_recheck_completed_ids",[])
+            if doc["id"] not in done:
+                done.append(doc["id"])
         analyzed += 1
     # Additional official citation/program discovery is optional and may never
     # prevent source-comparison results from being persisted.
