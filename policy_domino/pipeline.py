@@ -18,7 +18,7 @@ from .parser import parse_document
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_FILE = ROOT / "data" / "state.json"
-DATA_FILE = ROOT / "site" / "data.json"
+DATA_FILE = ROOT / "site" / "catalog.json"
 
 YEAR_TITLE = re.compile(r"(19|20)\d{2}\s*년(?:도)?")
 TERMINAL = {"compared", "no_text_change", "enactment", "repeal"}
@@ -487,7 +487,13 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     }
     from .contracts import validate_public
     validate_public(data)
-    write_json(output, data)
+    if output.resolve() == DATA_FILE.resolve():
+        from .web_export import export_site
+        export_site(data, output)
+    else:
+        # Explicit non-production output remains useful to existing research
+        # and regression tests; it is never published by GitHub Pages.
+        write_json(output, data)
     return data
 
 

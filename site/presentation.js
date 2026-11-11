@@ -14,6 +14,8 @@
   function highImpactScope(event) {
     // This pill measures only the *verified breadth of public-institution
     // review targets*, NOT a predicted socioeconomic impact score.
+    if(Array.isArray(event.agency_names))
+      return new Set(event.agency_names.filter(Boolean)).size>=2;
     const institutions=new Set((event.institutional_reviews||[])
       .map(review=>String(review.institution||"").trim())
       .filter(Boolean));
@@ -37,7 +39,7 @@
       const searchable=[
         event.title,event.headline,event.ministry,
         event.effective_date,...effectiveYear(event.effective_date),
-        event.published_at,
+        event.published_at,event.search_text||"",
         ...(event.members||[]).flatMap(x=>[x.title,x.kind]),
         ...(event.changes||[]).flatMap(x=>[
           x.document_title,x.article,x.meaning?.label||x.category||"",
@@ -84,10 +86,12 @@
   }
   function overview(events,progress={}) {
     const agencies=new Set(events.flatMap(e=>
-      (e.institutional_reviews||[]).map(x=>x.institution).filter(Boolean)));
+      Array.isArray(e.agency_names)?e.agency_names:
+        (e.institutional_reviews||[]).map(x=>x.institution).filter(Boolean)));
     return {
       events:events.length,institutions:agencies.size,
-      actions:events.reduce((sum,e)=>sum+(e.institutional_reviews||[]).length,0),
+      actions:events.reduce((sum,e)=>sum+(e.review_count??
+        (e.institutional_reviews||[]).length),0),
       sources:Number(progress.indexed_documents||0),
       comparedDocuments:Number(progress.verified_document_changes||0)
     };

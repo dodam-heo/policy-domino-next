@@ -7,7 +7,9 @@ on:
     paths-ignore:
       - 'data/state.json'
       - 'data/state/**'
-      - 'site/data.json'
+      - 'site/catalog.json'
+      - 'site/sources.json'
+      - 'site/details/**'
   workflow_dispatch:
   schedule:
     - cron: '17 */2 * * *'
@@ -41,9 +43,9 @@ jobs:
       - name: Test event-based interface
         run: node tests/test_site.cjs
       - name: Check official event and institutional evidence contracts
-        run: python -m policy_domino.contracts site/data.json
+        run: python -m policy_domino.contracts site/catalog.json
       - name: Audit full-source coverage gaps and agency classification
-        run: python -m policy_domino.verification site/data.json site/verification.json
+        run: python -m policy_domino.verification site/catalog.json site/verification.json
 
   # Official source collection and Gemini reviews must not be blocked by a
   # GitHub Pages deployment that is syncing or experiencing an outage.
@@ -127,15 +129,15 @@ jobs:
         timeout-minutes: 8
         run: python -m policy_domino ai --limit "$AI_LIMIT"
       - name: Enforce public source and impact evidence contract
-        run: python -m policy_domino.contracts site/data.json
+        run: python -m policy_domino.contracts site/catalog.json
       - name: Persist verified collection results
         if: ${{ !cancelled() }}
         run: |
           # Retain completed stages even if a later upstream API fails.
           # Evidence validation still gates every persisted snapshot.
           python -m policy_domino render
-          python -m policy_domino.contracts site/data.json
-          python -m policy_domino.verification site/data.json site/verification.json
+          python -m policy_domino.contracts site/catalog.json
+          python -m policy_domino.verification site/catalog.json site/verification.json
           git config user.name policy-domino-next-bot
           git config user.email policy-domino-next-bot@users.noreply.github.com
           # Canonical state is sharded and gzip-compressed. Stage both the
@@ -143,7 +145,9 @@ jobs:
           # 100 MB single-file limit. Never commit a new giant state.json.
           test -f data/state/manifest.json
           test ! -e data/state.json
-          git add -A -- data/state site/data.json
+          git add -A -- data/state
+          # Generated site files are exported in verify/publish, never stored
+          # as an ever-growing Git snapshot.
           if [ -f site/verification.json ]; then
             git add -- site/verification.json
           fi
@@ -185,9 +189,9 @@ jobs:
       - name: Build public event data from current official records
         run: python -m policy_domino render
       - name: Enforce verified source contract before publishing
-        run: python -m policy_domino.contracts site/data.json
+        run: python -m policy_domino.contracts site/catalog.json
       - name: Publish explicit coverage and impact completeness assessment
-        run: python -m policy_domino.verification site/data.json site/verification.json
+        run: python -m policy_domino.verification site/catalog.json site/verification.json
       - name: Configure actual GitHub Pages
         uses: actions/configure-pages@v6
       - name: Upload one verified site snapshot

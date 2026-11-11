@@ -23,9 +23,13 @@ assert.ok(style.includes(".agency-group"),"Impact grouping must be styled");
 assert.ok(style.includes(".agency-directory-modal[hidden]{display:none}"),
   "Modal must obey hidden attribute when not opened");
 
-const existing=JSON.parse(fs.readFileSync("site/data.json","utf8"));
+const existing=JSON.parse(fs.readFileSync("site/catalog.json","utf8"));
 assert.equal(existing.schema,"policy-domino-next-v1");
-assert.ok(Array.isArray(existing.documents));
+assert.equal(existing.distribution,"split-v1");
+assert.ok(Array.isArray(existing.events));
+assert.ok(fs.existsSync("site/sources.json"));
+assert.ok(!fs.existsSync("site/data.json"),
+  "The legacy combined 42MB public file must not be deployed");
 console.log("PASS: one event-centered interface, source documents kept as evidence");
 
 class ClassList{

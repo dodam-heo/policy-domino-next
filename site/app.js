@@ -4,7 +4,8 @@
   const view = window.PolicyDominoView;
   const state = {
     data: null, events: [], selected: null, mode: "all",
-    query: "", visible: 60, institutionFilter: "all"
+    query: "", visible: 60, institutionFilter: "all",
+    details: new Map(), loadingDetails: new Set(), sourceIndexLoading: false
   };
   const mobile = () => window.matchMedia("(max-width:850px)").matches;
   const num = n => Number(n || 0).toLocaleString("ko-KR");
@@ -90,6 +91,21 @@
   function filtered() {
     return view.filterEvents(state.events,state);
   }
+  function loadSourceIndexOnDemand() {
+    if(!state.data?.documents_path || state.data.documents_loaded ||
+       state.sourceIndexLoading)return;
+    state.sourceIndexLoading=true;
+    fetch(state.data.documents_path,{cache:"no-store"}).then(response=>{
+      if(!response.ok)throw Error("공식자료 검색 색인 요청 실패");
+      return response.json();
+    }).then(payload=>{
+      if(!Array.isArray(payload.documents))throw Error("공식자료 검색 색인 오류");
+      state.data.documents=payload.documents;
+      state.data.documents_loaded=true;
+      renderList();
+    }).catch(error=>console.error("공식자료 검색 색인:",String(error)))
+      .finally(()=>{state.sourceIndexLoading=false;});
+  }
   function renderIndexedOfficialSources(root, events) {
     // The official index and a verified policy change are different stages.
     // A document without completed comparison must be discoverable, but must
@@ -99,6 +115,11 @@
       .map(view.searchKey).filter(Boolean);
     if(!terms.length || terms.join("").length<2)return;
     const verified=new Set(state.events.flatMap(e=>e.source_documents||[]));
+    if(state.data?.documents_path&&!state.data.documents_loaded){
+      loadSourceIndexOnDemand();
+      append(root,create("p","section-help","공식자료 검색 색인을 불러오는 중입니다."));
+      return;
+    }
     const docs=(state.data?.documents||[]).filter(doc=>{
       if(verified.has(doc.id))return false;
       const year=String(doc.effective_date||"").slice(0,4);
@@ -180,7 +201,7 @@
       const highlighted=(event.highlights||[])[0];
       const important=highlighted && (event.changes||[]).find(ch=>
         ch.document_id===highlighted.document_id && ch.article===highlighted.article);
-      const brief=important?.brief||event.changes?.[0]?.brief;
+      const brief=event.list_brief||important?.brief||event.changes?.[0]?.brief;
       append(item,header,create("h3","",event.title),
         create("p","item-brief",brief||event.headline),tags);
       item.onclick=()=>select(event.id);
@@ -610,9 +631,32 @@
 
   function renderDetail() {
     const root=$("detail");root.replaceChildren();
-    const event=state.events.find(e=>e.id===state.selected);
-    if (!event) {
+    const summary=state.events.find(e=>e.id===state.selected);
+    if (!summary) {
       append(root,create("p","empty","정책 변경 사건을 선택하세요."));
+      return;
+    }
+    const event=state.details.get(summary.id)||summary;
+    if(summary.detail_path && !state.details.has(summary.id)){
+      append(root,create("p","empty","공식 변경 근거와 기관별 상세 정보를 불러오는 중입니다."));
+      if(!state.loadingDetails.has(summary.id)){
+        state.loadingDetails.add(summary.id);
+        const id=summary.id;
+        fetch(summary.detail_path,{cache:"no-store"}).then(response=>{
+          if(!response.ok)throw Error("상세 근거 데이터 요청 실패");
+          return response.json();
+        }).then(detail=>{
+          if(detail?.id!==id || !Array.isArray(detail.changes) ||
+             !Array.isArray(detail.institutional_reviews))
+            throw Error("정책 상세 데이터 형식 오류");
+          state.details.set(id,detail);
+          if(state.selected===id)renderDetail();
+        }).catch(error=>{
+          if(state.selected===id)
+            root.replaceChildren(create("p","no-impacts",
+              "상세 정보를 불러오지 못했습니다. 다시 정책을 선택해 주세요. "+String(error)));
+        }).finally(()=>state.loadingDetails.delete(id));
+      }
       return;
     }
     const head=create("header","detail-head");
@@ -661,6 +705,9 @@
         !Array.isArray(data.events)) throw Error("정책 변경 사건 데이터가 없습니다.");
     state.data=data;
     state.events=data.events;
+    state.details.clear();
+    state.loadingDetails.clear();
+    data.documents_loaded=!data.documents_path;
     state.mode="all";
     state.institutionFilter="all";
     const stats=view.overview(data.events,data.ai_progress||{});
@@ -722,7 +769,7 @@
       document.body.classList.remove("detail-active");
     } else if (!eventHash()) back(false);
   });
-  fetch("./data.json",{cache:"no-store"})
+  fetch("./catalog.json",{cache:"no-store"})
     .then(res=>{
       if(!res.ok)throw Error("공식 정책 데이터 응답 오류");
       return res.json();
