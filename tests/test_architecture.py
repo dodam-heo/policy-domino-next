@@ -50,10 +50,33 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("collect_sources=not args.analysis_only", pipeline)
         self.assertIn("source_budget_seconds", pipeline)
         self.assertEqual(workflow.count("uses: actions/deploy-pages@"), 1)
-        self.assertEqual(workflow.count("git add -A -- data/state data/state.json site/data.json"), 1)
+        self.assertEqual(workflow.count("git add -A -- data/state site/data.json"), 1)
+        self.assertIn("git ls-files --error-unmatch data/state.json", workflow)
         self.assertIn("test -f data/state/manifest.json", workflow)
         self.assertIn("test ! -e data/state.json", workflow)
         self.assertIn("'data/state/**'", workflow)
+
+    def test_staging_persists_shards_when_legacy_state_file_is_absent(self):
+        import subprocess
+        import tempfile
+        workflow = (ROOT / ".github/workflows/pipeline.yml").read_text()
+        commands = "git add -A -- " + workflow.split(
+            "          git add -A -- ", 1)[1].split(
+            "          if ! git diff --cached", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "data/state").mkdir(parents=True)
+            (root / "site").mkdir()
+            (root / "data/state/manifest.json").write_text("{}")
+            (root / "site/data.json").write_text("{}")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            result = subprocess.run(["bash", "-e", "-c", commands], cwd=root,
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            staged = subprocess.check_output(
+                ["git", "diff", "--cached", "--name-only"], cwd=root, text=True)
+            self.assertIn("data/state/manifest.json", staged)
+            self.assertIn("site/data.json", staged)
 
     def test_state_migration_is_one_shot_without_api_rescan(self):
         workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(
@@ -118,7 +141,9 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("def event_identity(", events)
         self.assertIn("def build_events(", events)
         self.assertIn("python -m policy_domino render", workflow)
-        self.assertIn("python -m policy_domino ai --limit 24", workflow)
+        self.assertIn('python -m policy_domino ai --limit "$AI_LIMIT"', workflow)
+        self.assertIn("AI_LIMIT:", workflow)
+        self.assertIn("\'24\'", workflow)
         for key in ("mode-all", "mode-new", "mode-amended",
                     "mode-repealed", "mode-impact", "stat-events",
                     "stat-agencies", "analysis-coverage"):
