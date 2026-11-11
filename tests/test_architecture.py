@@ -88,7 +88,7 @@ class SubmissionArchitectureTests(unittest.TestCase):
             encoding="utf-8")
         self.assertIn("[state-migrate]", workflow)
         self.assertIn("python -m policy_domino migrate", workflow)
-        self.assertIn("choices=(\"run\", \"render\", \"ai\", \"ai-check\", \"gov24\", \"migrate\", \"reconcile\")",pipeline)
+        self.assertIn("choices=(\"run\", \"render\", \"ai\", \"ai-check\", \"gov24\", \"institutions\", \"migrate\", \"reconcile\")",pipeline)
         self.assertIn("test ! -e data/state.json", workflow)
 
     def test_official_change_reconciliation_and_annexes_have_failing_closed_guards(self):
