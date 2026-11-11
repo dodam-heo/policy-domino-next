@@ -134,7 +134,7 @@ function browser(isMobile=false,hash="",data=payload) {
     "agency-directory-open","agency-directory-close",
     "agency-directory-modal","agency-directory-backdrop",
     "agency-directory-search","agency-directory-results",
-    "agency-directory-count","agency-directory-more",
+    "agency-directory-count",
     "search","updated","more","backToList",
     "mode-all","mode-new","mode-amended","mode-repealed","mode-impact"];
   const elements=new Map(ids.map(id=>[id,new Element()]));

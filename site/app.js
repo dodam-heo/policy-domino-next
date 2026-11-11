@@ -630,7 +630,7 @@
     const found=agencies.filter(a=>String(a.agency||"").toLocaleLowerCase("ko-KR").includes(term));
     $("agency-directory-count").textContent="공식 기관 "+num(agencies.length)+"곳 중 "+num(found.length)+"곳";
     if(!found.length)append(root,create("p","empty","검색된 기관이 없습니다."));
-    for(const a of found.slice(0,state.directoryLimit||50)) {
+    for(const a of found) {
       const item=create("div","agency-directory-entry");
       item.setAttribute("role","listitem");
       append(item,create("strong","",a.agency),
@@ -638,7 +638,6 @@
           "건 · 정부24 서비스 "+num(a.gov24_services)+"건"));
       append(root,item);
     }
-    $("agency-directory-more").hidden=found.length<=(state.directoryLimit||50);
   }
   function closeAgencyDirectory(){
     $("agency-directory-modal").hidden=true;
@@ -646,7 +645,6 @@
     $("agency-directory-open").focus?.();
   }
   function openAgencyDirectory(){
-    state.directoryLimit=50;
     $("agency-directory-search").value="";
     $("agency-directory-modal").hidden=false;
     document.body.classList.add("directory-modal-open");
@@ -700,12 +698,7 @@
   $("agency-directory-close").onclick=closeAgencyDirectory;
   $("agency-directory-backdrop").onclick=closeAgencyDirectory;
   $("agency-directory-search").oninput=ev=>{
-    state.directoryLimit=50;
     renderAgencyDirectory(ev.target.value);
-  };
-  $("agency-directory-more").onclick=()=>{
-    state.directoryLimit+=50;
-    renderAgencyDirectory($("agency-directory-search").value);
   };
   window.addEventListener("keydown",event=>{
     if(event.key==="Escape"&&!$("agency-directory-modal").hidden)

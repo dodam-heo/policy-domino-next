@@ -75,7 +75,7 @@ class ReconciliationTests(unittest.TestCase):
         today = dt.date(2026, 11, 10)
         first_kind = next(iter(ADMIN_RULE_KINDS))
         old_key = "admrulOldAndNew|" + first_kind + "|2026-11-01|2026-11-10"
-        state["reconciliation_windows"][old_key] = {
+        state.setdefault("reconciliation_windows", {})[old_key] = {
             "complete": False, "checked_at": "2026-11-01T00:00:00+00:00"}
         state["reconcile_cursor"] = 3
         api = FakeAPI()
