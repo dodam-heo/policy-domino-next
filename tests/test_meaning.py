@@ -41,6 +41,12 @@ class MeaningTests(unittest.TestCase):
                           ("300,000", "330,000"), ("400,000", "440,000")])
         self.assertIn("기본생활", rows[0]["column"])
         self.assertIn("주택이용", rows[2]["column"])
+        result = explain(old, new)
+        self.assertEqual(result["change_kind"], "numeric")
+        self.assertIn("2개 금액표", result["description"])
+        preview = " ".join(x["before"]["prefix"] for x in result["focus"])
+        self.assertIn("기본생활", preview)
+        self.assertIn("주택이용", preview)
 
     def test_ambiguous_duplicate_table_titles_never_pair_values(self):
         from policy_domino.meaning import _currency_table_changes

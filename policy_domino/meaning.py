@@ -385,13 +385,35 @@ def explain(before: str, after: str) -> dict:
         kind, label, score = "numeric", "금액·수치 기준", 105
         first = table_rows[0]
         old_quote, new_quote = first["before"], first["after"]
-        description = (f"가구원 수별 금액표의 {len(table_rows)}개 기준이 변경됐습니다. "
-                       f"{first['column']}: {old_quote} → {new_quote}{first['unit']}.")
+        # Show at least one actual changed row from each uniquely matched
+        # section before filling the remaining preview slots.
+        sections = list(dict.fromkeys(
+            row["column"].split(" · ", 1)[0]
+            for row in table_rows
+            if " · " in row["column"]))
+        if sections:
+            description = (f"{len(sections)}개 금액표의 {len(table_rows)}개 가구별 기준이 "
+                           f"변경됐습니다. {first['column']}: "
+                           f"{old_quote} → {new_quote}{first['unit']}.")
+            chosen = []
+            for section in sections:
+                row = next(x for x in table_rows
+                           if x["column"].startswith(section + " · "))
+                chosen.append(row)
+            for row in table_rows:
+                if len(chosen) >= 6:
+                    break
+                if row not in chosen:
+                    chosen.append(row)
+        else:
+            description = (f"가구원 수별 금액표의 {len(table_rows)}개 기준이 변경됐습니다. "
+                           f"{first['column']}: {old_quote} → {new_quote}{first['unit']}.")
+            chosen = table_rows[:6]
         focus = [{"before": {"prefix": row["column"] + " ", "changed": row["before"],
                               "suffix": row["unit"]},
                   "after": {"prefix": row["column"] + " ", "changed": row["after"],
                              "suffix": row["unit"]}, "type": "교체"}
-                 for row in table_rows[:6]]
+                 for row in chosen]
     elif citation:
         kind, label, score = "citation", "인용 조문 변경", 18
         old_quote, new_quote = citation
