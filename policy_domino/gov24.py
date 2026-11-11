@@ -443,15 +443,17 @@ def discover_public_service_leads(state: dict, events: list[dict],
                        for ref in extract_references(change.get("after", "").translate(
                            str.maketrans({"｢": "「", "｣": "」"})))
                        if ref.get("article")}
-    # One scan of official public-service records, not O(changes × services).
+    title_index = [(title, _plain(title)) for title in all_titles | embedded_titles
+                   if len(title) >= 5]
+    # Normalize each legal title once, rather than once per service.
     for service in sources.values():
         if not service.get("agency") or not service.get("service_name"):
             continue
         basis_plain = _plain(service.get("regulatory_basis", ""))
         if not basis_plain:
             continue
-        for title in all_titles | embedded_titles:
-            if len(title) >= 5 and _plain(title) in basis_plain:
+        for title, title_plain in title_index:
+            if title_plain in basis_plain:
                 candidates_by_title[title].append(service)
 
     linked = {}
