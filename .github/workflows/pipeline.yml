@@ -143,7 +143,10 @@ jobs:
           # 100 MB single-file limit. Never commit a new giant state.json.
           test -f data/state/manifest.json
           test ! -e data/state.json
-          git add -A -- data/state site/data.json site/verification.json
+          git add -A -- data/state site/data.json
+          if [ -f site/verification.json ]; then
+            git add -- site/verification.json
+          fi
           if git ls-files --error-unmatch data/state.json >/dev/null 2>&1; then
             git add -u -- data/state.json
           fi
