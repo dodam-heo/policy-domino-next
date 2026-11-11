@@ -200,6 +200,25 @@ class Gov24Tests(unittest.TestCase):
         self.assertEqual(validate_public_service_candidates({"events": [event],
                          "public_service_proofs": result["proofs"]}), [])
 
+    def test_explicit_defined_criterion_can_flow_to_a_different_entitlement_article(self):
+        service = normalize_record(record("DEFINITION"))
+        service["regulatory_basis"] = "가상 공공서비스 운영법(제12조)"
+        service["fields"] = {"선정기준": "생활안정기준소득의 50% 이하"}
+        change = {"document_title": "생활안정기준소득 및 급여 선정기준",
+                  "article": "첨부 전문", "document_id": "DEF",
+                  "before": "가상 공공서비스 운영법 제2조에 따른 ‘생활안정기준소득’을 100만원으로 정한다.",
+                  "after": "「가상 공공서비스 운영법」 제2조에 따른 “생활안정기준소득”을 120만원으로 정한다."}
+        event = {"id": "DEF-E", "changes": [change]}
+        result = discover_public_service_leads({"public_services": {"DEFINITION": service}}, [event])
+        self.assertEqual(event["public_service_lead_count"], 1)
+        self.assertEqual(event["public_service_leads"][0]["match_tier"],
+                         "official_defined_criterion_and_parent_law")
+        self.assertEqual(validate_public_service_candidates({"events": [event],
+                         "public_service_proofs": result["proofs"]}), [])
+        service["fields"]["선정기준"] = "다른급여의 50% 이하"
+        discover_public_service_leads({"public_services": {"DEFINITION": service}}, [event])
+        self.assertEqual(event["public_service_lead_count"], 0)
+
     def test_application_procedure_is_a_distinct_public_service_review_target(self):
         raw=record("S888")
         raw["선정기준"]=""

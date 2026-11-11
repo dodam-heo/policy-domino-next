@@ -295,6 +295,25 @@ def service_change_basis(service: dict, change: dict) -> tuple[str, str] | None:
     service_refs = references(service.get("regulatory_basis", ""))
     common = set(old) & set(new) & set(service_refs)
     if not common:
+        # A service can cite its entitlement article while using a criterion
+        # defined in another article of the SAME law. Require the literal
+        # defined term in both official versions and the actual service field.
+        def defined_terms(text):
+            return {_plain(term) for term in re.findall(
+                r"[‘“\"']([^’”\"']{5,60})[’”\"']", text)}
+        definitions = defined_terms(change.get("before", "")) & defined_terms(
+            change.get("after", ""))
+        definitions = {term for term in definitions if len(term) >= 5 and
+                       term in _plain(title) and term in _plain(criterion)}
+        if not definitions:
+            return None
+        for (law_title, article), ref in sorted(service_refs.items()):
+            # Exact law-name boundaries prevent 법 and 법 시행령 from merging.
+            law_pattern = r"(?<![가-힣])" + r"\s*".join(
+                re.escape(char) for char in law_title) + r"(?![가-힣])"
+            if all(re.search(law_pattern, change.get(side, ""))
+                   for side in ("before", "after")):
+                return "official_defined_criterion_and_parent_law", ref["quote"][:280]
         return None
     chosen = sorted(common)[0]
     return "official_shared_clause_and_criterion", service_refs[chosen]["quote"][:280]
