@@ -177,3 +177,22 @@ GitHub Actions는 단일 워크플로에서 **검증, 수집/AI, 단일 사이�
 
 공식 행정규칙 6종을 현행·연혁별로 조회하되, 수집 시간 예산을 넘기면 확인한 기록은 보존하고 미조회 종류의 커서를 유지한다. 다음 실행은 마지막 미조회 종류부터 계속 처리한다. 고시가 포함된 행정규칙 분석 대기열은 공식 종류별로 균등하게 교대하며, 제목에 연도가 들어가는 연례 규정은 국가법령정보센터가 문서화한 현행(nw=1)과 연혁(nw=2) API를 각각 사용해 전년도 같은 제목의 근거를 찾는다. 이 기능은 중위소득 등 특정 고시를 하드코딩하지 않는다.
 
+
+
+## Incremental source and public projection (v2)
+
+- `state_store.py` reads legacy v1 records without loss, then writes a v2
+  manifest. Official clauses are identified by their canonical SHA-256
+  fingerprint; identical text+metadata across editions references one block.
+- New clause contents are added to immutable compressed content packs under
+  `data/state/content/`; a previous pack is never edited during a later run.
+- Document metadata, version-to-clause references, findings, public services and
+  AI results use independently updated deterministic `records_v2/` buckets.
+- In-memory `state["versions"]` retains the original complete source contract.
+  Collectors and verified comparison algorithms do not see storage references.
+- The Pages build verifies full evidence before writing `site/catalog.json`,
+  `site/sources.json` (lazy search index), and
+  `site/details/event-<id>.json` (loaded only after click). The former
+  `site/data.json` monolith is removed; generated snapshots are not committed.
+- Completeness audit remains explicit: successful migration and validation
+  never imply that every official source or public-program impact was found.
