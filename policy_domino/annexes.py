@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 import re
 import urllib.parse
 import urllib.request
+import urllib.error
 
 from .api import field, tag
 from .core import clean
@@ -58,8 +59,14 @@ def fetch_official_file(href: str, magic: bytes) -> bytes:
                 raise ValueError("Non-official PDF redirect")
             return super().redirect_request(req,fp,code,msg,headers,newurl)
     opener=urllib.request.build_opener(OfficialRedirect)
-    with opener.open(request,timeout=18) as response:
-        content=response.read(MAX_ATTACHMENT_BYTES+1)
+    for attempt in range(2):
+        try:
+            with opener.open(request,timeout=18) as response:
+                content=response.read(MAX_ATTACHMENT_BYTES+1)
+            break
+        except (OSError, urllib.error.URLError):
+            if attempt:
+                raise
     if len(content)>MAX_ATTACHMENT_BYTES:
         raise ValueError("Official PDF exceeds size limit")
     if not content.startswith(magic):

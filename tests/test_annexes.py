@@ -129,6 +129,19 @@ class AnnexIntegrationTests(unittest.TestCase):
         self.assertEqual(result["unresolved_annexes"][0]["reason"],
                          "image_table_unresolved")
 
+    def test_transient_official_attachment_download_retries_once(self):
+        from unittest.mock import MagicMock, patch
+        import urllib.error
+        from policy_domino.annexes import fetch_official_hwpx
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b"PK verified hwpx"
+        opener = MagicMock()
+        opener.open.side_effect = [urllib.error.URLError("temporary"), response]
+        with patch("policy_domino.annexes.urllib.request.build_opener", return_value=opener):
+            blob = fetch_official_hwpx("http://law.go.kr/flDownload.do?flSeq=12")
+        self.assertEqual(blob, b"PK verified hwpx")
+        self.assertEqual(opener.open.call_count, 2)
+
     def test_unextractable_annex_fails_closed(self):
         root=ET.fromstring("""<행정규칙><별표단위><별표번호>4</별표번호>
           <별표서식PDF파일링크>/LSW/flDownload.do?flSeq=15</별표서식PDF파일링크>
