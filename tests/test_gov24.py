@@ -66,6 +66,12 @@ class Gov24Tests(unittest.TestCase):
         altered["상세조회URL"] = "https://attacker.example/service"
         self.assertEqual(normalize_record(altered)["service_url"], "")
 
+    def test_private_service_providers_are_not_affected_public_agencies(self):
+        private = record("PRIVATE")
+        private["소관기관유형"] = "민간위탁기관"
+        with self.assertRaises(Gov24SourceError):
+            normalize_record(private)
+
     def test_official_list_without_agency_is_kept_until_detail_supplies_issuer(self):
         raw=record("S090")
         raw.pop("소관기관명")
