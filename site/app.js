@@ -691,18 +691,6 @@
     append(head,meta,create("h2","",event.title),provenance,
       event.effective_date ?
         create("p","effective","시행일 "+event.effective_date):null);
-    if(Array.isArray(event.impact_reasons)){
-      const score=create("div","impact-assessment");
-      append(score,create("strong","",event.impact_level==="high"?
-        "영향도 큼 · "+num(event.impact_score)+"점":
-        event.impact_level==="pending"?"영향도 평가 중":
-        "영향도 "+num(event.impact_score)+"점"));
-      for(const axis of event.impact_reasons)
-        append(score,create("p","",axis.axis+" "+axis.score+"/"+axis.maximum+" · "+axis.reason));
-      if(event.impact_high_basis)
-        append(score,create("p","","판정 이유 · "+event.impact_high_basis));
-      append(head,score);
-    }
     append(root,head,renderCore(event),
       renderInstitutions(event),renderAI(event));
   }
