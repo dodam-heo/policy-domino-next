@@ -20,27 +20,21 @@
     <div><small>업무 검토사항</small><strong id="stat-actions">—</strong></div>
   </div>
 </a>
-<section class="coverage-status" aria-label="공식 근거 및 AI 분석 현황">
-  <details class="coverage-status-inner" open>
-    <summary id="analysis-coverage">공식 문서의 분석 진행률을 확인하는 중입니다.</summary>
-    <div class="coverage-expanded">
-      <p id="ai-review-progress">AI 분석 현황을 확인하는 중입니다.</p>
-      <details class="directory-search">
-        <summary>공공기관 명부 검색</summary>
-        <label for="agency-directory-search">공식자료에 등록된 기관명</label>
-        <input id="agency-directory-search" type="search" placeholder="기관명 입력" autocomplete="off" aria-label="공식자료 기관명 검색">
-        <div id="agency-directory-results" class="directory-results" aria-live="polite" hidden></div>
-      </details>
-      <p id="institution-link-progress">공공기관·사업 연결 근거를 확인하는 중입니다.</p>
-      <details class="coverage-more">
-        <summary>수집·분석 진도 및 연결 근거 상세</summary>
-        <p id="analysis-diagnostics"></p>
-        <p id="ai-diagnostics"></p>
-        <p id="institution-diagnostics"></p>
-      </details>
-    </div>
-  </details>
-</section>
+<div class="directory-toolbar">
+  <button id="agency-directory-open" type="button" class="directory-open-button">공공기관 명부 보기</button>
+</div>
+<div id="agency-directory-modal" class="agency-directory-modal" hidden>
+  <div id="agency-directory-backdrop" class="agency-directory-backdrop"></div>
+  <section class="agency-directory-dialog" role="dialog" aria-modal="true" aria-labelledby="agency-directory-heading">
+    <div class="agency-directory-top"><h2 id="agency-directory-heading">공공기관 명부</h2>
+      <button id="agency-directory-close" type="button">닫기</button></div>
+    <p class="agency-directory-note">공식 자료에 등록된 기관 목록입니다. 명부 등재와 정책별 영향 확인은 별개입니다.</p>
+    <input id="agency-directory-search" type="search" placeholder="기관명 검색" autocomplete="off" aria-label="공공기관 명부 기관명 검색">
+    <p id="agency-directory-count" class="agency-directory-count" aria-live="polite"></p>
+    <div id="agency-directory-results" class="agency-directory-results" role="list" aria-live="polite"></div>
+    <button id="agency-directory-more" type="button" class="agency-directory-more" hidden>기관 더 보기</button>
+  </section>
+</div>
 <main id="layout" class="layout">
   <aside class="panel list-panel" id="listPanel" aria-label="정책 변경 사건 목록">
     <div class="list-heading">

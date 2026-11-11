@@ -120,15 +120,21 @@ const payload={
     stopped_reason:"request_budget",
     checked_at:"2026-11-10T09:33:59+00:00",
   },
+  agency_directory:[
+    {agency:"가상공공기관",alioplus_programs:1,gov24_services:2},
+    {agency:"가상교육청",alioplus_programs:0,gov24_services:1},
+    {agency:"가상복지공단",alioplus_programs:3,gov24_services:0},
+  ],
   generated_at:"2026-11-10T05:00:00+00:00",
 };
 function browser(isMobile=false,hash="",data=payload) {
   const ids=["layout","listPanel","detailPanel","detail","items",
     "stat-events","stat-agencies","stat-actions","list-count",
     "ai-review-progress","institution-link-progress",
-    "analysis-coverage","analysis-diagnostics","ai-diagnostics",
-    "institution-diagnostics","agency-directory-search",
-    "agency-directory-results",
+    "agency-directory-open","agency-directory-close",
+    "agency-directory-modal","agency-directory-backdrop",
+    "agency-directory-search","agency-directory-results",
+    "agency-directory-count","agency-directory-more",
     "search","updated","more","backToList",
     "mode-all","mode-new","mode-amended","mode-repealed","mode-impact"];
   const elements=new Map(ids.map(id=>[id,new Element()]));
@@ -171,26 +177,18 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"stat-agencies").textContent,"1");
   assert.equal(node(ui,"stat-actions").textContent,"1");
   assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 4건");
-  assert.ok(html.includes("공공기관 명부 검색"));
+  assert.ok(html.includes("공공기관 명부 보기"));
+  assert.ok(!html.includes("수집·분석 진도 및 연결 근거 상세"));
   assert.ok(html.includes("공식 정책 변경 · 업무 영향 분석"));
-  node(ui,"agency-directory-search").oninput({target:{value:"가상공공기관"}});
-  assert.ok(node(ui,"agency-directory-results").textContent==="" ||
-    textOf(node(ui,"agency-directory-results")).includes("공식기관 명부 기록이 없습니다"));
-
+  node(ui,"agency-directory-open").onclick();
+  assert.equal(node(ui,"agency-directory-modal").hidden,false);
+  node(ui,"agency-directory-close").onclick();
+  assert.equal(node(ui,"agency-directory-modal").hidden,true);
   assert.ok(html.includes("정책 변경 목록"));
   assert.ok(html.includes("공포·발령일 최신순"));
   assert.ok(!html.includes("급여·지원기준"));
   assert.ok(!html.includes("filter-grid"));
   assert.ok(html.includes("법령명·정책명·소관기관 검색"));
-  assert.ok(node(ui,"analysis-coverage").textContent.includes("공식 판본 10,166건"));
-  assert.ok(node(ui,"analysis-diagnostics").textContent.includes("아직 미분석 9,840건"));
-  assert.ok(node(ui,"analysis-diagnostics").textContent.includes("재확인 대상 204건"));
-  assert.ok(node(ui,"analysis-diagnostics").textContent.includes("재확인 유예 21건"));
-  assert.ok(node(ui,"analysis-diagnostics").textContent.includes("수집 미완료 구간 2개"));
-  assert.ok(node(ui,"ai-diagnostics").textContent.includes("24 / 변경 조문 468건"));
-  assert.ok(node(ui,"ai-diagnostics").textContent.includes("신규 결과 9건"));
-  assert.ok(node(ui,"ai-diagnostics").textContent.includes("오류 15건"));
-  assert.ok(node(ui,"institution-diagnostics").textContent.includes("관련 공식 규정 소관기관 연결 1건"));
   assert.equal(node(ui,"items").children.length,4);
   assert.deepEqual(node(ui,"items").children.filter(x=>x.dataset.eventId).map(x=>x.dataset.eventId),
                    ["amended","new","ordinary","repealed"]);
@@ -242,6 +240,22 @@ async function verifiedNavigation(){
   assert.ok(!archive[0].open,"Official evidence should start collapsed");
   assert.ok(!text.includes("공식 변경 전·후와 출처"));
   console.log("PASS: policy events, institution/program reviews, search and evidence order");
+}
+async function directoryModalNavigation(){
+  const ui=browser();await flush();
+  node(ui,"agency-directory-open").onclick();
+  assert.equal(flatten(node(ui,"agency-directory-results"))
+    .filter(x=>x.className==="agency-directory-entry").length,3);
+  assert.ok(node(ui,"agency-directory-count").textContent.includes("3곳 중 3곳"));
+  node(ui,"agency-directory-search").value="교육청";
+  node(ui,"agency-directory-search").oninput({target:{value:"교육청"}});
+  const filtered=flatten(node(ui,"agency-directory-results"))
+    .filter(x=>x.className==="agency-directory-entry");
+  assert.equal(filtered.length,1);
+  assert.ok(textOf(filtered[0]).includes("가상교육청"));
+  ui.callbacks.keydown({key:"Escape"});
+  assert.equal(node(ui,"agency-directory-modal").hidden,true);
+  console.log("PASS: searchable modal displays all registered agencies");
 }
 async function mobileNavigation(){
   const ui=browser(true);
@@ -575,7 +589,7 @@ async function officialNoticeCanBeFoundByKind(){
   node(ui,"search").oninput({target:{value:"고시"}});
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,1);
   assert.ok(textOf(node(ui,"items")).includes("고시"));
-  assert.ok(node(ui,"institution-diagnostics").textContent.includes("고시 1건 색인"));
+  assert.ok(html.includes("공공기관 명부"));
   console.log("PASS: official notices are identifiable by source metadata");
 }
 
@@ -593,7 +607,7 @@ async function noFabricatedImpact(){
   console.log("PASS: no invented institutions or operational actions");
 }
 Promise.all([
-  verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
+  verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
   realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind(),
   realDiffDoesNotRepeatSameClauseStart(),shortProofEmphasis(),

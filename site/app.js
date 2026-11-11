@@ -622,29 +622,36 @@
     append(root,head,renderCore(event),
       renderInstitutions(event),renderAI(event));
   }
-  function renderAgencyDirectory(query) {
+  function renderAgencyDirectory(query="") {
     const root=$("agency-directory-results");
     root.replaceChildren();
+    const agencies=state.data?.agency_directory||[];
     const term=String(query||"").trim().toLocaleLowerCase("ko-KR");
-    root.hidden=!term;
-    if(!term)return;
-    const results=(state.data?.agency_directory||[]).filter(row=>
-      String(row.agency||"").toLocaleLowerCase("ko-KR").includes(term));
-    if(!results.length) {
-      append(root,create("p","empty","해당 이름의 공식기관 명부 기록이 없습니다."));
-      return;
+    const found=agencies.filter(a=>String(a.agency||"").toLocaleLowerCase("ko-KR").includes(term));
+    $("agency-directory-count").textContent="공식 기관 "+num(agencies.length)+"곳 중 "+num(found.length)+"곳";
+    if(!found.length)append(root,create("p","empty","검색된 기관이 없습니다."));
+    for(const a of found.slice(0,state.directoryLimit||50)) {
+      const item=create("div","agency-directory-entry");
+      item.setAttribute("role","listitem");
+      append(item,create("strong","",a.agency),
+        create("span","","알리오 공공사업 "+num(a.alioplus_programs)+
+          "건 · 정부24 서비스 "+num(a.gov24_services)+"건"));
+      append(root,item);
     }
-    for(const agency of results.slice(0,20)) {
-      const row=create("div","directory-entry");
-      append(row,create("strong","",agency.agency),
-        create("span","",
-          "알리오 사업 "+num(agency.alioplus_programs)+"건 · 정부24 서비스 "+
-          num(agency.gov24_services)+"건"));
-      append(root,row);
-    }
-    if(results.length>20)
-      append(root,create("p","section-help",
-        "상위 20개 기관만 표시합니다. 기관명을 더 구체화하세요."));
+    $("agency-directory-more").hidden=found.length<=(state.directoryLimit||50);
+  }
+  function closeAgencyDirectory(){
+    $("agency-directory-modal").hidden=true;
+    document.body.classList.remove("directory-modal-open");
+    $("agency-directory-open").focus?.();
+  }
+  function openAgencyDirectory(){
+    state.directoryLimit=50;
+    $("agency-directory-search").value="";
+    $("agency-directory-modal").hidden=false;
+    document.body.classList.add("directory-modal-open");
+    renderAgencyDirectory();
+    $("agency-directory-search").focus?.();
   }
   function show(data) {
     if (data.schema !== "policy-domino-next-v1" ||
@@ -654,61 +661,8 @@
     state.mode="all";
     state.institutionFilter="all";
     const stats=view.overview(data.events,data.ai_progress||{});
-    const progress=data.ai_progress||{};
-    const run=data.ai_run||{};
-    const total=progress.verified_clauses ?? 0;
-    const analyzed=progress.ai_analyzed_clauses ?? 0;
-    const audit=(data.quality||{}).analysis_status||{};
-    const count=(data.collection_run||{}).failed_windows||0;
-    $("analysis-coverage").textContent=
-      "공식 판본 "+num(audit.indexed??progress.indexed_documents)+"건"+
-      " · 신구 차이 확인 "+num(progress.verified_document_changes??audit.checked)+"건"+
-      " · 수집·분석 현황 펼치기";
-    $("analysis-diagnostics").textContent=
-      "공식 문서 "+num(audit.indexed??progress.indexed_documents)+"건 중"+
-      " 신구·제정·폐지 확인 "+num(audit.checked??progress.verified_document_changes)+"건"+
-      " · 아직 미분석 "+num(audit.unexamined)+"건"+
-      " · 재확인 대상 "+num(audit.retryable)+"건"+
-      " · 재확인 유예 "+num(audit.blocked)+"건"+
-      (count?" · 원천 수집 미완료 구간 "+num(count)+"개":"");
-    const checked=run.checked_at?String(run.checked_at).replace("T"," ").slice(0,16)+" UTC":"미실행";
-    $("ai-review-progress").textContent=
-      "AI 정책 변경 설명 "+num(progress.analyzed_events)+"건"+
-      " · 추가 분석 대상 "+num(progress.pending_events)+"건";
-    $("ai-diagnostics").textContent=
-      "AI 검토 완료 "+num(analyzed)+" / 변경 조문 "+num(total)+"건"+
-      " · 최근 실행 "+checked+
-      " · 요청 "+num(run.attempted)+"회, 신규 결과 "+num(run.generated)+"건"+
-      (run.errors?" · 검증/호출 오류 "+num(run.errors)+"건":"")+
-      (run.stopped_reason?" · 중단 사유: "+run.stopped_reason:"");
-    const rules=(data.quality||{}).rule_categories||{};
-    const notices=rules["고시"];
-    const unclassified=rules["미분류"];
-    const noticeEnd=(data.collection_run?.backfill_end_dates||{})["admrul|2|3"];
-    $("institution-diagnostics").textContent=
-      (notices?"고시 "+num(notices.indexed)+"건 색인 · 변경 확인 "+
-        num(notices.changed)+"건 · 분석 대기 "+num(notices.pending)+"건 · ":"")+
-      (unclassified?.indexed?"행정규칙 종류 미확인 "+num(unclassified.indexed)+"건 · ":"")+
-      (noticeEnd?"고시 연혁 과거 수집 기준일 "+noticeEnd+" · ":"")+
-      "기관별 검토사항 "+num(progress.institutional_reviews)+"건"+
-      " · 공공사업 인용 연결 "+num(progress.verified_program_links)+"건"+
-      " · 관련 공식 규정 소관기관 연결 "+num(progress.referencing_public_rule_reviews)+"건"+
-      " · 알리오 공공사업 원천자료 "+num(progress.official_program_records)+"건"+
-      " · 정부24 공공서비스 "+num(data.public_services_indexed||0)+"건"+
-      " · 검토 후보 "+num(data.public_service_review_leads||0)+"건";
-    const register=data.agency_directory_audit||{};
-    const gov24=data.gov24_audit||{};
-    $("institution-link-progress").textContent=
-      "알리오플러스 공공사업 "+num(progress.official_program_records)+"건"+
-      " / 운영기관 "+num(register.alioplus_agencies)+"곳 · 정부24 공공서비스 "+
-      num(data.public_services_indexed)+"건 / 운영기관 "+
-      num(register.gov24_agencies)+"곳. 기관 명부 등재와 정책별 영향 연결은 별개이며, "+
-      (gov24.status==="collected_incrementally"?
-        "정부24 수집은 증분 진행 중입니다.":
-        gov24.status==="not_configured"?
-        "정부24 API 인증이 설정되지 않았습니다.":
-        "정부24 최신 전체 갱신 여부는 확인되지 않았습니다.");
-    $("stat-events").textContent=num(audit.indexed??progress.indexed_documents??data.documents?.length??0);
+    $("stat-events").textContent=num(data.quality?.analysis_status?.indexed??
+      data.ai_progress?.indexed_documents??data.documents?.length??0);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);
 
@@ -742,8 +696,21 @@
     state.visible=60;
     renderList();
   };
-  $("agency-directory-search").oninput=ev=>
+  $("agency-directory-open").onclick=openAgencyDirectory;
+  $("agency-directory-close").onclick=closeAgencyDirectory;
+  $("agency-directory-backdrop").onclick=closeAgencyDirectory;
+  $("agency-directory-search").oninput=ev=>{
+    state.directoryLimit=50;
     renderAgencyDirectory(ev.target.value);
+  };
+  $("agency-directory-more").onclick=()=>{
+    state.directoryLimit+=50;
+    renderAgencyDirectory($("agency-directory-search").value);
+  };
+  window.addEventListener("keydown",event=>{
+    if(event.key==="Escape"&&!$("agency-directory-modal").hidden)
+      closeAgencyDirectory();
+  });
   $("more").onclick=()=>{state.visible+=60;renderList();};
   $("backToList").onclick=()=>back();
   window.addEventListener("popstate",()=>{
