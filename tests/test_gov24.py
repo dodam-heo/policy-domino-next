@@ -183,6 +183,23 @@ class Gov24Tests(unittest.TestCase):
         discover_public_service_leads(state, [event])
         self.assertEqual(event["public_service_lead_count"], 0)
 
+    def test_official_parenthesized_citation_and_alternate_legal_brackets_match(self):
+        service = normalize_record(record("RAW"))
+        service["service_name"] = "생활안정급여"
+        service["regulatory_basis"] = "가상 공공서비스 운영법(제12조)"
+        service["fields"] = {"지원내용": "초등학생 502,000원"}
+        change = {"document_title": "2027년 생활안정급여 선정기준",
+                  "document_id": "RAW-DOC", "article": "첨부 전문",
+                  "before": "「가상 공공서비스 운영법」 제6조 및 제12조제1항 초등학생 502,000원",
+                  "after": "｢가상 공공서비스 운영법｣ 제6조 및 제12조제1항 초등학생 513,000원"}
+        event = {"id": "RAW-EVENT", "changes": [change]}
+        result = discover_public_service_leads({"public_services": {"RAW": service}}, [event])
+        self.assertEqual(event["public_service_lead_count"], 1)
+        self.assertEqual(event["public_service_leads"][0]["review_targets"][0]["new_legal_value"],
+                         "513,000원")
+        self.assertEqual(validate_public_service_candidates({"events": [event],
+                         "public_service_proofs": result["proofs"]}), [])
+
     def test_application_procedure_is_a_distinct_public_service_review_target(self):
         raw=record("S888")
         raw["선정기준"]=""
@@ -213,6 +230,21 @@ class Gov24Tests(unittest.TestCase):
         self.assertEqual(item["old_value"],"100만원")
         self.assertEqual(item["new_legal_value"],"120만원")
         self.assertIn("120만원",item["review_question"])
+
+    def test_intact_named_rows_survive_removal_of_a_different_numeric_formula(self):
+        from policy_domino.gov24 import changed_numeric_pairs, criteria_to_review
+        change = {"article": "첨부 전문",
+                  "before": "추가 가구원 100원. 초등학생 502,000원 중학생 699,000원 고등학생 860,000원",
+                  "after": "초등학생 513,000원 중학생 714,000원 고등학생 945,000원"}
+        pairs = changed_numeric_pairs(change)
+        self.assertEqual(set(pairs), {("502,000원", "513,000원"),
+                         ("699,000원", "714,000원"), ("860,000원", "945,000원")})
+        service = normalize_record(record("ROWS"))
+        service["fields"] = {"지원내용": "초등학생 502,000원 중학생 699,000원 고등학생 860,000원"}
+        targets = criteria_to_review(service, change, "official_shared_clause_and_criterion")
+        self.assertEqual(len(targets), 3)
+        self.assertEqual({t["new_legal_value"] for t in targets},
+                         {"513,000원", "714,000원", "945,000원"})
 
     def test_ambiguous_amount_alignment_does_not_claim_specific_threshold(self):
         from policy_domino.gov24 import changed_numeric_pairs

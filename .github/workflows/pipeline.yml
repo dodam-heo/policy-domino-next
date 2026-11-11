@@ -94,7 +94,7 @@ jobs:
         env:
           GOV24_SERVICE_KEY: ${{ secrets.GOV24_SERVICE_KEY }}
         timeout-minutes: 5
-        run: python -m policy_domino gov24 --page-budget 10
+        run: python -m policy_domino gov24 --page-budget 120
       - name: Verify registered Gov24 key against real official API results
         if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[state-migrate]')
         run: |

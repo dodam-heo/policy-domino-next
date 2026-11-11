@@ -129,7 +129,7 @@ def parse_document(root: ET.Element) -> dict:
         status = "extracted"
     return {
         "image_placeholder_count": image_count,
-        "extraction_schema": 2,
+        "extraction_schema": 3,
         "status": status, "clauses": out,
         "incomplete_keys": incomplete, "attachment_link_count": attachment_links,
         "attachment_links":pending_annex_links,

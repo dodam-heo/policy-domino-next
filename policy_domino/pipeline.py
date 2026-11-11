@@ -171,7 +171,7 @@ def analyze_one(api: LawAPI, state: dict, doc: dict) -> dict:
     previous = state["versions"].get(prior["id"])
     missing_pdf = bool(previous and previous.get("attachment_link_count")
                        and (previous.get("status") != "extracted" or
-                            previous.get("extraction_schema") != 2))
+                            previous.get("extraction_schema") != 3))
     if not previous or missing_pdf:
         previous_root = api.detail(prior)
         previous = enrich_annexes(
@@ -519,7 +519,7 @@ def main(argv=None):
         credential = (os.getenv("GOV24_SERVICE_KEY", "").strip() or
                       os.getenv("DATA_GO_KR_KEY", "").strip())
         audit = collect_gov24(state, credential,
-                              pages_per_feed=max(1, min(args.page_budget, 12)))
+                              pages_per_feed=max(1, min(args.page_budget, 120)))
         save_shards(args.state, state, SCHEMA)
         print("Gov24 public-service collection:",
               json.dumps(audit, ensure_ascii=False))

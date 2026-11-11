@@ -46,7 +46,7 @@ class AnnexIntegrationTests(unittest.TestCase):
               <부칙><부칙내용>이 고시는 다음 해부터 시행한다.</부칙내용></부칙>
               <첨부파일><첨부파일명>연간 기준(전문).pdf</첨부파일명>
               <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=""" + seq + """</첨부파일링크>
-              <첨부파일명>연간 기준(전문).hwpx</첨부파일명>
+              <첨부파일명>연간 기준(전문).hwp</첨부파일명>
               <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=999</첨부파일링크>
               </첨부파일></행정규칙>""")
         old, new = notice("100", "11"), notice("120", "12")
@@ -100,6 +100,25 @@ class AnnexIntegrationTests(unittest.TestCase):
         self.assertIn("100만원", result["clauses"]["첨부 전문"]["text"])
         self.assertEqual(result["annex_evidence"]["첨부 전문"]["source"],
                          "law_go_kr_official_hwpx")
+
+    def test_explanatory_pdf_is_not_used_instead_of_actual_hwpx_instrument(self):
+        root = ET.fromstring("""<행정규칙><첨부파일>
+          <첨부파일명>조문별제개정이유서.pdf</첨부파일명>
+          <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=100</첨부파일링크>
+          <첨부파일명>연간 선정기준 고시.hwpx</첨부파일명>
+          <첨부파일링크>http://law.go.kr/flDownload.do?flSeq=101</첨부파일링크>
+          </첨부파일></행정규칙>""")
+        calls = []
+        def fetch(url):
+            calls.append(url)
+            return b"PK actual legal text"
+        result = enrich_annexes(root, parse_document(root),
+                               downloader=lambda _: self.fail("explanatory file is not law"),
+                               hwpx_downloader=fetch,
+                               hwpx_extractor=lambda _: "4인 가구 기준 100만원")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("101", calls[0])
+        self.assertEqual(result["clauses"]["첨부 전문"]["text"], "4인 가구 기준 100만원")
 
     def test_unresolved_inline_image_table_remains_partial(self):
         root = ET.fromstring("""<행정규칙><조문내용>

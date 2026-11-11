@@ -150,7 +150,8 @@ def enrich_annexes(root, parsed: dict, *,
     result=dict(parsed)
     clauses=dict(result.get("clauses",{}))
     previous_snapshot=normalize_legacy_annex_keys(previous_snapshot or {})
-    provenance=dict(previous_snapshot.get("annex_evidence",{}))
+    provenance=(dict(previous_snapshot.get("annex_evidence",{}))
+                if previous_snapshot.get("extraction_schema") == 3 else {})
     failures=[]
     processed=0
     for old_label, evidence in provenance.items():
@@ -211,6 +212,10 @@ def enrich_annexes(root, parsed: dict, *,
                 filename = clean("".join(child.itertext()))
             elif tag(child) == "첨부파일링크":
                 href = clean("".join(child.itertext()))
+                if re.search(r"이유서|개정이유|신구.*대비|검토보고", filename):
+                    continue  # Supporting explanations are not the legal text.
+                if re.search(r"별표|별지|서식|신청서", filename) and "전문" not in filename:
+                    continue  # A standalone form is not the whole instrument.
                 if filename.lower().endswith(".pdf"):
                     root_pdfs.append(href)
                 elif filename.lower().endswith(".hwpx"):
@@ -218,7 +223,7 @@ def enrich_annexes(root, parsed: dict, *,
     root_pdfs = list(dict.fromkeys(root_pdfs))
     # A single official PDF has an unambiguous whole-document identity.
     # Multiple PDFs require explicit mapping, never arbitrary ordinal pairing.
-    if len(root_pdfs) == 1:
+    if len(root_pdfs) == 1 and len(set(root_hwpx)) != 1:
         label = "첨부 전문"
         approved = authorized_law_pdf_url(root_pdfs[0])
         if not approved:
@@ -235,6 +240,7 @@ def enrich_annexes(root, parsed: dict, *,
                     clauses[label] = clause
                     provenance[label] = {
                         "source": "law_go_kr_official_pdf", "url": approved,
+                        "scope": "whole_instrument",
                         "pdf_sha256": hashlib.sha256(blob).hexdigest(),
                         "text_sha256": clause["sha256"],
                     }
@@ -243,7 +249,7 @@ def enrich_annexes(root, parsed: dict, *,
                     failures.append({"annex": label, "reason": type(exc).__name__})
     elif len(root_pdfs) > 1:
         failures.append({"annex": "첨부 전문", "reason": "ambiguous_multiple_pdfs"})
-    if not root_pdfs and len(set(root_hwpx)) == 1:
+    if len(set(root_hwpx)) == 1:
         label = "첨부 전문"
         approved = authorized_law_pdf_url(root_hwpx[0])
         if not approved:
@@ -260,6 +266,7 @@ def enrich_annexes(root, parsed: dict, *,
                     clauses[label] = clause
                     provenance[label] = {
                         "source": "law_go_kr_official_hwpx", "url": approved,
+                        "scope": "whole_instrument",
                         "file_sha256": hashlib.sha256(blob).hexdigest(),
                         "text_sha256": clause["sha256"],
                     }
@@ -269,7 +276,10 @@ def enrich_annexes(root, parsed: dict, *,
     if "첨부 전문" in provenance:
         # The complete attachment supersedes flat XML with omitted images.
         # Avoid a second, misleading comparison of the same incomplete body.
-        clauses.pop("본문", None)
+        if provenance["첨부 전문"].get("scope") == "whole_instrument":
+            clauses = {"첨부 전문": clauses["첨부 전문"]}
+        else:
+            clauses.pop("본문", None)
     if result.get("image_placeholder_count") and "첨부 전문" not in provenance:
         failures.append({"annex": "본문 표", "reason": "image_table_unresolved"})
     result["clauses"]=clauses

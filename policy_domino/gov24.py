@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import difflib
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -159,7 +160,8 @@ class Gov24Client:
 
 
 def collect_gov24(state: dict, key: str, *, pages_per_feed: int = 2,
-                  page_size: int = 100, transport=None) -> dict:
+                  page_size: int = 100, transport=None,
+                  max_seconds: float = 180) -> dict:
     """Durable cursors per official list/detail feed, never fabricated data.
 
     Missing API authorization does NOT cause a broken website or trigger a
@@ -173,13 +175,17 @@ def collect_gov24(state: dict, key: str, *, pages_per_feed: int = 2,
         audit["note"] = "GOV24_SERVICE_KEY is absent; no nationwide data ingested"
         state["gov24_audit"] = audit
         return audit
+    started = time.monotonic()
     client = Gov24Client(key, transport)
     store = state.setdefault("public_services", {})
     cursors = state.setdefault("gov24_cursors", {})
     audit["status"] = "partial"
     for source in SCHEMA:
         page = max(1, int(cursors.get(source, 1)))
-        for _ in range(max(0, min(12, pages_per_feed))):
+        for _ in range(max(0, min(120, pages_per_feed))):
+            if time.monotonic() - started >= max_seconds:
+                audit["budget_exhausted"] = True
+                break
             try:
                 response = client.fetch_page(source, page, page_size)
             except Gov24SourceError as exc:
@@ -255,18 +261,35 @@ def service_change_basis(service: dict, change: dict) -> tuple[str, str] | None:
         return None
     tokens = re.findall(r"[가-힣]{3,}", title)
     generic = {"선정기준", "지원기준", "지급기준", "최저보장수준", "운영기준",
-               "행정규칙", "전부개정", "일부개정", "시행규칙", "시행기준"}
+               "행정규칙", "전부개정", "일부개정", "시행규칙", "시행기준",
+               "수급자", "대상자", "신청자", "지원대상", "자격요건"}
     terms = [re.sub(r"(?:의|에관한)$", "", token) for token in tokens
              if token not in generic]
     fields = service.get("fields", {})
     criterion = " ".join(fields.get(k, "") for k in
                          ("선정기준", "지원대상", "지원내용"))
-    if not criterion or not any(len(term) >= 3 and _plain(term) in _plain(criterion)
+    if not criterion or not any(len(term) >= 3 and _plain(term) in _plain(criterion + " " + service.get("service_name", ""))
                                 for term in terms):
         return None
     def references(text):
+        normalized = text.translate(str.maketrans({"｢": "「", "｣": "」"}))
+        rows = extract_references(normalized)
+        # Enumerated clauses share the explicitly quoted title.
+        for match in re.finditer(r"「([^」]+)」\s*([^「」]{0,160})", normalized):
+            tail = re.match(
+                r"(?:제\s*\d+\s*(?:조(?:의\s*\d+)?|항|호)\s*|[,ㆍ·]|\s|및|과|와|부터|까지)+",
+                match.group(2))
+            if tail:
+                for article in re.findall(r"제\s*\d+\s*조(?:의\s*\d+)?", tail.group()):
+                    rows.append({"title": match.group(1), "article": article,
+                                 "quote": match.group()[:280]})
+        # Gov24 publishes legal bases as 법령명(제N조), without quotation marks.
+        for match in re.finditer(
+                r"([가-힣A-Za-zㆍ·\s]{3,100}(?:법|법률|시행령|시행규칙))\s*\(?\s*(제\s*\d+\s*조(?:의\s*\d+)?)", normalized):
+            rows.append({"title": match.group(1).strip(), "article": match.group(2),
+                         "quote": match.group()[:280]})
         return {(_plain(r["title"]), _plain(r["article"])): r
-                for r in extract_references(text) if r.get("article")}
+                for r in rows if r.get("article")}
     old = references(change.get("before", ""))
     new = references(change.get("after", ""))
     service_refs = references(service.get("regulatory_basis", ""))
@@ -301,8 +324,22 @@ def changed_numeric_pairs(change: dict) -> list[tuple[str, str]]:
     after=change.get("after","")
     old=list(pattern.finditer(before))
     new=list(pattern.finditer(after))
-    if not old or len(old)!=len(new):
+    if not old or not new:
         return []
+    if len(old) != len(new):
+        # Rows can survive while a different paragraph/formula is deleted.
+        # Match a unique intact row label and currency unit, never ordinal.
+        def labeled(text, matches):
+            rows = defaultdict(list)
+            for match in matches:
+                label = re.search(r"([가-힣]{3,})\s*$", text[max(0, match.start()-30):match.start()])
+                unit = re.search(r"(?:억\s*원|만원|원)$", match.group().strip())
+                if label and unit:
+                    rows[(label.group(1), unit.group())].append(match.group().strip())
+            return rows
+        a, b = labeled(before, old), labeled(after, new)
+        return [(a[key][0], b[key][0]) for key in sorted(set(a) & set(b))
+                if len(a[key]) == len(b[key]) == 1 and a[key][0] != b[key][0]]
     values=[]
     for a,b in zip(old,new):
         x,y=a.group().strip(),b.group().strip()
@@ -349,22 +386,23 @@ def criteria_to_review(service: dict, change: dict, tier: str) -> list[dict]:
         if not source:
             continue
         applicable=[(a,b) for a,b in pairs if a and a in source]
-        old,new=applicable[0] if len(applicable)==1 else ("","")
-        old_found=bool(old)
-        question=(
-            field + "에 기재된 " + old +
-            " 기준을 변경 조문의 " + new + " 기준과 대조하고 적용 여부를 확인"
-            if old_found and new else
-            field + "의 실제 적용기준과 " + change["article"] +
-            " 개정내용의 관계를 확인")
-        targets.append({
-            "field": field,
-            "source_excerpt": source[:300],
-            "old_value": old if old_found else "",
-            "new_legal_value": new if old_found else "",
-            "review_question": question,
-            "verification": "source_field_and_legal_change_only",
-        })
+        for old, new in (applicable or [("", "")]):
+            old_found=bool(old)
+            question=(
+                field + "에 기재된 " + old +
+                " 기준을 변경 조문의 " + new + " 기준과 대조하고 적용 여부를 확인"
+                if old_found and new else
+                field + "의 실제 적용기준과 " + change["article"] +
+                " 개정내용의 관계를 확인")
+            targets.append({
+                "field": field,
+                "source_excerpt": (source[max(0,source.find(old)-90):source.find(old)+210]
+                                   if old_found else source[:300]),
+                "old_value": old if old_found else "",
+                "new_legal_value": new if old_found else "",
+                "review_question": question,
+                "verification": "source_field_and_legal_change_only",
+            })
     targets.sort(key=lambda x: (
         not bool(x["old_value"]),
         CRITERION_FIELDS.index(x["field"]),
@@ -402,7 +440,8 @@ def discover_public_service_leads(state: dict, events: list[dict],
     candidates_by_title = defaultdict(list)
     embedded_titles = {ref["title"] for event in events
                        for change in event.get("changes", [])
-                       for ref in extract_references(change.get("after", ""))
+                       for ref in extract_references(change.get("after", "").translate(
+                           str.maketrans({"｢": "「", "｣": "」"})))
                        if ref.get("article")}
     # One scan of official public-service records, not O(changes × services).
     for service in sources.values():
@@ -422,7 +461,8 @@ def discover_public_service_leads(state: dict, events: list[dict],
         for change in event.get("changes", []):
             title, article = change["document_title"], change["article"]
             eligible = {s["service_id"]: s for s in candidates_by_title.get(title, [])}
-            for ref in extract_references(change.get("after", "")):
+            for ref in extract_references(change.get("after", "").translate(
+                           str.maketrans({"｢": "「", "｣": "」"}))):
                 for service in candidates_by_title.get(ref["title"], []):
                     eligible[service["service_id"]] = service
             for service in eligible.values():
