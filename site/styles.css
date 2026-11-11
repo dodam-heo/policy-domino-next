@@ -301,3 +301,44 @@ a{color:var(--blue);text-underline-offset:3px}
   overflow-wrap:anywhere}
 .indexed-source-item strong{display:block;font-size:12px;color:#244b62}
 .indexed-source-item p{margin:4px 0;font-size:11px;color:#648092;line-height:1.5}
+
+/* Screenshot-aligned, source-counted hero and compact disclosure. */
+.intro{max-width:1390px;margin:6px auto 12px;min-height:148px;
+  padding:22px 26px;background:linear-gradient(112deg,#fff 61%,#eff8fc);
+  border:1px solid #d8e5ed;border-radius:16px}
+.intro h1{font-size:clamp(23px,2.75vw,34px);letter-spacing:-.045em}
+.intro-copy{min-width:0}
+.intro-copy>p:last-child{max-width:790px}
+.summary{grid-template-columns:repeat(3,minmax(98px,1fr))}
+.summary>div{padding:12px 15px}
+.coverage-status{margin:0 auto 16px}
+.coverage-status-inner{padding:12px 16px;background:#eff6fa}
+.coverage-expanded{gap:7px}
+.directory-search{border:1px solid #d9e4ef;border-radius:8px;
+  background:#f6f8fd;color:#32637a}
+.directory-search>summary{display:block;cursor:pointer;text-align:center;
+  font-size:12px;font-weight:760;padding:8px 12px;list-style:none}
+.directory-search>summary::-webkit-details-marker{display:none}
+.directory-search[open]>summary{border-bottom:1px solid #d9e4ef}
+.directory-search>label{display:block;font-size:11px;margin:10px 12px 4px}
+.directory-search>input{display:block;width:calc(100% - 24px);margin:0 12px 10px;
+  border:1px solid #b9d0de;border-radius:6px;background:white;
+  padding:9px 11px;font-size:12px;color:var(--ink)}
+.directory-results{padding:0 12px 10px;max-height:240px;overflow:auto}
+.directory-entry{display:flex;justify-content:space-between;gap:10px;
+  padding:7px 9px;background:white;border:1px solid #dce8ef;
+  border-radius:5px;margin-top:5px;font-size:11px}
+.directory-entry strong{color:var(--navy)}
+.directory-entry span{color:var(--muted);text-align:right}
+.coverage-more{font-size:11px;color:var(--muted)}
+.coverage-more>summary{cursor:pointer;font-weight:700;color:#2e627e}
+.coverage-more p{margin:7px 0 0}
+@media(max-width:850px){
+  .intro{margin:6px 12px 12px;padding:18px 16px;min-height:auto;
+    flex-direction:column;align-items:stretch;gap:13px}
+  .summary{grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+  .summary>div{padding:10px 12px}
+  .summary small{font-size:9px}
+  .summary strong{font-size:21px}
+  .coverage-status{padding:0 12px}
+}
