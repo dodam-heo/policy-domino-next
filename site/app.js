@@ -636,7 +636,7 @@
       " · 검토 후보 "+num(data.public_service_review_leads||0)+"건"+
       ((data.gov24_audit?.status==="not_configured")?
         " (정부24 API 인증 미설정)":"");
-    $("stat-events").textContent=num(stats.events);
+    $("stat-events").textContent=num(audit.indexed ?? data.documents?.length ?? 0);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);
 
