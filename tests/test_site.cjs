@@ -734,6 +734,41 @@ async function splitDistributionLoadsOnlyClickedDetail(){
   console.log("PASS: split catalog, on-demand source index and one-detail-at-a-time fetching");
 }
 
+async function compactPolicyOriginHeader(){
+  const e=sample("origin",{date:"2026-11-12",impact:true});
+  e.origin={
+    issuer:"가상금융위원회",instrument_type:"대통령령",
+    instrument:"가상정책 시행령",number:"제1234호",
+    url:"https://www.law.go.kr/법령/가상정책",
+    upper_bases:[{title:"가상상위법",article:"제11조",
+      quote:"가상상위법 제11조 위임 내용",
+      source_url:"https://www.law.go.kr/법령/가상상위법"}]
+  };
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[e],
+    ai_progress:{indexed_documents:1},generated_at:""
+  });
+  await flush();
+  const detail=node(ui,"detail");
+  const header=flatten(detail).find(x=>x.className==="detail-head");
+  assert.ok(textOf(header).includes("소관·발령기관 · 가상금융위원회"));
+  assert.ok(!textOf(header).includes("이번 변경의 출발점"));
+  assert.ok(!textOf(header).includes("위임 근거"));
+  assert.ok(!textOf(header).includes("가상상위법"));
+  assert.ok(!flatten(header).some(x=>x.tag==="a"),
+    "Official-source links should not clutter the first screen");
+  const core=flatten(detail).find(x=>x.className==="detail-section core");
+  assert.ok(core,"Actual amendments must follow the compact title and issuer");
+  const archive=flatten(core).find(x=>x.className==="evidence-panel evidence-archive");
+  assert.ok(archive&&!archive.open,"Source evidence must be collapsed by default");
+  const originEvidence=flatten(archive).find(x=>x.className==="origin-evidence");
+  assert.ok(originEvidence&&!originEvidence.open);
+  assert.ok(textOf(originEvidence).includes("가상상위법"));
+  assert.ok(flatten(originEvidence).some(x=>x.tag==="a"),
+    "Official provenance must remain accessible on demand");
+  console.log("PASS: compact issuer header, provenance kept in collapsed evidence");
+}
+
 async function collapsedDetailPreviews(){
   const e=sample("preview",{date:"2026-11-12",impact:true,ai:true});
   const initial=e.changes[0];
@@ -769,7 +804,7 @@ async function collapsedDetailPreviews(){
 }
 
 Promise.all([
-  collapsedDetailPreviews(),
+  compactPolicyOriginHeader(),collapsedDetailPreviews(),
   splitDistributionLoadsOnlyClickedDetail(),
   verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),
   effectiveYearAndRenamedAnnualCriteriaSearch(),noFabricatedImpact(),
