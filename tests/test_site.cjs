@@ -391,9 +391,12 @@ async function largeScopeFiltering(){
   event.institutional_reviews=[
     {...verified,id:"multi-1",institution:"가상시청"},
     {...verified,id:"multi-2",institution:"가상교육청"},
+    {...verified,id:"multi-3",institution:"가상기관삼"},
+    {...verified,id:"multi-4",institution:"가상기관사"},
+    {...verified,id:"multi-5",institution:"가상기관오"},
   ];
-  event.institution_count=2;
-  event.review_count=2;
+  event.institution_count=5;
+  event.review_count=5;
   const data={schema:"policy-domino-next-v1",
     events:[event,sample("solo",{date:"2026-11-11",impact:true})],
     ai_progress:{indexed_documents:200},generated_at:""};

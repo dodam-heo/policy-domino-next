@@ -51,8 +51,12 @@ def _summary(event):
     selected={key:event.get(key) for key in (
         "id","title","published_at","effective_date","kind",
         "verification","source_count","institution_count","review_count",
-        "public_service_lead_count","ai_count","headline","ministry")}
-    selected["members"]=[{"title":m.get("title",""),"kind":m.get("kind","")}
+        "public_service_lead_count","ai_count","headline","ministry",
+        "impact_score","impact_level","impact_high_basis","impact_reasons",
+        "verified_institution_count_for_impact","origin")}
+    selected["members"]=[{"title":m.get("title",""),"kind":m.get("kind",""),
+                          "ministry":m.get("ministry",""),"number":m.get("number",""),
+                          "source":m.get("source","")}
                          for m in event.get("members",[])]
     selected["source_documents"]=event.get("source_documents",[])
     selected["list_brief"]=featured.get("brief","")

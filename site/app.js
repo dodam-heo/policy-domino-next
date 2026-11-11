@@ -193,6 +193,9 @@
         create("span","item-date",event.published_at||"날짜 미확인"));
       const tags=create("div","item-tags");
       if (event.source_count>1) append(tags,pill("동시 개정 "+num(event.source_count)+"건"));
+      if(event.impact_level==="high")append(tags,pill("영향도 큼 · "+num(event.impact_score)+"점","impact"));
+      else if(event.impact_level==="pending")append(tags,pill("영향도 평가 중","partial"));
+      else if(typeof event.impact_score==="number")append(tags,pill("영향도 "+num(event.impact_score)+"점"));
       if (event.institution_count) append(tags,pill("검토 기관 "+num(event.institution_count)+"곳","impact"));
       if (event.review_count) append(tags,pill("업무 "+num(event.review_count)+"건"));
       if (event.public_service_lead_count)
@@ -202,7 +205,9 @@
       const important=highlighted && (event.changes||[]).find(ch=>
         ch.document_id===highlighted.document_id && ch.article===highlighted.article);
       const brief=event.list_brief||important?.brief||event.changes?.[0]?.brief;
-      append(item,header,create("h3","",event.title),
+      append(item,header,create("p","item-issuer","소관·발령기관 · "+
+        (event.origin?.issuer||event.ministry||"확인 중")),
+        create("h3","",event.title),
         create("p","item-brief",brief||event.headline),tags);
       item.onclick=()=>select(event.id);
       append(root,item);
@@ -665,9 +670,39 @@
       create("span","",event.published_at||""),
       event.verification==="partial" ?
         pill("일부 조문 대조","partial"):null);
-    append(head,meta,create("h2","",event.title),
+    const origin=event.origin||{};
+    const provenance=create("div","origin-proof");
+    append(provenance,
+      create("p","", "소관·발령기관 · "+(origin.issuer||event.ministry||"확인 중")),
+      create("p","","이번 변경의 출발점 · "+
+        [origin.instrument_type||event.members?.[0]?.kind||"",
+         origin.instrument||event.title,origin.number||""].filter(Boolean).join(" · ")));
+    const upper=Array.isArray(origin.upper_bases)?origin.upper_bases:[];
+    if(upper.length) {
+      append(provenance,create("p","","공식 원문의 위임 근거 · "+
+        upper.slice(0,3).map(x=>x.title+" "+x.article).join(" / ")));
+      const more=create("details","origin-citations");
+      append(more,create("summary","","상위 근거 원문 인용 보기"));
+      for(const source of upper)
+        append(more,create("p","",source.quote),link(source.source_url,"공식 법령 원문"));
+      append(provenance,more);
+    } else append(provenance,create("p","","상위 법적 근거 · 위임 관계 확인 중"));
+    append(provenance,link(origin.url||event.members?.[0]?.url,"이번 변경 규범 공식 원문"));
+    append(head,meta,create("h2","",event.title),provenance,
       event.effective_date ?
         create("p","effective","시행일 "+event.effective_date):null);
+    if(Array.isArray(event.impact_reasons)){
+      const score=create("div","impact-assessment");
+      append(score,create("strong","",event.impact_level==="high"?
+        "영향도 큼 · "+num(event.impact_score)+"점":
+        event.impact_level==="pending"?"영향도 평가 중":
+        "영향도 "+num(event.impact_score)+"점"));
+      for(const axis of event.impact_reasons)
+        append(score,create("p","",axis.axis+" "+axis.score+"/"+axis.maximum+" · "+axis.reason));
+      if(event.impact_high_basis)
+        append(score,create("p","","판정 이유 · "+event.impact_high_basis));
+      append(head,score);
+    }
     append(root,head,renderCore(event),
       renderInstitutions(event),renderAI(event));
   }

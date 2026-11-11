@@ -6,6 +6,11 @@
   <meta name="description" content="공식 정책 변경 사건에서 공공기관·사업별 업무 영향과 검토할 변경사항을 확인합니다.">
   <title>정책도미노 NEXT | 정책 변경과 공공기관 업무 영향</title>
   <link rel="stylesheet" href="./styles.css">
+  <style>
+  .item-issuer{font-size:.78rem;color:#5d6c7c;margin:4px 0}
+  .origin-proof,.impact-assessment{margin:10px 0;padding:12px;border:1px solid #cdd9e7;border-radius:10px}
+  .origin-proof p,.impact-assessment p{margin:4px 0;font-size:.86rem;line-height:1.5}
+  </style>
 </head>
 <body>
 <a class="intro home-banner" href="./" aria-label="정책도미노 첫 화면으로 돌아가기">
@@ -38,15 +43,15 @@
   <aside class="panel list-panel" id="listPanel" aria-label="정책 변경 사건 목록">
     <div class="list-heading">
       <div class="panel-title"><h2>정책 변경 목록</h2></div>
-      <p class="list-subtitle">공포·발령일 최신순</p>
+      <p class="list-subtitle">영향도 큼 우선 · 점수순 · 동점 최신순</p>
       <div class="quick-filters" role="group" aria-label="정책 변경 목록 필터">
         <button id="mode-all" type="button" class="quick-filter active" aria-pressed="true">전체</button>
         <button id="mode-new" type="button" class="quick-filter" aria-pressed="false">신규</button>
         <button id="mode-amended" type="button" class="quick-filter" aria-pressed="false">개정</button>
         <button id="mode-repealed" type="button" class="quick-filter" aria-pressed="false">폐지</button>
         <button id="mode-impact" type="button" class="quick-filter" aria-pressed="false"
-          title="공식 변경 근거로 검토 대상 공공기관이 2곳 이상 확인된 변경입니다. 사회경제적 영향도 확정 평가는 아닙니다."
-          aria-label="영향도 큼: 근거 확인 공공기관 2곳 이상">영향도 큼</button>
+          title="실질성·적용 범위·파급 경로 총점 65점 이상(실질성 30점 이상) 또는 공식 근거로 연결된 공공기관 5곳 이상"
+          aria-label="영향도 큼: 65점 이상 또는 근거 확인 공공기관 5곳 이상">영향도 큼</button>
       </div>
       <input id="search" type="search" class="search" aria-label="법령명·정책명·소관기관 검색"
         placeholder="법령명·정책명·소관기관 검색" autocomplete="off">

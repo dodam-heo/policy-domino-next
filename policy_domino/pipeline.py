@@ -390,6 +390,13 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     # NOT proof that the agency must already change a program or system.
     from .gov24 import discover_public_service_leads
     gov24_links = discover_public_service_leads(state, events)
+    from .legal_origin import origin_of
+    from .priority import score_and_sort
+    for event in events:
+        document_id=event.get("source_documents", [""])[0]
+        event["origin"]=origin_of(docs.get(document_id,{}),
+                                  state.get("versions",{}).get(document_id))
+    score_and_sort(events)
     # Institution directory is a factual source index, not an impact finding.
     # Each counter is obtained from retained official records, never examples.
     # A statutory officeholder is not a public institution. This applies

@@ -12,14 +12,13 @@
       event.institutional_reviews.length>0;
   }
   function highImpactScope(event) {
-    // This pill measures only the *verified breadth of public-institution
-    // review targets*, NOT a predicted socioeconomic impact score.
-    if(Array.isArray(event.agency_names))
-      return new Set(event.agency_names.filter(Boolean)).size>=2;
-    const institutions=new Set((event.institutional_reviews||[])
-      .map(review=>String(review.institution||"").trim())
-      .filter(Boolean));
-    return institutions.size>=2;
+    if(event.impact_level)return event.impact_level==="high";
+    if(Array.isArray(event.institutional_reviews))
+      return new Set(event.institutional_reviews
+        .filter(r=>["direct_regulated_institution","explicit_changed_clause",
+                    "verified_official_rule_citation","verified_program_citation"].includes(r.basis_tier))
+        .map(r=>r.institution).filter(Boolean)).size>=5;
+    return new Set((event.agency_names||[]).filter(Boolean)).size>=5;
   }
   // Search names and effective years independently so re-titled annual
   // criteria remain discoverable without hard-coded example titles.
@@ -55,8 +54,10 @@
       const haystack=searchKey(searchable);
       return terms.every(term=>haystack.includes(term));
     }).sort((a,b)=>
+      Number(highImpactScope(b))-Number(highImpactScope(a))||
+      Number(b.impact_level==="pending")-Number(a.impact_level==="pending")||
+      Number(b.impact_score||0)-Number(a.impact_score||0)||
       String(b.published_at||"").localeCompare(String(a.published_at||""))||
-      (b.institution_count||0)-(a.institution_count||0)||
       String(a.id||"").localeCompare(String(b.id||"")));
   }
   function impactGroups(event) {

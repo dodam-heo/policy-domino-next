@@ -383,6 +383,8 @@ def build_events(documents: dict, findings: dict, *,
             "members": [{
                 "id": m["id"], "title": m["title"],
                 "kind": m.get("law_type", m.get("kind", "")),
+                "source": m.get("source", ""), "ministry": m.get("ministry", ""),
+                "number": m.get("number", ""),
                 "url": m["url"], "published_at": m.get("published_at"),
             } for m in members],
             "ministry": " · ".join(sorted({
