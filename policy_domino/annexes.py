@@ -266,6 +266,10 @@ def enrich_annexes(root, parsed: dict, *,
                     processed += 1
                 except Exception as exc:
                     failures.append({"annex": label, "reason": type(exc).__name__})
+    if "첨부 전문" in provenance:
+        # The complete attachment supersedes flat XML with omitted images.
+        # Avoid a second, misleading comparison of the same incomplete body.
+        clauses.pop("본문", None)
     if result.get("image_placeholder_count") and "첨부 전문" not in provenance:
         failures.append({"annex": "본문 표", "reason": "image_table_unresolved"})
     result["clauses"]=clauses
