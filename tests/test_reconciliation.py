@@ -56,7 +56,7 @@ class ReconciliationTests(unittest.TestCase):
                 raise ValueError("official upstream unavailable")
         state=new_state()
         out=reconcile_changed_rules(Failure(),state,dt.date(2026,11,10),
-                    earliest=dt.date(2026,11,01),max_windows=2,max_seconds=30)
+                    earliest=dt.date(2026,11,1),max_windows=2,max_seconds=30)
         self.assertEqual(out["failed_windows"],2)
         self.assertEqual(out["new_documents"],0)
         self.assertTrue(any(not v["complete"] for v in
