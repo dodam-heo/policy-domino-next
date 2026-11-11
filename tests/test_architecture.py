@@ -50,7 +50,9 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("collect_sources=not args.analysis_only", pipeline)
         self.assertIn("source_budget_seconds", pipeline)
         self.assertEqual(workflow.count("uses: actions/deploy-pages@"), 1)
-        self.assertEqual(workflow.count("git add -A -- data/state site/data.json"), 1)
+        self.assertEqual(workflow.count("git add -A -- data/state"), 1)
+        self.assertNotIn("git add -A -- data/state site/data.json", workflow)
+        self.assertIn("site/catalog.json", workflow)
         self.assertIn("git ls-files --error-unmatch data/state.json", workflow)
         self.assertIn("test -f data/state/manifest.json", workflow)
         self.assertIn("test ! -e data/state.json", workflow)
@@ -76,7 +78,8 @@ class SubmissionArchitectureTests(unittest.TestCase):
             staged = subprocess.check_output(
                 ["git", "diff", "--cached", "--name-only"], cwd=root, text=True)
             self.assertIn("data/state/manifest.json", staged)
-            self.assertIn("site/data.json", staged)
+            self.assertNotIn("site/data.json", staged,
+                             "Monolithic site snapshot must never be re-committed")
 
     def test_state_migration_is_one_shot_without_api_rescan(self):
         workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(
@@ -128,7 +131,8 @@ class SubmissionArchitectureTests(unittest.TestCase):
         pipeline = (ROOT / "policy_domino/pipeline.py").read_text(encoding="utf-8")
         workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(encoding="utf-8")
         self.assertIn("validate_public(data)", pipeline)
-        self.assertIn("python -m policy_domino.contracts site/data.json", workflow)
+        self.assertIn("python -m policy_domino.contracts site/catalog.json", workflow)
+        self.assertIn("export_site(data, output)", pipeline)
 
     def test_one_event_projection_and_evidence_first_interface(self):
         workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(encoding="utf-8")
