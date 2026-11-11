@@ -327,6 +327,7 @@ a{color:var(--blue);text-underline-offset:3px}
   color:#1c5b78;font-size:12px;font-weight:750;padding:8px 15px}
 .agency-directory-modal{position:fixed;inset:0;z-index:1000;display:flex;
   align-items:center;justify-content:center;padding:18px}
+.agency-directory-modal[hidden]{display:none}
 .agency-directory-backdrop{position:absolute;inset:0;background:rgba(25,48,68,.48)}
 .agency-directory-dialog{position:relative;background:#fff;border-radius:16px;
   width:min(680px,100%);max-height:min(86vh,820px);padding:26px 25px 24px;
