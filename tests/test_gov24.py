@@ -299,6 +299,11 @@ class Gov24Tests(unittest.TestCase):
             {"public_services": {"OUTSIDE": normalize_record(raw)}}, [event])
         self.assertEqual(event["public_service_lead_count"], 0)
         # Source-aligned old criterion and wording create a traceable lead.
+        raw["선정기준"] = "소득 150만원 이하"
+        event = policy_event()
+        discover_public_service_leads(
+            {"public_services": {"OUTSIDE": normalize_record(raw)}}, [event])
+        self.assertEqual(event["public_service_lead_count"], 0)
         raw["선정기준"] = "소득 50만원 이하"
         event = policy_event()
         discover_public_service_leads(
