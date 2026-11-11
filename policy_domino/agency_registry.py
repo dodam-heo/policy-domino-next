@@ -140,27 +140,66 @@ def parse_local_registry(html:str) -> dict:
                     record["rename_source_url"]=CLEANEYE_URL
     return found
 
-def collect_local_institutions(state:dict, transport=None)->dict:
-    try:
-        if transport:
-            raw=transport(CLEANEYE_URL)
-        else:
-            request=Request(CLEANEYE_URL,headers={
-                "User-Agent":"PolicyDominoNext/1.0"})
-            with urlopen(request,timeout=18) as response:
-                if not response.geturl().startswith(
-                        "https://www.cleaneye.go.kr/siteGuide/"):
-                    raise ValueError("Untrusted CleanEye redirect")
-                raw=response.read(3_000_001)
-        if len(raw)>3_000_000:raise ValueError("CleanEye page too large")
-        parsed=parse_local_registry(raw.decode("utf8","replace"))
-        state["official_local_institutions"]=parsed
-        audit={"source":"cleaneye","status":"collected",
-               "count":len(parsed),"coverage":"extracted establishment table; not verified exhaustive"}
-    except (OSError,ValueError,TypeError,UnicodeError) as exc:
+CLEANEYE_TARGETS="https://www.cleaneye.go.kr/user/selectTargetEntList.do?groupId=investmentPlan"
+
+def parse_local_target_list(html:str)->dict:
+    """Independently published target-agency list (partial coverage, not census)."""
+    import hashlib
+    parser=_InstitutionTable()
+    parser.feed(html)
+    header=next((row for row in parser.rows if "기관명" in row),None)
+    if not header:
+        raise ValueError("Official target table lacks agency column")
+    index=header.index("기관명")
+    found={}
+    for row in parser.rows:
+        if len(row)<=index:
+            continue
+        name=" ".join(row[index].split())
+        if (not re.fullmatch(r"[가-힣A-Za-z0-9·()\s]{3,100}(?:공사|공단)",name)
+                or "테스트" in name):
+            continue
+        digest=hashlib.sha256(name.encode("utf8")).hexdigest()[:18]
+        found[digest]={"id":digest,"agency":name,
+            "source":"cleaneye_official_target_list","source_url":CLEANEYE_TARGETS}
+    if not found:
+        raise ValueError("Official target table contains no validated agencies")
+    return found
+
+def collect_local_institutions(state:dict,transport=None)->dict:
+    errors=[]
+    for url,parser in ((CLEANEYE_URL,parse_local_registry),
+                       (CLEANEYE_TARGETS,parse_local_target_list)):
+        try:
+            if transport:
+                raw=transport(url)
+            else:
+                req=Request(url,headers={"User-Agent":"PolicyDominoNext/1.0",
+                                         "Accept":"text/html"})
+                with urlopen(req,timeout=9) as response:
+                    from urllib.parse import urlparse
+                    parsed_url=urlparse(response.geturl())
+                    if (parsed_url.scheme!="https" or
+                        parsed_url.hostname not in ("www.cleaneye.go.kr","cleaneye.go.kr")):
+                        raise ValueError("Unapproved institution-source redirect")
+                    raw=response.read(3_000_001)
+            if len(raw)>3_000_000:
+                raise ValueError("Official agency page too large")
+            rows=parser(raw.decode("utf8","replace"))
+            existing=state.setdefault("official_local_institutions",{})
+            existing.update(rows)
+            audit={"source":"cleaneye",
+                "status":"collected" if url==CLEANEYE_URL else "partial_official_target_list",
+                "count":len(existing),"source_url":url,
+                "coverage":"establishment table" if url==CLEANEYE_URL
+                  else "official annual target list; not nationwide completeness"}
+            break
+        except (OSError,ValueError,TypeError,UnicodeError) as exc:
+            errors.append(type(exc).__name__+":"+str(exc)[:100])
+    else:
         audit={"source":"cleaneye","status":"refresh_failed",
                "count":len(state.get("official_local_institutions",{})),
-               "error":type(exc).__name__+":"+str(exc)[:120]}
+               "errors":errors}
     state["official_local_audit"]=audit
     return audit
 
