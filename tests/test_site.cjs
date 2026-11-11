@@ -19,6 +19,7 @@ assert.ok(!app.includes("각각의 근거 수준은 구분해 보여줍니다.")
 for(const id of ["items","detail","mode-all","mode-new",
                  "mode-amended","mode-repealed","mode-impact",
                  "stat-events","stat-agencies","stat-actions",
+                 "stat-change-events","stat-linked-actions",
                  "list-count","search","backToList"]){
   assert.ok(html.includes('id="'+id+'"'),"Missing coherent event UI element "+id);
 }
@@ -142,7 +143,8 @@ const payload={
 };
 function browser(isMobile=false,hash="",data=payload,remote={}) {
   const ids=["layout","listPanel","detailPanel","detail","items",
-    "stat-events","stat-agencies","stat-actions","list-count",
+    "stat-events","stat-agencies","stat-actions",
+    "stat-change-events","stat-linked-actions","list-count",
     "ai-review-progress","institution-link-progress",
     "agency-directory-open","agency-directory-close",
     "agency-directory-modal","agency-directory-backdrop",
