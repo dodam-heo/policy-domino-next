@@ -101,6 +101,62 @@ def extract_hwpx_text(blob: bytes) -> str:
         return value
 
 
+
+def extract_hwpx_cells(blob: bytes) -> dict[str, str]:
+    """Preserve HWPX table cell identity: table, row label and column header.
+
+    Reject ambiguous header/row alignment instead of inferring an amount
+    from adjacent text. This uses embedded OOXML-like HWPX section XML.
+    """
+    cells={}
+    with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+        sections=sorted(
+            (name for name in zf.namelist()
+             if re.fullmatch(r"Contents/section\d+\.xml",name)),
+            key=lambda name:int(re.search(r"section(\d+)",name).group(1)))
+        if len(sections)>100 or sum(zf.getinfo(name).file_size
+                                   for name in sections)>20_000_000:
+            raise ValueError("HWPX section size/count invalid")
+        sequence=0
+        for name in sections:
+            root=ET.fromstring(zf.read(name))
+            for table in root.iter():
+                if tag(table)!="tbl":
+                    continue
+                sequence+=1
+                rows=[]
+                for row in table.iter():
+                    if tag(row)!="tr":
+                        continue
+                    entries=[]
+                    for cell in row:
+                        if tag(cell)!="tc":
+                            continue
+                        entries.append(clean(" ".join(
+                            "".join(run.itertext()) for run in cell.iter()
+                            if tag(run)=="t")))
+                    if entries:
+                        rows.append(entries)
+                header=next((i for i,row in enumerate(rows)
+                             if len(row)>1 and any(
+                                 re.search(r"[가-힣A-Za-z%]",v)
+                                 for v in row[1:])),None)
+                if header is None:
+                    continue
+                headings=rows[header]
+                if len(headings)<2:
+                    continue
+                for row in rows[header+1:]:
+                    if len(row)!=len(headings) or not row[0]:
+                        continue
+                    for col,value in enumerate(row[1:],1):
+                        if not headings[col] or not re.search(r"\d",value):
+                            continue
+                        key=f"표 {sequence} · {row[0]} · {headings[col]}"
+                        if key not in cells and len(value)<15000:
+                            cells[key]=value
+    return cells
+
 def extract_digital_pdf_text(pdf: bytes) -> str:
     from pypdf import PdfReader
     reader=PdfReader(io.BytesIO(pdf),strict=False)
@@ -267,16 +323,32 @@ def enrich_annexes(root, parsed: dict, *,
             else:
                 try:
                     blob = hwpx_downloader(approved)
+                    table_cells=(extract_hwpx_cells(blob)
+                                 if hwpx_extractor is extract_hwpx_text else {})
                     clause = take(hwpx_extractor(blob))
-                    if not clause["complete"]:
+                    file_hash=hashlib.sha256(blob).hexdigest()
+                    if not clause["complete"] and not table_cells:
                         raise ValueError("Full-text HWPX incomplete")
-                    clauses[label] = clause
-                    provenance[label] = {
-                        "source": "law_go_kr_official_hwpx", "url": approved,
-                        "scope": "whole_instrument",
-                        "file_sha256": hashlib.sha256(blob).hexdigest(),
-                        "text_sha256": clause["sha256"],
-                    }
+                    if clause["complete"]:
+                        clauses[label] = clause
+                        provenance[label] = {
+                            "source": "law_go_kr_official_hwpx", "url": approved,
+                            "scope": "whole_instrument",
+                            "file_sha256": file_hash,
+                            "text_sha256": clause["sha256"],
+                        }
+                    else:
+                        failures.append({"annex":label,
+                                         "reason":"whole_text_incomplete_cells_retained"})
+                    for cell_key,cell_value in table_cells.items():
+                        cell=take(cell_value)
+                        clauses[cell_key]=cell
+                        provenance[cell_key]={
+                            "source":"law_go_kr_official_hwpx_cell",
+                            "scope":"structured_cell","url":approved,
+                            "file_sha256":file_hash,
+                            "text_sha256":cell["sha256"],
+                        }
                     processed += 1
                 except Exception as exc:
                     failures.append({"annex": label, "reason": type(exc).__name__})
@@ -284,7 +356,9 @@ def enrich_annexes(root, parsed: dict, *,
         # The complete attachment supersedes flat XML with omitted images.
         # Avoid a second, misleading comparison of the same incomplete body.
         if provenance["첨부 전문"].get("scope") == "whole_instrument":
-            clauses = {"첨부 전문": clauses["첨부 전문"]}
+            structured={key:value for key,value in clauses.items()
+                        if provenance.get(key,{}).get("scope")=="structured_cell"}
+            clauses = {"첨부 전문": clauses["첨부 전문"], **structured}
         else:
             clauses.pop("본문", None)
     if result.get("image_placeholder_count") and "첨부 전문" not in provenance:
