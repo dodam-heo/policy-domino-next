@@ -133,7 +133,7 @@ const payload={
   ],
   generated_at:"2026-11-10T05:00:00+00:00",
 };
-function browser(isMobile=false,hash="",data=payload) {
+function browser(isMobile=false,hash="",data=payload,remote={}) {
   const ids=["layout","listPanel","detailPanel","detail","items",
     "stat-events","stat-agencies","stat-actions","list-count",
     "ai-review-progress","institution-link-progress",
@@ -165,14 +165,24 @@ function browser(isMobile=false,hash="",data=payload) {
     },
     createElement:tag=>new Element(tag),
   };
-  const fetch=()=>Promise.resolve({ok:true,json:()=>Promise.resolve(data)});
+  const fetchCalls=[];
+  const fetch=(path)=>{
+    fetchCalls.push(path);
+    const match=String(path).match(/^\.\/details\/([^/]+)\.json$/);
+    const value=match ? (remote.details?.[match[1]] ??
+      data.events.find(event=>event.id===match[1])) :
+      (path==="./sources.json" ?
+        {documents:remote.sources??data.documents??[]} : data);
+    return Promise.resolve({ok:value!==undefined,
+      json:()=>Promise.resolve(value)});
+  };
   vm.runInNewContext(presenter,{window:win,console},
                      {filename:"site/presentation.js"});
   vm.runInNewContext(app,{
     window:win,document:dom,history,location:here,fetch,URL,
     console,encodeURIComponent,decodeURIComponent
   },{filename:"site/app.js"});
-  return {elements,body,historyCalls,here,callbacks,win};
+  return {elements,body,historyCalls,here,callbacks,win,fetchCalls};
 }
 function node(context,id){return context.elements.get(id)}
 async function flush(){await new Promise(resolve=>setImmediate(resolve))}
@@ -630,7 +640,52 @@ async function noFabricatedImpact(){
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,0);
   console.log("PASS: no invented institutions or operational actions");
 }
+
+async function splitDistributionLoadsOnlyClickedDetail(){
+  const first=sample("lazy-one",{date:"2026-11-12",impact:true});
+  const second=sample("lazy-two",{date:"2026-11-11",benefit:true});
+  const synopsis=event=>({
+    id:event.id,title:event.title,kind:event.kind,
+    published_at:event.published_at,effective_date:event.effective_date,
+    institution_count:event.institution_count,review_count:event.review_count,
+    agency_names:event.institutional_reviews.map(row=>row.institution),
+    source_documents:[],list_brief:"공식 개정 요약",
+    detail_path:"./details/"+event.id+".json",
+  });
+  const data={schema:"policy-domino-next-v1",distribution:"split-v1",
+    events:[synopsis(first),synopsis(second)],
+    documents_path:"./sources.json",ai_progress:{indexed_documents:10}};
+  const ui=browser(false,"",data,{details:{
+    [first.id]:first,[second.id]:second,
+  },sources:[{id:"pending-document",title:"2027년도 신규 심사기준 고시",
+    source:"admrul",law_type:"고시",published_at:"2026-11-09",
+    analysis:{status:"queued"},url:"https://www.law.go.kr/행정규칙/2027년도신규심사기준"}]});
+  await flush();
+  assert.equal(ui.fetchCalls.filter(x=>x==="./catalog.json").length,1);
+  assert.equal(ui.fetchCalls.filter(x=>x==="./details/lazy-one.json").length,1);
+  assert.equal(ui.fetchCalls.filter(x=>x==="./details/lazy-two.json").length,0);
+  assert.ok(textOf(node(ui,"detail")).includes("가상공공기관"),
+    "Selected detail must be hydrated from the separate verified file");
+  node(ui,"search").oninput({target:{value:"2027년도 신규"}});
+  await flush();
+  assert.equal(ui.fetchCalls.filter(x=>x==="./sources.json").length,1,
+    "Unverified official source index loads only when searched");
+  assert.ok(textOf(node(ui,"items")).includes("신구 분석 대기"));
+  node(ui,"search").oninput({target:{value:""}});
+  const other=flatten(node(ui,"items")).find(x=>x.dataset.eventId==="lazy-two");
+  other.onclick();
+  await flush();
+  assert.equal(ui.fetchCalls.filter(x=>x==="./details/lazy-two.json").length,1);
+  assert.ok(textOf(node(ui,"detail")).includes("가상정책 lazy-two"));
+  node(ui,"items").children[0].onclick();
+  await flush();
+  assert.equal(ui.fetchCalls.filter(x=>x==="./details/lazy-one.json").length,1,
+    "Previously viewed official detail must be cached in the browser");
+  console.log("PASS: split catalog, on-demand source index and one-detail-at-a-time fetching");
+}
+
 Promise.all([
+  splitDistributionLoadsOnlyClickedDetail(),
   verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),
   effectiveYearAndRenamedAnnualCriteriaSearch(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
