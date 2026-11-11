@@ -18,7 +18,7 @@
         .filter(r=>["direct_regulated_institution","explicit_changed_clause",
                     "verified_official_rule_citation","verified_program_citation"].includes(r.basis_tier))
         .map(r=>r.institution).filter(Boolean)).size>=5;
-    return new Set((event.agency_names||[]).filter(Boolean)).size>=5;
+    return false; // Registry names alone are not verified impacts.
   }
   // Search names and effective years independently so re-titled annual
   // criteria remain discoverable without hard-coded example titles.
@@ -55,8 +55,7 @@
       return terms.every(term=>haystack.includes(term));
     }).sort((a,b)=>
       Number(highImpactScope(b))-Number(highImpactScope(a))||
-      Number(b.impact_level==="pending")-Number(a.impact_level==="pending")||
-      Number(b.impact_score||0)-Number(a.impact_score||0)||
+      Number(a.impact_level==="pending")-Number(b.impact_level==="pending")||
       String(b.published_at||"").localeCompare(String(a.published_at||""))||
       String(a.id||"").localeCompare(String(b.id||"")));
   }

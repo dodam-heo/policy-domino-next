@@ -130,6 +130,15 @@ a{color:var(--blue);text-underline-offset:3px}
 .original-clause[open] .pair{margin-top:12px}
 .full-clause-text{overflow-wrap:anywhere;white-space:pre-wrap;max-height:450px;overflow:auto}
 .highlights .section-help{margin:2px 0}
+.more-change-items,.agency-more-reviews{margin:10px 0;border:1px solid #d6e5ed;
+  border-radius:8px;background:#f8fbfd;padding:9px 11px}
+.more-change-items>summary,.agency-more-reviews>summary{cursor:pointer;
+  font-size:12px;font-weight:800;color:#1c6685}
+.more-change-items[open]>summary,.agency-more-reviews[open]>summary{margin-bottom:11px}
+.more-change-items>.highlight{margin:8px 0;background:white}
+.agency-more-reviews{margin:9px 14px}
+.agency-more-reviews>.review-card{margin:10px 0}
+.agency-more-reviews>.service-review-lead{margin:10px 0}
 .impact-numbers{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}
 .impact-numbers span{font-size:11px;font-weight:780;color:#275f7c;
   border:1px solid #c9dde7;border-radius:5px;padding:4px 8px;background:#fff}
