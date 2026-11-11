@@ -23,15 +23,15 @@ class MeaningTests(unittest.TestCase):
         # layout; the old and new numbers must never cross table boundaries.
         old = (
             "1. 가상 기본생활 지원기준 구 분 1인가구 2인가구 "
-            "금액(원/월) 100,000 200,000 "
+            "금액(원/월) 100,000 200,000 * 다음 기준 "
             "2. 가상 주택이용 선정기준 구 분 1인가구 2인가구 "
-            "금액(원/월) 300,000 400,000 "
+            "금액(원/월) 300,000 400,000 * "
         )
         new = (
             "제4조(가상 주택이용 수급자 선정기준) 구 분 1인가구 2인가구 "
-            "금액(원/월) 330,000 440,000 "
+            "금액(원/월) 330,000 440,000 * 다음 기준 "
             "제3조(가상 기본생활 지원기준) 구 분 1인가구 2인가구 "
-            "금액(원/월) 110,000 220,000 "
+            "금액(원/월) 110,000 220,000 * "
         )
         from policy_domino.meaning import _currency_table_changes
         rows = _currency_table_changes(old, new)
@@ -49,7 +49,7 @@ class MeaningTests(unittest.TestCase):
                "2. 중복사업 운영기준 구 분 1인가구 2인가구 "
                "금액(원/월) 300,000 400,000")
         new = ("제3조(중복사업 선정기준) 구 분 1인가구 2인가구 "
-               "금액(원/월) 900,000 800,000 "
+               "금액(원/월) 900,000 800,000 * 다음 기준 "
                "제4조(중복사업 운영기준) 구 분 1인가구 2인가구 "
                "금액(원/월) 700,000 600,000")
         self.assertEqual(_currency_table_changes(old, new), [])
