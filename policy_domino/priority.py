@@ -59,6 +59,7 @@ def _changed_windows(change):
 
 
 def _material_standard(change):
+    """A change to the actual benefit, amount or eligibility (not an incidental number)."""
     if not _real_change(change):
         return False
     old, new = str(change.get("before", "")), str(change.get("after", ""))
@@ -69,17 +70,36 @@ def _material_standard(change):
             and RENDERED_DIGITS.fullmatch(new.strip())
             and old.strip() != new.strip()):
         return True
-    for before, after in _changed_windows(change):
-        local = before + " " + after
-        # A title-wide keyword cannot make an unrelated number significant.
-        if not CRITERION.search(local):
+    for window in _meaning(change).get("focus", []):
+        before, after = window.get("before", {}), window.get("after", {})
+        if not isinstance(before, dict) or not isinstance(after, dict):
             continue
-        x, y = AMOUNT.findall(before), AMOUNT.findall(after)
-        if x and y and x != y:
+        x = str(before.get("changed", "")).strip()
+        y = str(after.get("changed", "")).strip()
+        old_context = (str(before.get("prefix", ""))[-95:] + " " + x +
+                       str(before.get("suffix", ""))[:40])
+        new_context = (str(after.get("prefix", ""))[-95:] + " " + y +
+                       str(after.get("suffix", ""))[:40])
+        local = old_context + " " + new_context
+        if not x or not y or not CRITERION.search(local):
+            continue
+        # Monetary/percentage values must themselves have been edited.
+        xmoney, ymoney = AMOUNT.findall(x), AMOUNT.findall(y)
+        if xmoney and ymoney and xmoney != ymoney:
             return True
-        m = _meaning(change)
-        if (m.get("label") == "대상·자격 기준" and ELIGIBILITY.search(local)
-                and re.sub(r"\s+", "", before) != re.sub(r"\s+", "", after)):
+        # Token-based diffs often isolate the digits, leaving "원" as suffix.
+        if (RENDERED_DIGITS.fullmatch(x) and RENDERED_DIGITS.fullmatch(y)
+                and x != y
+                and re.match(r"^\s*(?:억\s*원|만원|천원|원|%|퍼센트|배)",
+                             str(after.get("suffix", "")))
+                and not (len(x) == len(y) == 4
+                         and 1900 <= int(x) <= 2100
+                         and 1900 <= int(y) <= 2100)):
+            return True
+        if (_meaning(change).get("label") == "대상·자격 기준"
+                and ELIGIBILITY.search(local)
+                and not RENDERED_DIGITS.fullmatch(x)
+                and x != y):
             return True
     return False
 

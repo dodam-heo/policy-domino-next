@@ -11,6 +11,11 @@ const style=fs.readFileSync("site/styles.css","utf8");
 new vm.Script(app,{filename:"site/app.js"});
 new vm.Script(presenter,{filename:"site/presentation.js"});
 assert.ok(html.indexOf('src="./presentation.js"')<html.indexOf('src="./app.js"'));
+assert.ok(html.includes('class="site-header"'),"The navy topbar must remain");
+assert.ok(html.includes("정책이 바뀌면, 무엇을 고쳐야 할까?"),"The compact hero must remain");
+assert.ok(style.includes(".site-header"),"The nav bar must be visibly styled");
+assert.ok(!app.includes("원천자료 수집·인용 대조가 더 필요합니다."));
+assert.ok(!app.includes("각각의 근거 수준은 구분해 보여줍니다."));
 for(const id of ["items","detail","mode-all","mode-new",
                  "mode-amended","mode-repealed","mode-impact",
                  "stat-events","stat-agencies","stat-actions",

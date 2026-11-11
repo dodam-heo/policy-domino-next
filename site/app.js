@@ -595,7 +595,7 @@
       append(drawer,card);
     }
     if (event.ai_summaries.length>12)
-      append(drawer,create("p","section-help","추가 결과 "+num(event.ai_summaries.length-12)+"건"));
+      append(drawer,create("p","section-help","나머지 "+num(event.ai_summaries.length-12)+"건"));
     append(section,drawer);
     return section;
   }
@@ -657,7 +657,7 @@
         }).catch(error=>{
           if(state.selected===id)
             root.replaceChildren(create("p","no-impacts",
-              "상세 정보를 불러오지 못했습니다. 다시 정책을 선택해 주세요. "+String(error)));
+              "상세 정보를 열 수 없습니다. 다른 정책을 선택한 뒤 다시 시도해 주세요."));
         }).finally(()=>state.loadingDetails.delete(id));
       }
       return;
@@ -665,9 +665,7 @@
     const head=create("header","detail-head");
     const meta=create("div","detail-meta");
     append(meta,pill(view.category(event),"type "+event.kind),
-      create("span","",event.published_at||""),
-      event.verification==="partial" ?
-        null);
+      create("span","",event.published_at||""));
     const origin=event.origin||{};
     const provenance=create("div","origin-proof");
     append(provenance,
@@ -736,6 +734,8 @@
       data.ai_progress?.indexed_documents??data.documents?.length??0);
     $("stat-agencies").textContent=num(stats.institutions);
     $("stat-actions").textContent=num(stats.actions);
+    $("stat-change-events").textContent=num(stats.events);
+    $("stat-linked-actions").textContent=num(stats.actions);
 
     $("updated").textContent=data.generated_at ?
       " · 자료 갱신 "+String(data.generated_at).replace("T"," ").slice(0,16)+" UTC":"";
