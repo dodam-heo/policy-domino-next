@@ -166,6 +166,30 @@ class Gov24Tests(unittest.TestCase):
         self.assertEqual(target["old_value"],"")
         self.assertIn("제3조",target["review_question"])
 
+    def test_multirow_official_annex_values_create_specific_program_review(self):
+        from policy_domino.gov24 import changed_numeric_pairs,criteria_to_review
+        change={"article":"별표 1",
+                "before":"4인 가구 지원기준 100만원, 5인 가구 지원기준 150만원.",
+                "after":"4인 가구 지원기준 120만원, 5인 가구 지원기준 180만원."}
+        pairs=changed_numeric_pairs(change)
+        self.assertEqual(len(pairs),2)
+        self.assertIn(("100만원","120만원"),pairs)
+        entry=normalize_record(record("S2027"))
+        entry["fields"]["선정기준"]="4인 가구 지원기준 100만원"
+        item=criteria_to_review(entry,change,"official_clause_citation")[0]
+        self.assertEqual(item["field"],"선정기준")
+        self.assertEqual(item["old_value"],"100만원")
+        self.assertEqual(item["new_legal_value"],"120만원")
+        self.assertIn("120만원",item["review_question"])
+
+    def test_ambiguous_amount_alignment_does_not_claim_specific_threshold(self):
+        from policy_domino.gov24 import changed_numeric_pairs
+        before={"article":"별표 1","before":"가 기준은 100만원, 나 기준은 150만원",
+                "after":"나 기준 180만원, 가 기준 120만원"}
+        pairs=changed_numeric_pairs(before)
+        self.assertNotIn(("100만원","180만원"),pairs)
+        self.assertNotIn(("150만원","120만원"),pairs)
+
     def test_title_only_basis_does_not_pretend_article_level_citation(self):
         raw=record("S777")
         raw["법령"]="가상 공공서비스 운영법"

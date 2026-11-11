@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import difflib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -250,6 +251,42 @@ def _changed_values(change: dict) -> tuple[str, str]:
     return (old[0], new[0]) if len(old) == len(new) == 1 else ("", "")
 
 
+def changed_numeric_pairs(change: dict) -> list[tuple[str, str]]:
+    """Locate changed numerals by matching intact neighboring legal context.
+
+    Pairs from a table are admitted only when old/new sequences are equally
+    long and both sides retain comparable surrounding labels. Arbitrary
+    amount-order pairing is not permitted.
+    """
+    pattern=re.compile(r"(?<![\d,.])\d[\d,.]*\s*(?:억\s*원|만원|원|%|명|개월|일)")
+    before=change.get("before","")
+    after=change.get("after","")
+    old=list(pattern.finditer(before))
+    new=list(pattern.finditer(after))
+    if not old or len(old)!=len(new):
+        return []
+    values=[]
+    for a,b in zip(old,new):
+        x,y=a.group().strip(),b.group().strip()
+        if x==y:
+            continue
+        unit=r"(?:억\s*원|만원|원|%|명|개월|일)$"
+        old_unit=re.search(unit,x)
+        new_unit=re.search(unit,y)
+        if not old_unit or not new_unit or old_unit.group()!=new_unit.group():
+            continue
+        context_before=(before[max(0,a.start()-36):a.start()]+"|"+
+                        before[a.end():a.end()+30])
+        context_after=(after[max(0,b.start()-36):b.start()]+"|"+
+                       after[b.end():b.end()+30])
+        # Similar neighboring row labels are evidence; raw ordinal is not.
+        if difflib.SequenceMatcher(
+                None,context_before,context_after,autojunk=False).ratio()<0.72:
+            continue
+        values.append((x,y))
+    return list(dict.fromkeys(values))
+
+
 def criteria_to_review(service: dict, change: dict, tier: str) -> list[dict]:
     """Concrete review targets from actual government-service field snapshots.
 
@@ -257,14 +294,19 @@ def criteria_to_review(service: dict, change: dict, tier: str) -> list[dict]:
     not proof that an agency's internal rules have already changed.
     """
     fields = service.get("fields", {})
-    old, new = _changed_values(change)
+    single=_changed_values(change)
+    pairs=changed_numeric_pairs(change)
+    if single!=("","") and single not in pairs:
+        pairs.insert(0,single)
     targets = []
     for field in CRITERION_FIELDS:
         source = fields.get(field, "")
         if not source:
             continue
-        old_found = bool(old and old in source)
-        question = (
+        applicable=[(a,b) for a,b in pairs if a and a in source]
+        old,new=applicable[0] if len(applicable)==1 else ("","")
+        old_found=bool(old)
+        question=(
             field + "에 기재된 " + old +
             " 기준을 변경 조문의 " + new + " 기준과 대조하고 적용 여부를 확인"
             if old_found and new else
