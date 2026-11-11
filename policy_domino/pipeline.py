@@ -390,6 +390,25 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     # NOT proof that the agency must already change a program or system.
     from .gov24 import discover_public_service_leads
     gov24_links = discover_public_service_leads(state, events)
+    # Institution directory is a factual source index, not an impact finding.
+    # Each counter is obtained from retained official records, never examples.
+    directory = {}
+    def register_agency(name: str, key: str):
+        name = str(name or "").strip()
+        if not name:
+            return
+        row = directory.setdefault(name, {
+            "agency": name, "alioplus_programs": 0, "gov24_services": 0})
+        row[key] += 1
+    for program in state.get("official_programs", {}).values():
+        register_agency(program.get("agency", ""), "alioplus_programs")
+    for service in state.get("public_services", {}).values():
+        register_agency(service.get("agency", ""), "gov24_services")
+    agency_directory = sorted(directory.values(), key=lambda row: row["agency"])
+    agency_directory_audit = {
+        "alioplus_agencies": sum(row["alioplus_programs"] > 0 for row in agency_directory),
+        "gov24_agencies": sum(row["gov24_services"] > 0 for row in agency_directory),
+    }
     data = {
         "schema": state["schema"],
         "generated_at": state.get("generated_at", ""),
@@ -410,6 +429,8 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
             key=lambda x: x["id"]),
         "events": events,
         "public_service_proofs": gov24_links["proofs"],
+        "agency_directory": agency_directory,
+        "agency_directory_audit": agency_directory_audit,
         "gov24_audit": state.get("gov24_audit", {
             "source":"gov24_public_services","status":"not_configured"}),
         "public_services_indexed": len(state.get("public_services", {})),
