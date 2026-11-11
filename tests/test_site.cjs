@@ -194,6 +194,9 @@ async function verifiedNavigation(){
   assert.equal(node(ui,"stat-events").textContent,"10,166");
   assert.equal(node(ui,"stat-agencies").textContent,"1");
   assert.equal(node(ui,"stat-actions").textContent,"1");
+  assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 0건");
+  assert.equal(node(ui,"mode-impact").getAttribute("aria-pressed"),"true");
+  node(ui,"mode-all").onclick();
   assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 4건");
   assert.ok(html.includes("공공기관 명부 보기"));
   assert.ok(!html.includes("수집·분석 진도 및 연결 근거 상세"));
@@ -203,7 +206,7 @@ async function verifiedNavigation(){
   node(ui,"agency-directory-close").onclick();
   assert.equal(node(ui,"agency-directory-modal").hidden,true);
   assert.ok(html.includes("정책 변경 목록"));
-  assert.ok(html.includes("영향도 큼 우선 · 점수순 · 동점 최신순"));
+  assert.ok(html.includes("기본 조회: 영향도 큼 · 최신 변경순"));
   assert.ok(!html.includes("급여·지원기준"));
   assert.ok(!html.includes("filter-grid"));
   assert.ok(html.includes("법령명·정책명·소관기관 검색"));
@@ -269,6 +272,7 @@ async function effectiveYearAndRenamedAnnualCriteriaSearch(){
     ai_progress:{indexed_documents:1},generated_at:"",
   });
   await flush();
+  node(ui,"mode-all").onclick();
   node(ui,"search").oninput({target:{value:"2027년 생활보장"}});
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,1);
   node(ui,"search").oninput({target:{value:"2027년도 선정 기준"}});
@@ -296,6 +300,7 @@ async function directoryModalNavigation(){
 async function mobileNavigation(){
   const ui=browser(true);
   await flush();
+  node(ui,"mode-all").onclick();
   assert.equal(node(ui,"layout").classList.contains("detail-open"),false);
   node(ui,"items").children[0].onclick();
   assert.equal(node(ui,"layout").classList.contains("detail-open"),true);
@@ -325,6 +330,7 @@ async function institutionFilterNavigation(){
     ai_progress:{indexed_documents:80},generated_at:""};
   const ui=browser(false,"",data);
   await flush();
+  node(ui,"mode-all").onclick();
   let detail=node(ui,"detail");
   const pick=(root,klass)=>flatten(root).find(x=>x.className===klass);
   const controls=pick(detail,"agency-filter-panel");
@@ -448,6 +454,7 @@ async function screenshotComparisonSafety(){
     ai_progress:{indexed_documents:1000},generated_at:"",
   });
   await flush();
+  node(ui,"mode-all").onclick();
   const text=textOf(node(ui,"detail"));
   assert.ok(text.includes("인용하는 조문이 제12조제2항에서 제12조제3항으로"));
   assert.ok(text.includes("종전 인용 조문"));
@@ -494,6 +501,7 @@ async function realServiceLeadDiscoveryPresentation(){
   };
   const ui=browser(false,"",data);
   await flush();
+  node(ui,"mode-all").onclick();
   const detail=node(ui,"detail");
   const text=textOf(detail);
   assert.ok(text.includes("기관별 변경·사업 검토사항"));
@@ -538,6 +546,7 @@ async function indexedNoticesAreSearchableWithoutFakingImpact(){
     ai_progress:{indexed_documents:3},generated_at:""};
   const ui=browser(false,"",data);
   await flush();
+  node(ui,"mode-all").onclick();
   node(ui,"search").oninput({target:{value:"2027년도 가상 고시"}});
   const items=node(ui,"items");
   const text=textOf(items);
@@ -579,6 +588,7 @@ async function realDiffDoesNotRepeatSameClauseStart(){
     ai_progress:{indexed_documents:1000},generated_at:"",
   });
   await flush();
+  node(ui,"mode-all").onclick();
   const detail=node(ui,"detail");
   const marked=flatten(detail).filter(el=>el.tag==="mark" &&
     el.className==="diff-changed");
@@ -604,6 +614,7 @@ async function shortProofEmphasis(){
   const ui=browser(false,"",{schema:"policy-domino-next-v1",
     events:[ev],ai_progress:{indexed_documents:1},generated_at:""});
   await flush();
+  node(ui,"mode-all").onclick();
   const card=flatten(node(ui,"detail")).find(x=>x.className==="review-card");
   const p=flatten(card).find(x=>x.className==="proof-preview");
   const marks=flatten(p).filter(x=>x.tag==="mark");
@@ -625,6 +636,7 @@ async function officialNoticeCanBeFoundByKind(){
     ai_progress:{indexed_documents:1},generated_at:"",
   });
   await flush();
+  node(ui,"mode-all").onclick();
   node(ui,"search").oninput({target:{value:"고시"}});
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,1);
   assert.ok(textOf(node(ui,"items")).includes("고시"));
@@ -639,6 +651,7 @@ async function noFabricatedImpact(){
     ai_progress:{indexed_documents:1000},generated_at:"",
   });
   await flush();
+  node(ui,"mode-all").onclick();
   assert.equal(node(ui,"stat-agencies").textContent,"0");
   assert.ok(textOf(node(ui,"detail")).includes("공식 근거가 아직 확인되지 않았습니다"));
   node(ui,"mode-impact").onclick();
@@ -648,10 +661,12 @@ async function noFabricatedImpact(){
 
 async function splitDistributionLoadsOnlyClickedDetail(){
   const first=sample("lazy-one",{date:"2026-11-12",impact:true});
+  first.impact_level="high";
   const second=sample("lazy-two",{date:"2026-11-11",benefit:true});
   const synopsis=event=>({
     id:event.id,title:event.title,kind:event.kind,
     published_at:event.published_at,effective_date:event.effective_date,
+    impact_level:event.impact_level,
     institution_count:event.institution_count,review_count:event.review_count,
     agency_names:event.institutional_reviews.map(row=>row.institution),
     source_documents:[],list_brief:"공식 개정 요약",
@@ -677,6 +692,7 @@ async function splitDistributionLoadsOnlyClickedDetail(){
     "Unverified official source index loads only when searched");
   assert.ok(textOf(node(ui,"items")).includes("신구 분석 대기"));
   node(ui,"search").oninput({target:{value:""}});
+  node(ui,"mode-all").onclick();
   const other=flatten(node(ui,"items")).find(x=>x.dataset.eventId==="lazy-two");
   other.onclick();
   await flush();
@@ -689,7 +705,41 @@ async function splitDistributionLoadsOnlyClickedDetail(){
   console.log("PASS: split catalog, on-demand source index and one-detail-at-a-time fetching");
 }
 
+async function collapsedDetailPreviews(){
+  const e=sample("preview",{date:"2026-11-12",impact:true,ai:true});
+  const initial=e.changes[0];
+  e.changes=[initial,...Array.from({length:5},(_,i)=>({
+    ...initial,article:"제"+(i+4)+"조",brief:"추가 변경 "+(i+4)
+  }))];
+  e.highlights=e.changes.map(ch=>({document_id:ch.document_id,article:ch.article}));
+  const first=e.institutional_reviews[0];
+  e.institutional_reviews=Array.from({length:10},(_,i)=>({
+    ...first,id:"review-"+i,task:"업무 "+i
+  }));
+  e.review_count=10;
+  e.impact_level="high";
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[e],
+    ai_progress:{indexed_documents:10},generated_at:""
+  });
+  await flush();
+  const detail=node(ui,"detail");
+  const core=flatten(detail).find(x=>x.className==="detail-section core");
+  const initialCards=core.children.find(x=>x.className==="highlights");
+  assert.ok(initialCards,"Policy change highlights must exist");
+  assert.equal(initialCards.children.filter(x=>x.className.startsWith("highlight")).length,1);
+  const more=flatten(core).find(x=>x.className==="more-change-items");
+  assert.ok(more && !more.open && textOf(more).includes("다른 변경 내용 5건 펼쳐보기"));
+  const group=flatten(detail).find(x=>x.className==="agency-group");
+  assert.equal(group.children.filter(x=>x.className==="review-card").length,2);
+  const rest=flatten(group).find(x=>x.className==="agency-more-reviews");
+  assert.ok(rest&&!rest.open && textOf(rest).includes("검토사항 8건 더 보기"));
+  assert.ok(textOf(detail).includes("AI 보조검토"));
+  console.log("PASS: one policy preview, two agency cards, expand all, AI section reachable");
+}
+
 Promise.all([
+  collapsedDetailPreviews(),
   splitDistributionLoadsOnlyClickedDetail(),
   verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),
   effectiveYearAndRenamedAnnualCriteriaSearch(),noFabricatedImpact(),
