@@ -240,9 +240,9 @@ async function verifiedNavigation(){
   assert.ok(text.includes("가상 지원운영사업의 적용 금액을 제3조와 대조"));
   assert.ok(text.includes("전체 조문·공식 근거 보기"));
   assert.ok(text.includes("동시 개정된 법령 17건"));
-  assert.ok(text.includes("AI 보조검토"));
-  assert.ok(text.includes("AI 보조 요약 · 원문 인용 검증 완료"),
-    "Verified AI clause summary should be on the main change card");
+  assert.ok(text.includes("AI 보조분석"));
+  assert.ok(text.includes("AI 요약"),
+    "AI summary should stay on the main change card");
   assert.ok(text.includes("지급 기준 금액이 10만원에서 12만원으로 바뀌었습니다."),
     "Meaningful source-bound sentence must replace the fragmented raw arrow");
   assert.ok(text.includes("변경 전") && text.includes("변경 후"));
@@ -508,8 +508,8 @@ async function realServiceLeadDiscoveryPresentation(){
   assert.ok(text.includes("기관별 변경·사업 검토사항"));
   assert.ok(text.includes("가상광역시청"));
   assert.ok(text.includes("가상생활지원서비스"));
-  assert.ok(text.includes("공공서비스 기준 확인 1건"));
-  assert.ok(text.includes("각각의 근거 수준은 구분해 보여줍니다"));
+  assert.ok(text.includes("관련 서비스 1건"));
+  assert.ok(!text.includes("근거 수준은 구분해 보여줍니다"));
   assert.ok(text.includes("10만원"));
   assert.ok(text.includes("선정기준 · 검토할 기준"));
   assert.ok(text.includes("개정 조문 12만원"));
@@ -554,7 +554,7 @@ async function indexedNoticesAreSearchableWithoutFakingImpact(){
   assert.ok(text.includes("공식자료 검색 · 분석 대기 포함 2건"));
   assert.ok(text.includes("신구 분석 대기"));
   assert.ok(text.includes("본문 미확보"));
-  assert.ok(text.includes("정책 변경으로 확정하거나 기관별 업무 변경으로 표시하지 않습니다"));
+  assert.ok(!text.includes("정책 변경으로 확정하거나 기관별 업무 변경으로 표시하지 않습니다"));
   assert.equal(flatten(items).filter(x=>x.dataset.eventId==="official-queued-01").length,0);
   assert.ok(flatten(items).some(x=>x.tag==="a" &&
     decodeURI(x.href||"")==="https://www.law.go.kr/행정규칙/가상지원기준"));
@@ -654,7 +654,9 @@ async function noFabricatedImpact(){
   await flush();
   node(ui,"mode-all").onclick();
   assert.equal(node(ui,"stat-agencies").textContent,"0");
-  assert.ok(textOf(node(ui,"detail")).includes("공식 근거가 아직 확인되지 않았습니다"));
+  assert.ok(!textOf(node(ui,"detail")).includes("공식 근거가 아직 확인되지 않았습니다"));
+  assert.ok(!flatten(node(ui,"detail")).some(el=>el.textContent==="기관별 변경·사업 검토사항"),
+    "No empty institution-impact panel should appear without identified rows");
   node(ui,"mode-impact").onclick();
   assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,0);
   console.log("PASS: no invented institutions or operational actions");
@@ -736,7 +738,8 @@ async function collapsedDetailPreviews(){
   assert.equal(group.children.filter(x=>x.className==="review-card").length,2);
   const rest=flatten(group).find(x=>x.className==="agency-more-reviews");
   assert.ok(rest&&!rest.open && textOf(rest).includes("검토사항 8건 더 보기"));
-  assert.ok(textOf(detail).includes("AI 보조검토"));
+  assert.ok(textOf(detail).includes("AI 보조분석"));
+  assert.ok(!textOf(detail).includes("위임 관계 확인 중"));
   console.log("PASS: one policy preview, two agency cards, expand all, AI section reachable");
 }
 
