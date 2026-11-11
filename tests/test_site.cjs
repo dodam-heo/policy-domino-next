@@ -736,6 +736,7 @@ async function splitDistributionLoadsOnlyClickedDetail(){
 
 async function compactPolicyOriginHeader(){
   const e=sample("origin",{date:"2026-11-12",impact:true});
+  e.impact_level="high";
   e.origin={
     issuer:"가상금융위원회",instrument_type:"대통령령",
     instrument:"가상정책 시행령",number:"제1234호",
