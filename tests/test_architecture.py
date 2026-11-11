@@ -146,7 +146,8 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("\'24\'", workflow)
         for key in ("mode-all", "mode-new", "mode-amended",
                     "mode-repealed", "mode-impact", "stat-events",
-                    "stat-agencies", "analysis-coverage"):
+                    "stat-agencies", "agency-directory-open",
+                    "agency-directory-modal", "agency-directory-results"):
             self.assertIn('id="' + key + '"', index)
         for obsolete in ("kind-filter", "topic-filter", "impact-filter", "mode-benefit"):
             self.assertNotIn('id="' + obsolete + '"', index)
