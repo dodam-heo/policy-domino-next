@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .gov24 import CATALOG, _explicit_law_basis, criteria_to_review
+from .gov24 import CATALOG, service_change_basis, criteria_to_review
 
 
 def validate_public_service_candidates(payload: dict) -> list[str]:
@@ -50,8 +50,7 @@ def validate_public_service_candidates(payload: dict) -> list[str]:
                 proof.get("source") != "gov24" or
                 lead.get("verification") != "candidate_not_confirmed"):
                 errors.append(loc+": unsupported agency, service or implementation claim")
-            evidence = _explicit_law_basis(
-                proof, lead.get("law_title",""),lead.get("article",""))
+            evidence = service_change_basis(proof, change)
             if evidence != (lead.get("match_tier"),lead.get("basis_quote")):
                 errors.append(loc+": legal basis is not the original public service citation")
             targets=lead.get("review_targets", [])

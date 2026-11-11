@@ -239,6 +239,44 @@ def _explicit_law_basis(service: dict, title: str, article: str) -> tuple[str, s
     return "official_rule_title", basis[:280]
 
 
+def service_change_basis(service: dict, change: dict) -> tuple[str, str] | None:
+    """A notice can delegate a criterion under a law cited by a service.
+
+    Shared parent-law citations alone are insufficient: the service must also
+    name the notice's actual criterion and retain an applicable criterion field.
+    This is a review dependency, never proof of implementation or an obligation.
+    """
+    direct = _explicit_law_basis(service, change.get("document_title", ""),
+                                 change.get("article", ""))
+    if direct:
+        return direct
+    title = change.get("document_title", "")
+    if not re.search(r"기준|수준", title):
+        return None
+    tokens = re.findall(r"[가-힣]{3,}", title)
+    generic = {"선정기준", "지원기준", "지급기준", "최저보장수준", "운영기준",
+               "행정규칙", "전부개정", "일부개정", "시행규칙", "시행기준"}
+    terms = [re.sub(r"(?:의|에관한)$", "", token) for token in tokens
+             if token not in generic]
+    fields = service.get("fields", {})
+    criterion = " ".join(fields.get(k, "") for k in
+                         ("선정기준", "지원대상", "지원내용"))
+    if not criterion or not any(len(term) >= 3 and _plain(term) in _plain(criterion)
+                                for term in terms):
+        return None
+    def references(text):
+        return {(_plain(r["title"]), _plain(r["article"])): r
+                for r in extract_references(text) if r.get("article")}
+    old = references(change.get("before", ""))
+    new = references(change.get("after", ""))
+    service_refs = references(service.get("regulatory_basis", ""))
+    common = set(old) & set(new) & set(service_refs)
+    if not common:
+        return None
+    chosen = sorted(common)[0]
+    return "official_shared_clause_and_criterion", service_refs[chosen]["quote"][:280]
+
+
 CRITERION_FIELDS = ("선정기준", "지원대상", "지원내용", "신청방법", "신청기한")
 
 
@@ -362,6 +400,10 @@ def discover_public_service_leads(state: dict, events: list[dict],
         if change.get("document_title")
     }
     candidates_by_title = defaultdict(list)
+    embedded_titles = {ref["title"] for event in events
+                       for change in event.get("changes", [])
+                       for ref in extract_references(change.get("after", ""))
+                       if ref.get("article")}
     # One scan of official public-service records, not O(changes × services).
     for service in sources.values():
         if not service.get("agency") or not service.get("service_name"):
@@ -369,7 +411,7 @@ def discover_public_service_leads(state: dict, events: list[dict],
         basis_plain = _plain(service.get("regulatory_basis", ""))
         if not basis_plain:
             continue
-        for title in all_titles:
+        for title in all_titles | embedded_titles:
             if len(title) >= 5 and _plain(title) in basis_plain:
                 candidates_by_title[title].append(service)
 
@@ -379,8 +421,12 @@ def discover_public_service_leads(state: dict, events: list[dict],
         selected = {}
         for change in event.get("changes", []):
             title, article = change["document_title"], change["article"]
-            for service in candidates_by_title.get(title, []):
-                basis = _explicit_law_basis(service, title, article)
+            eligible = {s["service_id"]: s for s in candidates_by_title.get(title, [])}
+            for ref in extract_references(change.get("after", "")):
+                for service in candidates_by_title.get(ref["title"], []):
+                    eligible[service["service_id"]] = service
+            for service in eligible.values():
+                basis = service_change_basis(service, change)
                 if not basis:
                     continue
                 tier, quote = basis

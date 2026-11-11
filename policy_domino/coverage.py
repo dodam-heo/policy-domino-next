@@ -243,7 +243,8 @@ def fair_work_queue(state, today: dt.date, limit: int) -> list[dict]:
         not bool(re.search(r"기준|금액|요건|선정|수준", row.get("title", ""))),
         row["effective_date"], attempts.get(row["id"], {}).get("count", 0),
         row.get("published_at", ""), row["id"]))
-    priority.extend(upcoming[:min(max(1, limit // 6), limit-len(priority))])
+    priority = (upcoming[:min(max(1, limit // 6), limit-len(priority))]
+                + priority)
     priority_ids = {d["id"] for d in priority}
     for source in SOURCES:
         for channel in ("recent","backlog","retry"):

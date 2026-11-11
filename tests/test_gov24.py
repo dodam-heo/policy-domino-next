@@ -151,6 +151,38 @@ class Gov24Tests(unittest.TestCase):
         forged["events"][0]["public_service_leads"][0]["verification"]="confirmed_action"
         self.assertTrue(validate_public_service_candidates(forged))
 
+    def test_annual_notice_links_through_parent_clause_and_exact_service_criterion(self):
+        service = normalize_record(record("ANNUAL"))
+        service["fields"]["선정기준"] = "생활안정급여 소득 50만원 이하"
+        event = policy_event()
+        change = event["changes"][0]
+        change.update({
+            "document_title": "2027년 생활안정급여 선정기준 및 최저보장수준",
+            "article": "첨부 전문",
+            "before": "「가상 공공서비스 운영법」 제3조 생활안정급여 소득 50만원 이하",
+            "after": "「가상 공공서비스 운영법」 제3조 생활안정급여 소득 70만원 이하",
+        })
+        state = {"public_services": {"ANNUAL": service}}
+        result = discover_public_service_leads(state, [event])
+        lead = event["public_service_leads"][0]
+        self.assertEqual(lead["match_tier"], "official_shared_clause_and_criterion")
+        self.assertEqual(lead["review_targets"][0]["new_legal_value"], "70만원")
+        payload = {"events": [event], "public_service_proofs": result["proofs"],
+                   "public_services_indexed": 1, "public_service_review_leads": 1}
+        self.assertEqual(validate_public_service_candidates(payload), [])
+        # Another benefit under the SAME law/article must not be mixed in.
+        unrelated = copy.deepcopy(service)
+        unrelated["service_id"] = "OTHER"
+        unrelated["fields"]["선정기준"] = "별도주택급여 소득 50만원 이하"
+        state["public_services"]["OTHER"] = unrelated
+        discover_public_service_leads(state, [event])
+        self.assertEqual(event["public_service_lead_count"], 1)
+        # Same criterion label without an exact common legal article is not a link.
+        state["public_services"]["ANNUAL"]["regulatory_basis"] = (
+            "「가상 공공서비스 운영법」 제9조")
+        discover_public_service_leads(state, [event])
+        self.assertEqual(event["public_service_lead_count"], 0)
+
     def test_application_procedure_is_a_distinct_public_service_review_target(self):
         raw=record("S888")
         raw["선정기준"]=""

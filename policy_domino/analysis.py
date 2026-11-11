@@ -57,6 +57,14 @@ def compare(before: dict, after: dict, record: dict) -> dict:
     for article in sorted(set(a) | set(b)):
         old, new = a.get(article), b.get(article)
         if (old is None or new is None):
+            # Version-specific supplement IDs differ by issuance date. When
+            # both complete official attachment texts include the supplement,
+            # it is already compared there, not a missing legal provision.
+            full_old, full_new = a.get("첨부 전문", {}), b.get("첨부 전문", {})
+            if (article.startswith("부칙") and
+                all(v.get("complete") and "부칙" in re.sub(r"\s+", "", v.get("text", ""))
+                    for v in (full_old, full_new))):
+                continue
             # A missing key may mean the API omitted an annex, not a legal deletion.
             excluded.append({"article": article, "reason": "동일 조문 대응본 없음"})
             continue

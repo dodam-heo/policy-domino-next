@@ -66,6 +66,20 @@ class AnnexIntegrationTests(unittest.TestCase):
         self.assertFalse(any("999" in url for url in urls))
         self.assertTrue(after["annex_evidence"]["첨부 전문"]["pdf_sha256"])
 
+    def test_dated_supplements_in_full_attachments_are_not_false_missing_clauses(self):
+        from policy_domino.parser import take
+        before = {"status": "extracted", "clauses": {
+            "부칙 2025-1": take("2026년 시행"),
+            "첨부 전문": take("지원금액 100만원 부칙 2026년 시행")}}
+        after = {"status": "extracted", "clauses": {
+            "부칙 2026-1": take("2027년 시행"),
+            "첨부 전문": take("지원금액 120만원 부칙 2027년 시행")}}
+        result = compare(before, after, {"url": "https://www.law.go.kr"})
+        self.assertEqual(result["status"], "compared")
+        self.assertEqual(result["excluded"], [])
+        self.assertEqual(len(result["changes"]), 1)
+        self.assertIn("120만원", result["changes"][0]["after"])
+
     def test_hwpx_only_official_notice_extracts_table_cells(self):
         import io
         import zipfile
