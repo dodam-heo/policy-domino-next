@@ -361,6 +361,24 @@ def _currency_table_changes(before: str, after: str) -> list[dict]:
     return changes
 
 
+def _source_change_sentence(focus: list[dict]) -> str:
+    """State observed before/after text instead of commenting on model limits."""
+    for item in focus:
+        before = str(item.get("before", {}).get("changed", "")).strip()
+        after = str(item.get("after", {}).get("changed", "")).strip()
+        if before and after and before != after:
+            return (f"기존 ‘{_abbreviate(before, 96)}’ 부분이 "
+                    f"‘{_abbreviate(after, 96)}’으로 바뀌었습니다.")
+    for item in focus:
+        before = str(item.get("before", {}).get("changed", "")).strip()
+        after = str(item.get("after", {}).get("changed", "")).strip()
+        if after and not before:
+            return f"‘{_abbreviate(after, 135)}’ 내용이 추가됐습니다."
+        if before and not after:
+            return f"기존 ‘{_abbreviate(before, 135)}’ 내용이 삭제됐습니다."
+    return "변경된 조문의 종전 내용과 개정 내용을 신구대비로 확인할 수 있습니다."
+
+
 def explain(before: str, after: str) -> dict:
     """Evidence-bound comparison: do not mistake token substitutions for meaning."""
     before, after = str(before or ""), str(after or "")
@@ -442,12 +460,7 @@ def explain(before: str, after: str) -> dict:
         elif broad:
             kind, label, score = "rewrite", (
                 area if area != "조문 내용 변경" else "조문 내용 재구성"), 86
-            if len(edits) == 1 and max(len(before), len(after)) <= 130:
-                description = ("종전과 현행의 문구가 크게 달라, "
-                               "동일 제도나 기관의 단순 명칭 변경으로 단정할 수 없습니다.")
-            else:
-                description = ("여러 문구가 함께 바뀌어, 특정 단어 하나만으로 "
-                               "개정 내용을 설명할 수 없습니다.")
+            description = _source_change_sentence(focus)
             old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
         elif len(edits) == 1 and (not old_quote or not new_quote):
             kind = "addition" if not old_quote else "removal"
@@ -467,8 +480,7 @@ def explain(before: str, after: str) -> dict:
         else:
             kind = "multiple_edits"
             label = area if area != "조문 내용 변경" else "여러 문구 변경"
-            description = (f"조문 안의 {len(edits)}곳에서 문구가 변경됐습니다. "
-                           "신구 문장과 원문을 함께 확인하세요.")
+            description = _source_change_sentence(focus)
             old_quote, new_quote = _abbreviate(before, 175), _abbreviate(after, 175)
             score = 75
     # Show the words that actually changed, not identical clause openings.

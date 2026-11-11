@@ -59,7 +59,26 @@ def _summary(event):
                           "source":m.get("source","")}
                          for m in event.get("members",[])]
     selected["source_documents"]=event.get("source_documents",[])
-    selected["list_brief"]=featured.get("brief","")
+    # Prefer a literal-quote-verified AI explanation when available.
+    # The evidence/contract validator already checks source quotations, but
+    # repeat that check at the export boundary to avoid stale AI prose.
+    evidence_ai = next((
+        row for row in event.get("ai_summaries", [])
+        if row.get("document_id") == featured.get("document_id")
+        and row.get("article") == featured.get("article")
+        and isinstance(row.get("summary"), str)
+        and row["summary"].strip()
+        and isinstance(row.get("before_quote"), str)
+        and row["before_quote"].strip()
+        and row["before_quote"] in featured.get("before", "")
+        and isinstance(row.get("after_quote"), str)
+        and row["after_quote"].strip()
+        and row["after_quote"] in featured.get("after", "")
+        and not (featured.get("meaning") or {}).get("source_check_required")
+    ), None)
+    selected["list_brief"] = (
+        evidence_ai["summary"].strip() if evidence_ai else featured.get("brief", "")
+    )
     selected["agency_names"]=names
     selected["search_text"]=search
     selected["detail_path"]="./details/"+event["id"]+".json"

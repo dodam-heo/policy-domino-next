@@ -163,6 +163,26 @@ class MeaningTests(unittest.TestCase):
         self.assertIn("적극행정국민신청", result["before"])
         self.assertIn("적극행정 보호지원단", result["after"])
 
+    def test_multi_sentence_rewrite_shows_actual_edit_not_system_explanation(self):
+        old = (
+            "제56조의4(임원후보의 추천절차) 추천위원회는 "
+            "지방자치단체와 공사 홈페이지 및 일간신문에 모집공고를 "
+            "의무적으로 실시하며, 모집 기간은 15일 이상으로 한다. "
+            "후보자 심사를 거쳐 두 사람 이상을 추천한다."
+        )
+        new = (
+            "제56조의4(임원후보의 추천절차) 추천위원회는 "
+            "지방자치단체와 공사 홈페이지 및 지정 인터넷 사이트에 "
+            "모집공고를 하며, 필요한 경우 일간신문과 방송을 병행할 수 있다. "
+            "모집 기간은 15일 이상으로 하되 예외적으로 단축할 수 있다. "
+            "후보자 심사를 거쳐 두 사람 이상을 추천한다."
+        )
+        meaning = explain(old, new)
+        self.assertNotIn("특정 단어 하나만으로", meaning["description"])
+        self.assertNotIn("여러 문구가 함께 바뀌어", meaning["description"])
+        self.assertTrue(any(x in meaning["description"] for x in (
+            "인터넷", "일간신문", "모집공고", "홈페이지", "지정")))
+
     def test_number_only_preceding_body_is_not_a_verified_change(self):
         from policy_domino.parser import take
         from policy_domino.analysis import compare
