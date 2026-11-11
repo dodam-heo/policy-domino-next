@@ -27,6 +27,8 @@ assert.ok(!app.includes("공식 근거가 아직 확보되지 않았습니다") 
   !app.includes("근거 수준은 구분해 보여줍니다"),
   "Never leak machine-oriented evidence shortage descriptions into policy details");
 assert.ok(!app.includes("원천자료 수집·인용 대조가 더 필요합니다."));
+assert.ok(presenter.includes("verified_institution_count_for_impact"),
+  "Same-date impact results should prefer directly linked public agencies");
 assert.ok(!app.includes("각각의 근거 수준은 구분해 보여줍니다."));
 assert.ok(!presenter.includes('".map(r=>r.institution)'),
   "Frontend cannot infer impact from the count of cited institutions");

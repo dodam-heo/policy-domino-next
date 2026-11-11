@@ -53,6 +53,7 @@
       Number(highImpactScope(b))-Number(highImpactScope(a))||
       Number(a.impact_level==="pending")-Number(b.impact_level==="pending")||
       String(b.published_at||"").localeCompare(String(a.published_at||""))||
+      Number(b.verified_institution_count_for_impact||0)-Number(a.verified_institution_count_for_impact||0)||
       String(a.id||"").localeCompare(String(b.id||"")));
   }
   function impactGroups(event) {
