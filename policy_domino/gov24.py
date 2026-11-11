@@ -245,6 +245,34 @@ def _explicit_law_basis(service: dict, title: str, article: str) -> tuple[str, s
     return "official_rule_title", basis[:280]
 
 
+def _title_only_criterion_match(service: dict, change: dict) -> bool:
+    """Title-only legal bases need an independently matching changed criterion.
+
+    A shared law title by itself does not link every article of that law to
+    every service citing it. Require a source-aligned old/new numeric pair
+    and a matching substantive term around the old number in both texts.
+    Exact changed-article citations are handled separately.
+    """
+    before = change.get("before", "")
+    pairs = changed_numeric_pairs(change)
+    if not pairs:
+        return False
+    for field in CRITERION_FIELDS:
+        original = service.get("fields", {}).get(field, "")
+        if not original:
+            continue
+        for old, _new in pairs:
+            for source in re.finditer(re.escape(old), original):
+                source_left = original[max(0, source.start()-55):source.start()]
+                source_words = set(re.findall(r"[가-힣]{2,}", source_left))
+                for legal in re.finditer(re.escape(old), before):
+                    legal_left = before[max(0,legal.start()-55):legal.start()]
+                    legal_words = set(re.findall(r"[가-힣]{2,}", legal_left))
+                    if source_words & legal_words:
+                        return True
+    return False
+
+
 def service_change_basis(service: dict, change: dict) -> tuple[str, str] | None:
     """A notice can delegate a criterion under a law cited by a service.
 
@@ -255,6 +283,9 @@ def service_change_basis(service: dict, change: dict) -> tuple[str, str] | None:
     direct = _explicit_law_basis(service, change.get("document_title", ""),
                                  change.get("article", ""))
     if direct:
+        if (direct[0] == "official_rule_title" and
+                not _title_only_criterion_match(service, change)):
+            return None
         return direct
     title = change.get("document_title", "")
     if not re.search(r"기준|수준", title):
@@ -395,10 +426,9 @@ def criteria_to_review(service: dict, change: dict, tier: str) -> list[dict]:
     not proof that an agency's internal rules have already changed.
     """
     fields = service.get("fields", {})
-    single=_changed_values(change)
+    # Only row/context-aligned pairs may support a concrete amount revision.
+    # An isolated old and new number can belong to unrelated provisions.
     pairs=changed_numeric_pairs(change)
-    if single!=("","") and single not in pairs:
-        pairs.insert(0,single)
     targets = []
     for field in CRITERION_FIELDS:
         source = fields.get(field, "")
