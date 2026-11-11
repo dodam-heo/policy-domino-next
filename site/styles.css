@@ -342,12 +342,12 @@ a{color:var(--blue);text-underline-offset:3px}
 .proof-full p{max-height:220px;overflow:auto;white-space:pre-wrap}
 
 /* Full searchable directory modal; distinct from policy impact filters. */
-.directory-toolbar{max-width:1120px;margin:0 auto 12px;padding:0;display:flex;
-  justify-content:space-between;align-items:center;gap:10px}
-.source-overview{flex:1;min-width:0;border:1px solid #dbe6ed;border-radius:7px;background:#fafcfe}
+.directory-toolbar{max-width:1120px;margin:0 auto 12px;padding:0;display:block}
+.source-overview{width:100%;min-width:0;border:1px solid #dbe6ed;border-radius:7px;background:#fafcfe}
 .source-overview>summary{padding:8px 12px;font-size:11px;font-weight:750;
   cursor:pointer;color:#316781;line-height:1.4}
-.source-overview-body{display:flex;gap:15px;padding:8px 14px 12px;color:#517184;font-size:11px}
+.source-overview>summary strong{color:#175d7f;font-weight:850}
+.source-overview-body{display:flex;gap:15px;padding:10px 14px 12px;color:#517184;font-size:11px}
 .source-overview-body strong{color:#195a77}
 .directory-toolbar .directory-open-button{padding:8px 12px;min-height:32px}
 .directory-open-button{border:1px solid #c9dde8;border-radius:8px;background:#fff;

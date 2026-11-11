@@ -14,6 +14,18 @@ assert.ok(html.indexOf('src="./presentation.js"')<html.indexOf('src="./app.js"')
 assert.ok(html.includes('class="site-header"'),"The navy topbar must remain");
 assert.ok(html.includes("정책이 바뀌면, 무엇을 고쳐야 할까?"),"The compact hero must remain");
 assert.ok(style.includes(".site-header"),"The nav bar must be visibly styled");
+assert.ok(html.indexOf('class="site-header"')<html.indexOf('class="intro home-banner"') &&
+  html.indexOf('class="intro home-banner"')<html.indexOf('class="directory-toolbar"') &&
+  html.indexOf('class="directory-toolbar"')<html.indexOf('id="layout"'),
+  "Full screenshot layout: top bar, white hero, source summary and two-column content");
+assert.ok(html.includes("법령·고시 등 정책이 바뀌면"));
+assert.ok(html.includes("자료 현황 펼쳐보기") &&
+  html.includes('id="stat-change-events"') &&
+  html.includes('id="stat-linked-actions"'),
+  "Source overview row must show real counts on the first screen");
+assert.ok(!app.includes("공식 근거가 아직 확보되지 않았습니다") &&
+  !app.includes("근거 수준은 구분해 보여줍니다"),
+  "Never leak machine-oriented evidence shortage descriptions into policy details");
 assert.ok(!app.includes("원천자료 수집·인용 대조가 더 필요합니다."));
 assert.ok(!app.includes("각각의 근거 수준은 구분해 보여줍니다."));
 assert.ok(!presenter.includes('".map(r=>r.institution)'),
