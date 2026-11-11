@@ -443,7 +443,9 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
             "source_events": len(events),
             "verified_events": len(events),
             "analyzed_events": sum(bool(e["ai_count"]) for e in events),
-            "pending_events": sum(not e["ai_count"] for e in events),
+            "pending_events": sum(
+                bool(e["changes"]) and e["ai_count"] < len(e["changes"])
+                for e in events),
             "analyzed_documents": ai_review_count,
             "verified_document_changes": verified_count,
             "verified_clauses": sum(len(event["changes"]) for event in events),
