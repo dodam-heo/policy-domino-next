@@ -476,7 +476,8 @@ async function screenshotComparisonSafety(){
   assert.ok(changes.length>=1,"Core changes show short summary and collapse the before/after excerpts");
   assert.ok(changes.every(x=>!x.open),"Before/after source excerpts must start collapsed");
   assert.ok(text.includes("정확한 변경 내용을 판단할 수 없습니다"));
-  assert.ok(text.includes("재확인 대상"));
+  assert.ok(!text.includes("이 조문은 재확인 대상입니다."),
+    "Do not expose internal analysis warnings as explanatory banners");
   assert.ok(!text.includes("대상·자격 기준에 관한 조문 문구"),
     "Incomplete official text must never be treated as a verified eligibility change");
   console.log("PASS: real-style citation changes and incomplete source are distinct");
