@@ -47,7 +47,7 @@ jobs:
   # GitHub Pages deployment that is syncing or experiencing an outage.
   # UI-only pushes deploy fast; schedule/manual runs refresh data first.
   collect_and_refresh:
-    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[gov24-sync]') || contains(github.event.head_commit.message, '[rules-sync]'))) }}
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (contains(github.event.head_commit.message, '[gov24-sync]') || contains(github.event.head_commit.message, '[rules-sync]') || contains(github.event.head_commit.message, '[state-migrate]'))) }}
     needs: verify
     permissions:
       contents: write
@@ -61,6 +61,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Migrate legacy state to Git-safe shards without network or data loss
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[state-migrate]')
+        run: python -m policy_domino migrate
       - name: Collect official records and process unexamined backlog with time budget
         if: github.event_name != 'push' || contains(github.event.head_commit.message, '[rules-sync]')
         env:
@@ -73,12 +76,13 @@ jobs:
             python -m policy_domino run --limit 150 --time-budget 690 --source-budget 150
           fi
       - name: Collect official nationwide Gov24 services and operating criteria
+        if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[state-migrate]')
         env:
           GOV24_SERVICE_KEY: ${{ secrets.GOV24_SERVICE_KEY }}
         timeout-minutes: 5
         run: python -m policy_domino gov24 --page-budget 10
       - name: Verify registered Gov24 key against real official API results
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[state-migrate]')
         run: |
           python - <<'PY'
           import json

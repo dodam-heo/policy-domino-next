@@ -439,7 +439,7 @@ def configured_law_oc() -> str:
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24"))
+    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24", "migrate"))
     parser.add_argument("--limit", type=int, default=24)
     parser.add_argument("--page-budget", type=int, default=2)
     parser.add_argument("--time-budget", type=float, default=670)
@@ -450,6 +450,11 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, default=DATA_FILE)
     args = parser.parse_args(argv)
     state = load_state(args.state)
+    if args.mode == "migrate":
+        # Offline, non-destructive one-time conversion of a fully verified
+        # original state. Subsequent render uses the new state store.
+        report = save_shards(args.state, state, SCHEMA)
+        print("Official state shard migration:", json.dumps(report))
     if args.mode == "run":
         # The previous project's publicly configured official API OC is
         # "dori". It is an OC identifier, not a private API secret.

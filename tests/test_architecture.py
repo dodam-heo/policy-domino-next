@@ -55,6 +55,16 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("test ! -e data/state.json", workflow)
         self.assertIn("'data/state/**'", workflow)
 
+    def test_state_migration_is_one_shot_without_api_rescan(self):
+        workflow = (ROOT / ".github/workflows/pipeline.yml").read_text(
+            encoding="utf-8")
+        pipeline = (ROOT / "policy_domino/pipeline.py").read_text(
+            encoding="utf-8")
+        self.assertIn("[state-migrate]", workflow)
+        self.assertIn("python -m policy_domino migrate", workflow)
+        self.assertIn("choices=(\"run\", \"render\", \"ai\", \"ai-check\", \"gov24\", \"migrate\")",pipeline)
+        self.assertIn("test ! -e data/state.json", workflow)
+
     def test_gov24_credential_can_be_checked_without_full_reindex(self):
         workflow=(ROOT/".github/workflows/pipeline.yml").read_text(encoding="utf-8")
         self.assertIn("[gov24-sync]",workflow)
