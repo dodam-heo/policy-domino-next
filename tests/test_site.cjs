@@ -377,6 +377,7 @@ async function institutionFilterNavigation(){
 
   const mobile=browser(true,"",data);
   await flush();
+  node(mobile,"mode-all").onclick();
   node(mobile,"items").children[0].onclick();
   const mobileDetail=node(mobile,"detail");
   const mobileSelect=pick(mobileDetail,"agency-select");
