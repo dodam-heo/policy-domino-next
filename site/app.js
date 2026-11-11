@@ -3,7 +3,7 @@
   const $ = name => document.getElementById(name);
   const view = window.PolicyDominoView;
   const state = {
-    data: null, events: [], selected: null, mode: "all",
+    data: null, events: [], selected: null, mode: "impact",
     query: "", visible: 60, institutionFilter: "all",
     details: new Map(), loadingDetails: new Set(), sourceIndexLoading: false
   };
@@ -193,9 +193,8 @@
         create("span","item-date",event.published_at||"날짜 미확인"));
       const tags=create("div","item-tags");
       if (event.source_count>1) append(tags,pill("동시 개정 "+num(event.source_count)+"건"));
-      if(event.impact_level==="high")append(tags,pill("영향도 큼 · "+num(event.impact_score)+"점","impact"));
+      if(event.impact_level==="high")append(tags,pill("영향도 큼","impact"));
       else if(event.impact_level==="pending")append(tags,pill("영향도 평가 중","partial"));
-      else if(typeof event.impact_score==="number")append(tags,pill("영향도 "+num(event.impact_score)+"점"));
       if (event.institution_count) append(tags,pill("검토 기관 "+num(event.institution_count)+"곳","impact"));
       if (event.review_count) append(tags,pill("업무 "+num(event.review_count)+"건"));
       if (event.public_service_lead_count)
@@ -291,8 +290,17 @@
       const featured=(event.highlights||[]).map(key=>
         (event.changes||[]).find(ch=>ch.document_id===key.document_id &&
           ch.article===key.article)).filter(Boolean);
-      const shown=featured.length?featured:event.changes.slice(0,3);
-      for (const change of shown) {
+      // Prioritize the first comparison and keep remaining changes on demand.
+      const priority=featured.length?featured:event.changes.slice(0,3);
+      const shown=[...priority];
+      for(const change of event.changes){
+        if(shown.length>=12)break;
+        if(!shown.includes(change))shown.push(change);
+      }
+      const remaining=create("details","more-change-items");
+      if(shown.length>1)append(remaining,create("summary","",
+        "다른 변경 내용 "+num(shown.length-1)+"건 펼쳐보기"));
+      for (const [index, change] of shown.entries()) {
         const meaning=change.meaning||{};
         const row=create("div","highlight");
         if(meaning.source_check_required)row.className+=" highlight-caution";
@@ -335,12 +343,14 @@
             meaning.change_kind==="citation"?"현행 인용 조문":"변경 후"));
           append(row,toggle);
         }
-        append(highlights,row);
+        if(index===0)append(highlights,row);
+        else append(remaining,row);
       }
-      if (event.changes.length>shown.length)
-        append(highlights,create("p","section-help",
+      if(event.changes.length>shown.length)
+        append(remaining,create("p","section-help",
           "그 밖의 "+num(event.changes.length-shown.length)+
-          "개 변경 조문은 아래 '전체 조문·공식 근거 보기'에서 확인할 수 있습니다."));
+          "개 변경 조문은 '전체 조문·공식 근거 보기'에서 확인할 수 있습니다."));
+      if(shown.length>1)append(highlights,remaining);
       append(section,highlights);
     }
     const stats=create("div","impact-numbers");
@@ -479,17 +489,22 @@
       for(let i=0;i<shown.length;i++){
         const entry=shown[i];
         const group=create("details","agency-group");
-        group.open=state.institutionFilter!=="all" ||
-          shown.length<=3 || i===0;
+        group.open=state.institutionFilter!=="all" || i===0;
         const top=create("summary","agency-heading");
         append(top,create("strong","",entry.agency),
           create("span","",num(entry.reviews.length+entry.services.length)+"건"));
         append(group,top);
-        for(const review of entry.reviews){
-          append(group,reviewCard(review,event));
-        }
-        for(const service of entry.services) {
-          append(group,serviceLeadCard(service));
+        const cards=[
+          ...entry.reviews.map(review=>reviewCard(review,event)),
+          ...entry.services.map(service=>serviceLeadCard(service))
+        ];
+        for(const card of cards.slice(0,2))append(group,card);
+        if(cards.length>2){
+          const rest=create("details","agency-more-reviews");
+          append(rest,create("summary","",
+            "검토사항 "+num(cards.length-2)+"건 더 보기"));
+          for(const card of cards.slice(2))append(rest,card);
+          append(group,rest);
         }
         append(results,group);
       }
@@ -731,7 +746,7 @@
     state.details.clear();
     state.loadingDetails.clear();
     data.documents_loaded=!data.documents_path;
-    state.mode="all";
+    state.mode="impact";
     state.institutionFilter="all";
     const stats=view.overview(data.events,data.ai_progress||{});
     $("stat-events").textContent=num(data.quality?.analysis_status?.indexed??
@@ -743,7 +758,7 @@
       " · 자료 갱신 "+String(data.generated_at).replace("T"," ").slice(0,16)+" UTC":"";
     const linked=eventHash();
     state.selected=state.events.some(e=>e.id===linked) ?
-      linked:(view.filterEvents(state.events)[0]?.id||null);
+      linked:(filtered()[0]?.id||null);
     renderList();renderDetail();
     if (linked && mobile()) select(linked,false);
     else if (mobile()) back(false);
