@@ -29,7 +29,8 @@ def _query(api, first: str, last: str, kind: str, splits: int = 4):
         return records, [audit.as_dict()], True
     # Split a dense date range if pagination exceeds its page cap.
     # Transport, parser and authorization errors must remain failures.
-    if splits <= 0 or first == last or audit.reported < 0:
+    if (splits <= 0 or first == last or audit.reported < 0 or
+            audit.error != "Comparison page limit reached"):
         return records, [audit.as_dict()], False
     start, end = dt.date.fromisoformat(first), dt.date.fromisoformat(last)
     mid = start + (end-start)//2
@@ -82,7 +83,12 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
                 "error":type(exc).__name__+": "+str(exc)[:120]}],False
         missing=[]
         unresolved=[]
-        for candidate in records:
+        deferred = 0
+        for position, candidate in enumerate(records):
+            if time.monotonic() - start >= max_seconds:
+                deferred = len(records) - position
+                complete = False
+                break
             possible=canonical_by_name_date.get(
                 (candidate["title"],candidate["published_at"]),[])
             if len(possible)==1 and possible[0].get("law_type") in (
@@ -123,6 +129,7 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
             "first":first,"last":last,
             "indexed_count":len(records),"newly_discovered":len(missing),
             "missing_document_ids":missing[:40],
+            "deferred_canonical_records":deferred,
             "unresolved_canonical_records":len(unresolved),
             "unresolved_comparison_records":unresolved[:10],
             "complete":complete and not unresolved,
@@ -133,8 +140,10 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
         }
         categories.setdefault(ADMIN_RULE_KINDS[kind],0)
         categories[ADMIN_RULE_KINDS[kind]] += len(records)
-        index = (index+1)%len(windows)
         examined += 1
+        if deferred:
+            break  # Resume this window; resolved canonical IDs are retained.
+        index = (index+1)%len(windows)
     state["reconcile_cursor"] = index
     # Exact official IDs only. The existing fair work queue will process
     # discovered documents; no previously extracted version is discarded.

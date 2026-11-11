@@ -493,8 +493,10 @@ def main(argv=None):
     if args.mode == "reconcile":
         from .reconciliation import reconcile_changed_rules
         credential=configured_law_oc()
+        api = LawAPI(credential)
+        api.deadline = time.monotonic() + max(30, min(args.time_budget, 600))
         report=reconcile_changed_rules(
-            LawAPI(credential),state,dt.date.today(),
+            api,state,dt.date.today(),
             max_windows=max(1,min(args.reconcile_windows,60)),
             max_seconds=max(30,min(args.time_budget,600)))
         save_shards(args.state,state,SCHEMA)

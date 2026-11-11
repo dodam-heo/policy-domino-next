@@ -1,5 +1,6 @@
 import datetime as dt
 import unittest
+from unittest.mock import patch
 from policy_domino.api import LawAPI, Coverage
 from policy_domino.core import new_state, document_key
 from policy_domino.reconciliation import reconcile_changed_rules
@@ -67,6 +68,50 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(out["new_documents"],0)
         self.assertTrue(any(not v["complete"] for v in
                             state["reconciliation_windows"].values()))
+
+    def test_budget_exhaustion_preserves_partial_window_for_resume(self):
+        class Slow(FakeAPI):
+            def changed_rule_window(self, first, last, kind, max_pages=20):
+                rows = [{"title": official_doc(i)["title"],
+                         "published_at": "2026-10-29",
+                         "comparison_id": str(i), "comparison_serial": str(i)}
+                        for i in (1, 2)]
+                return rows, Coverage("admrulOldAndNew", first, last,
+                                      "both", 2, 2, 1, True)
+        state = new_state()
+        with patch("policy_domino.reconciliation.time.monotonic",
+                   side_effect=[0, 0, 1, 31]):
+            report = reconcile_changed_rules(
+                Slow(), state, dt.date(2026, 11, 10),
+                earliest=dt.date(2026, 10, 20), max_seconds=30)
+        self.assertEqual(report["new_documents"], 1)
+        self.assertEqual(report["next_cursor"], 0)
+        window = next(iter(state["reconciliation_windows"].values()))
+        self.assertFalse(window["complete"])
+        self.assertEqual(window["deferred_canonical_records"], 1)
+        self.assertEqual(len(state["reconciliation_priority_ids"]), 1)
+
+    def test_upstream_failure_never_fans_out_into_recursive_requests(self):
+        class Broken(FakeAPI):
+            def changed_rule_window(self, first, last, kind, max_pages=20):
+                self.calls.append(kind)
+                return [], Coverage("admrulOldAndNew", first, last,
+                                     "both", 200, 0, 0, False,
+                                     "Official API time budget exhausted")
+        api = Broken()
+        reconcile_changed_rules(api, new_state(), dt.date(2026, 11, 10),
+                                max_windows=1, max_seconds=30)
+        self.assertEqual(len(api.calls), 1)
+
+    def test_expired_api_budget_never_starts_another_transport(self):
+        from policy_domino.api import ApiError
+        transport = unittest.mock.Mock()
+        api = LawAPI("example", transport)
+        api.deadline = 1
+        with patch("policy_domino.api.time.monotonic", return_value=2):
+            with self.assertRaises(ApiError):
+                api.request("lawSearch.do", "admrul")
+        transport.assert_not_called()
 
     def test_comparison_api_requires_independent_canonical_identity(self):
         from urllib.parse import parse_qs,urlparse

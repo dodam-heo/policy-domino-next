@@ -100,8 +100,11 @@ class LawAPI:
             raise ValueError("LAW_OC is required; never use a built-in credential")
         self.credential = credential.strip()
         self.transport = transport
+        self.deadline = None
 
     def request(self, endpoint: str, target: str, **params) -> ET.Element:
+        if self.deadline is not None and time.monotonic() >= self.deadline:
+            raise ApiError("Official API time budget exhausted")
         args = {"OC": self.credential, "target": target, "type": "XML", **params}
         url = API + endpoint + "?" + urllib.parse.urlencode(args)
         if self.transport:
@@ -112,7 +115,11 @@ class LawAPI:
             last = None
             for attempt in range(3):
                 try:
-                    with urllib.request.urlopen(req, timeout=25) as response:
+                    remaining = (self.deadline - time.monotonic()
+                                 if self.deadline is not None else 25)
+                    if remaining <= 0:
+                        raise ApiError("Official API time budget exhausted")
+                    with urllib.request.urlopen(req, timeout=min(25, remaining)) as response:
                         data = response.read(MAX_BYTES + 1)
                     break
                 except (OSError, urllib.error.URLError) as exc:
