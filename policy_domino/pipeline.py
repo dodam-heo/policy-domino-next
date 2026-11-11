@@ -389,13 +389,17 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     # A confirmed service name and statutory citation is a review lead,
     # NOT proof that the agency must already change a program or system.
     from .gov24 import discover_public_service_leads
-    gov24_links = discover_public_service_leads(state, events)
     from .legal_origin import origin_of
     from .priority import score_and_sort
     for event in events:
         document_id=event.get("source_documents", [""])[0]
         event["origin"]=origin_of(docs.get(document_id,{}),
                                   state.get("versions",{}).get(document_id))
+        for change in event.get("changes",[]):
+            change["origin_upper_bases"]=event["origin"]["upper_bases"]
+    # Search both the changed notice and its directly quoted parent basis,
+    # but require a matching previous amount in the official service fields.
+    gov24_links = discover_public_service_leads(state, events)
     score_and_sort(events)
     # Institution directory is a factual source index, not an impact finding.
     # Each counter is obtained from retained official records, never examples.
@@ -408,8 +412,11 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         if not name or is_office_title(name):
             return
         row = directory.setdefault(name, {
-            "agency": name, "alioplus_programs": 0, "gov24_services": 0})
+            "agency": name, "alioplus_programs": 0,
+            "gov24_services": 0, "official_registry": 0})
         row[key] += 1
+    for institution in state.get("official_institutions",{}).values():
+        register_agency(institution.get("agency",""),"official_registry")
     for program in state.get("official_programs", {}).values():
         register_agency(program.get("agency", ""), "alioplus_programs")
     for service in state.get("public_services", {}).values():
@@ -418,6 +425,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
     agency_directory_audit = {
         "alioplus_agencies": sum(row["alioplus_programs"] > 0 for row in agency_directory),
         "gov24_agencies": sum(row["gov24_services"] > 0 for row in agency_directory),
+        "official_registry_agencies": sum(row["official_registry"] > 0 for row in agency_directory),
     }
     data = {
         "schema": state["schema"],
@@ -442,6 +450,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "public_service_proofs": gov24_links["proofs"],
         "agency_directory": agency_directory,
         "agency_directory_audit": agency_directory_audit,
+        "official_institution_audit": state.get("official_institution_audit",{}),
         "gov24_audit": state.get("gov24_audit", {
             "source":"gov24_public_services","status":"not_configured"}),
         "public_services_indexed": len(state.get("public_services", {})),
@@ -514,7 +523,7 @@ def configured_law_oc() -> str:
 def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24", "migrate", "reconcile"))
+    parser.add_argument("mode", choices=("run", "render", "ai", "ai-check", "gov24", "institutions", "migrate", "reconcile"))
     parser.add_argument("--limit", type=int, default=24)
     parser.add_argument("--page-budget", type=int, default=2)
     parser.add_argument("--reconcile-windows",type=int,default=12)
@@ -566,6 +575,11 @@ def main(argv=None):
         save_shards(args.state, state, SCHEMA)
         print("Gov24 public-service collection:",
               json.dumps(audit, ensure_ascii=False))
+    if args.mode == "institutions":
+        from .agency_registry import collect_institutions
+        audit=collect_institutions(state)
+        save_shards(args.state,state,SCHEMA)
+        print("Official institution directory:",json.dumps(audit,ensure_ascii=False))
     if args.mode == "ai-check":
         from .ai import assess_ai_run
         report = state.get("ai_run", {})

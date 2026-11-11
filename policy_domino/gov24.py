@@ -291,6 +291,16 @@ def service_change_basis(service: dict, change: dict) -> tuple[str, str] | None:
                 not _title_only_criterion_match(service, change)):
             return None
         return direct
+    # This source-backed alternative addresses annual notices whose changed
+    # annex has numbers but no explicit citation on that particular table row.
+    # Merely sharing a parent's title is insufficient: the service must show
+    # the exact prior numerical amount with matching surrounding criterion.
+    for parent in change.get("origin_upper_bases", []):
+        parent_title=_plain(parent.get("title",""))
+        quoted=[ref for ref in extract_references(service.get("regulatory_basis",""))
+                if _plain(ref.get("title",""))==parent_title]
+        if parent_title and quoted and _title_only_criterion_match(service,change):
+            return "official_delegated_numeric_criterion", quoted[0].get("quote","")[:280]
     title = change.get("document_title", "")
     if not re.search(r"기준|수준", title):
         return None
@@ -491,12 +501,15 @@ def discover_public_service_leads(state: dict, events: list[dict],
         if change.get("document_title")
     }
     candidates_by_title = defaultdict(list)
+    origin_titles={ref.get("title","") for event in events
+                   for ref in (event.get("origin") or {}).get("upper_bases",[])
+                   if ref.get("title")}
     embedded_titles = {ref["title"] for event in events
                        for change in event.get("changes", [])
                        for ref in extract_references(change.get("after", "").translate(
                            str.maketrans({"｢": "「", "｣": "」"})))
                        if ref.get("article")}
-    title_index = [(title, _plain(title)) for title in all_titles | embedded_titles
+    title_index = [(title, _plain(title)) for title in all_titles | embedded_titles | origin_titles
                    if len(title) >= 5]
     # Normalize each legal title once, rather than once per service.
     for service in sources.values():
@@ -516,6 +529,9 @@ def discover_public_service_leads(state: dict, events: list[dict],
         for change in event.get("changes", []):
             title, article = change["document_title"], change["article"]
             eligible = {s["service_id"]: s for s in candidates_by_title.get(title, [])}
+            for ref in change.get("origin_upper_bases",[]):
+                for service in candidates_by_title.get(ref.get("title",""),[]):
+                    eligible[service["service_id"]]=service
             for ref in extract_references(change.get("after", "").translate(
                            str.maketrans({"｢": "「", "｣": "」"}))):
                 for service in candidates_by_title.get(ref["title"], []):

@@ -68,6 +68,7 @@ def new_state() -> dict:
         "findings": {}, "coverage": [], "attempts": {}, "cursor_days": 0,
         "dependency_discovery": {}, "discovery_metrics": {},
         "official_programs": {}, "program_source_audit": {},
+        "official_institutions": {}, "official_institution_audit": {},
         "errors": [], "generated_at": "",
     }
 
