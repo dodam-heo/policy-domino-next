@@ -95,14 +95,19 @@
     // A document without completed comparison must be discoverable, but must
     // NEVER be represented as an already verified amendment or agency impact.
     if(state.mode!=="all")return;
-    const terms=state.query.trim().toLocaleLowerCase("ko-KR")
-      .split(/\s+/).filter(Boolean);
+    const terms=state.query.trim().split(/\s+/)
+      .map(view.searchKey).filter(Boolean);
     if(!terms.length || terms.join("").length<2)return;
     const verified=new Set(state.events.flatMap(e=>e.source_documents||[]));
     const docs=(state.data?.documents||[]).filter(doc=>{
       if(verified.has(doc.id))return false;
-      const text=[doc.title,doc.law_type,doc.ministry]
-        .join(" ").toLocaleLowerCase("ko-KR");
+      const year=String(doc.effective_date||"").slice(0,4);
+      const text=view.searchKey([
+        doc.title,doc.law_type,doc.ministry,
+        doc.effective_date,doc.published_at,
+        /^\d{4}$/.test(year)?year+"년":"",
+        /^\d{4}$/.test(year)?year+"년도":""
+      ].join(" "));
       return terms.every(term=>text.includes(term));
     });
     const section=create("details","indexed-search-section");

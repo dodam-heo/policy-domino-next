@@ -241,6 +241,24 @@ async function verifiedNavigation(){
   assert.ok(!text.includes("공식 변경 전·후와 출처"));
   console.log("PASS: policy events, institution/program reviews, search and evidence order");
 }
+async function effectiveYearAndRenamedAnnualCriteriaSearch(){
+  // The official title can change between years and omit the effective year.
+  const event=sample("annual-basis",{date:"2026-07-29"});
+  event.title="새로운 생활보장 선정기준 및 최저보장수준";
+  event.effective_date="2027-01-01";
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[event],
+    ai_progress:{indexed_documents:1},generated_at:"",
+  });
+  await flush();
+  node(ui,"search").oninput({target:{value:"2027년 생활보장"}});
+  assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,1);
+  node(ui,"search").oninput({target:{value:"2027년도 선정 기준"}});
+  assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,1);
+  node(ui,"search").oninput({target:{value:"2027년 무관한상황"}});
+  assert.equal(node(ui,"items").children.filter(x=>x.dataset.eventId).length,0);
+  console.log("PASS: effective year and renamed annual criteria remain searchable");
+}
 async function directoryModalNavigation(){
   const ui=browser();await flush();
   node(ui,"agency-directory-open").onclick();
@@ -607,7 +625,8 @@ async function noFabricatedImpact(){
   console.log("PASS: no invented institutions or operational actions");
 }
 Promise.all([
-  verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),noFabricatedImpact(),
+  verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),
+  effectiveYearAndRenamedAnnualCriteriaSearch(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
   realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind(),
   realDiffDoesNotRepeatSameClauseStart(),shortProofEmphasis(),
