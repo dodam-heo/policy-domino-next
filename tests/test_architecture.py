@@ -50,7 +50,10 @@ class SubmissionArchitectureTests(unittest.TestCase):
         self.assertIn("collect_sources=not args.analysis_only", pipeline)
         self.assertIn("source_budget_seconds", pipeline)
         self.assertEqual(workflow.count("uses: actions/deploy-pages@"), 1)
-        self.assertEqual(workflow.count("git add data/state.json site/data.json"), 1)
+        self.assertEqual(workflow.count("git add -A -- data/state data/state.json site/data.json"), 1)
+        self.assertIn("test -f data/state/manifest.json", workflow)
+        self.assertIn("test ! -e data/state.json", workflow)
+        self.assertIn("'data/state/**'", workflow)
 
     def test_gov24_credential_can_be_checked_without_full_reindex(self):
         workflow=(ROOT/".github/workflows/pipeline.yml").read_text(encoding="utf-8")

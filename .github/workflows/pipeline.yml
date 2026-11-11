@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'data/state.json'
+      - 'data/state/**'
       - 'site/data.json'
   workflow_dispatch:
   schedule:
@@ -106,7 +107,12 @@ jobs:
         run: |
           git config user.name policy-domino-next-bot
           git config user.email policy-domino-next-bot@users.noreply.github.com
-          git add data/state.json site/data.json
+          # Canonical state is sharded and gzip-compressed. Stage both the
+          # migration deletion and only changed shards to avoid GitHub's
+          # 100 MB single-file limit. Never commit a new giant state.json.
+          test -f data/state/manifest.json
+          test ! -e data/state.json
+          git add -A -- data/state data/state.json site/data.json
           if ! git diff --cached --quiet; then
             git commit -m 'data(next): update verified official results [skip ci]'
             git pull --rebase origin main

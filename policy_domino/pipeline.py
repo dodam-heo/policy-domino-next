@@ -12,6 +12,8 @@ from pathlib import Path
 from .analysis import compare, review_topics, direct_actor_reviews
 from .api import LawAPI
 from .core import SOURCES, document_key, load_state, new_state, utc_now, write_json
+from .state_store import save_shards
+from .core import SCHEMA
 from .parser import parse_document
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -458,14 +460,14 @@ def main(argv=None):
                  max_seconds=max(120, min(args.time_budget, 840)),
                  collect_sources=not args.analysis_only,
                  source_budget_seconds=max(30, min(args.source_budget, 300)))
-        write_json(args.state, state)
+        save_shards(args.state, state, SCHEMA)
     if args.mode == "gov24":
         from .gov24 import collect_gov24
         credential = (os.getenv("GOV24_SERVICE_KEY", "").strip() or
                       os.getenv("DATA_GO_KR_KEY", "").strip())
         audit = collect_gov24(state, credential,
                               pages_per_feed=max(1, min(args.page_budget, 12)))
-        write_json(args.state, state)
+        save_shards(args.state, state, SCHEMA)
         print("Gov24 public-service collection:",
               json.dumps(audit, ensure_ascii=False))
     if args.mode == "ai-check":
@@ -495,7 +497,7 @@ def main(argv=None):
         report = analyze_batch(
             state, links, limit=max(1, min(args.limit, 60)),
             relationships=edges)
-        write_json(args.state, state)
+        save_shards(args.state, state, SCHEMA)
         print("Policy Domino AI:", json.dumps(report, ensure_ascii=False))
     result = render(state, args.output)
     print("Policy Domino Next:", {

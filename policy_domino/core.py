@@ -73,9 +73,13 @@ def new_state() -> dict:
 
 
 def load_state(path: Path) -> dict:
-    if not path.exists():
+    from .state_store import has_shards, load_shards
+    if has_shards(path):
+        value = load_shards(path, SCHEMA)
+    elif path.exists():
+        value = json.loads(path.read_text(encoding="utf8"))
+    else:
         return new_state()
-    value = json.loads(path.read_text(encoding="utf8"))
     if value.get("schema") != SCHEMA:
         raise ValueError("State schema mismatch; migration is required")
     for key, default in new_state().items():

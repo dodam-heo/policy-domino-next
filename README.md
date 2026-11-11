@@ -157,5 +157,5 @@ Gemini는 문서별로 첫 3개 조문만 보고 종료하는 대신 **모든 �
 ### 운영 시 공식 원천 증분 갱신
 
 - 공식 변경자료 신규 수집은 `Policy Domino NEXT - Single Production Pipeline`의 **workflow_dispatch** 또는 정기 실행으로 진행한다. 단순 UI 변경 push는 저장된 공식 자료만 다시 표시한다.
-- 수집 파이프라인은 `LAW_OC`가 설정되지 않으면 공개 식별자 `dori`를 사용한다. 수집 결과는 문서·버전별 기존 상태와 합쳐 `data/state.json`에 저장하고, 공식 근거를 통과한 결과만 `site/data.json`으로 내보낸다.
+- 수집 파이프라인은 `LAW_OC`가 설정되지 않으면 공개 식별자 `dori`를 사용한다. 공식 원천과 분석 상태는 변경된 조각만 재커밋할 수 있도록 `data/state/manifest.json` 및 `data/state/records/*/*.json.gz`의 **원천별 분할·압축 저장소**에 보존한다. 기존 `data/state.json`은 최초 실행 시 그대로 읽어 이관한 뒤 제거한다. 정규화된 검증 결과만 `site/data.json`으로 공개한다.
 - 최초 색인 성공과 조문 신구 검증 성공은 서로 다른 상태이다. 새 수집 뒤에는 공식 행정규칙의 고시/공고/지침별 색인 변화, 신구 검증 완료 건수, 미완료 원인 및 저장 파일 변경을 확인한다.
