@@ -442,7 +442,7 @@ def criteria_to_review(service: dict, change: dict, tier: str) -> list[dict]:
 
 
 def discover_public_service_leads(state: dict, events: list[dict],
-                                  *, max_per_event: int = 15) -> dict:
+                                  *, max_per_event: int | None = None) -> dict:
     """Join actual public-service agencies, program fields and changed laws.
 
     Strict legal title/article citation is distinguished from title-only
