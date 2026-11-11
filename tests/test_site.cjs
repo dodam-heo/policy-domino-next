@@ -769,6 +769,63 @@ async function compactPolicyOriginHeader(){
   console.log("PASS: compact issuer header, provenance kept in collapsed evidence");
 }
 
+async function linkedAmendmentPanelsRemainInServiceAndAgencyReviews(){
+  const e=sample("linked",{date:"2026-11-12",impact:true,benefit:true,ai:true});
+  e.impact_level="high";
+  e.changes[0].meaning.focus=[
+    {before:{prefix:"1인 가구 ",changed:"1,230,834",suffix:"원/월"},
+     after:{prefix:"1인 가구 ",changed:"1,313,300",suffix:"원/월"}},
+    {before:{prefix:"2인 가구 ",changed:"2,015,660",suffix:"원/월"},
+     after:{prefix:"2인 가구 ",changed:"2,150,710",suffix:"원/월"}}
+  ];
+  e.public_service_leads=[{
+    agency:"가상지자체",verification:"candidate_not_confirmed",
+    document_id:e.changes[0].document_id,article:e.changes[0].article,
+    law_title:e.title,service_name:"가상 주거지원 서비스",
+    match_tier:"official_shared_clause_and_criterion",
+    review_targets:[{field:"지원대상",review_question:"해당 기준을 확인",
+      source_excerpt:"구기준에 따른 가구 지원"}],
+    basis_quote:"가상정책 제3조의 금액 기준을 준용합니다.",
+    service_url:"https://plus.gov.kr/portal/benefitV2/test"
+  }];
+  const ui=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[e],
+    ai_progress:{indexed_documents:1},generated_at:""
+  });
+  await flush();
+  const detail=node(ui,"detail");
+  const direct=flatten(detail).find(x=>x.className==="review-card");
+  const service=flatten(detail).find(x=>x.className==="review-card service-review-lead");
+  assert.ok(direct && service);
+  for(const card of [direct,service]){
+    const matched=flatten(card).find(x=>x.className==="linked-changes");
+    assert.ok(matched && matched.open,"Exact document+article must restore an inline linked source panel");
+    assert.ok(textOf(matched).includes("연결된 변경 근거 1개"));
+    assert.ok(textOf(matched).includes("1,230,834"));
+    assert.ok(textOf(matched).includes("1,313,300"));
+    const extra=flatten(matched).find(x=>x.className==="linked-change-more");
+    assert.ok(extra && !extra.open,"Additional changed values must be collapsed");
+    assert.ok(textOf(extra).includes("2,015,660"));
+    assert.ok(textOf(extra).includes("2,150,710"));
+    assert.ok(flatten(matched).some(x=>x.tag==="a" && x.href?.includes("law.go.kr")));
+  }
+  assert.ok(flatten(service).some(x=>x.tag==="a" && x.href?.startsWith("https://plus.gov.kr/")),
+    "The official Plus GOV service URL must be accessible");
+  const wrong={...e,public_service_leads:[{
+    ...e.public_service_leads[0],document_id:"unrelated-source"
+  }],institutional_reviews:[]};
+  const ui2=browser(false,"",{
+    schema:"policy-domino-next-v1",events:[wrong],
+    ai_progress:{indexed_documents:1},generated_at:""
+  });
+  await flush();
+  const service2=flatten(node(ui2,"detail")).find(x=>x.className==="review-card service-review-lead");
+  assert.ok(service2,"An independent service entry should still show its own requirements");
+  assert.ok(!flatten(service2).some(x=>x.className==="linked-changes"),
+    "Similar policy titles without an exact clause match must not create false evidence");
+  console.log("PASS: exact source-linked comparisons in agency and service review cards");
+}
+
 async function collapsedDetailPreviews(){
   const e=sample("preview",{date:"2026-11-12",impact:true,ai:true});
   const initial=e.changes[0];
@@ -804,6 +861,7 @@ async function collapsedDetailPreviews(){
 }
 
 Promise.all([
+  linkedAmendmentPanelsRemainInServiceAndAgencyReviews(),
   compactPolicyOriginHeader(),collapsedDetailPreviews(),
   splitDistributionLoadsOnlyClickedDetail(),
   verifiedNavigation(),mobileNavigation(),directoryModalNavigation(),
