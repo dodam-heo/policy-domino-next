@@ -18,6 +18,19 @@ def item(name, old, new):
 
 
 class MeaningTests(unittest.TestCase):
+    def test_household_table_amounts_take_priority_over_changed_year_headers(self):
+        old = "2026년 고시 제1호 구 분 1인가구 2인가구 금액(원/월) 1,000,000 2,000,000 부칙"
+        new = "2027년 고시 제2호 구 분 1인가구 2인가구 금액(원/월) 1,100,000 2,200,000 부칙"
+        result = explain(old, new)
+        self.assertEqual(result["change_kind"], "numeric")
+        self.assertIn("2개 기준", result["description"])
+        self.assertEqual(result["focus"][0]["before"]["changed"], "1,000,000")
+        self.assertEqual(result["focus"][0]["after"]["changed"], "1,100,000")
+        self.assertNotIn("2026", result["description"])
+        from policy_domino.meaning import _currency_table_changes
+        self.assertEqual(_currency_table_changes(old + old, new + new), [])
+        self.assertEqual(_currency_table_changes(old, new.replace("1인가구 2인가구", "2인가구 1인가구")), [])
+
     def test_amount_change_is_a_natural_sentence(self):
         result = explain("제3조 지원금액은 10만원으로 한다.",
                          "제3조 지원금액은 12만원으로 한다.")

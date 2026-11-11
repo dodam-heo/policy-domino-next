@@ -287,10 +287,39 @@ def _source_fragmentary(before: str, after: str) -> bool:
             is_placeholder_clause(new) and len(old) > 18)
 
 
+def _currency_table_changes(before: str, after: str) -> list[dict]:
+    """Match a uniquely identified household table using its literal columns.
+
+    Multiple identical table layouts are ambiguous; never pair them by order.
+    The unit is read from the source header, not inferred from bare numbers.
+    """
+    pattern = re.compile(
+        r"구\s*분(?P<header>[^()]{1,180}?)금\s*액\s*\(\s*"
+        r"(?P<unit>원(?:\s*/\s*월)?)\s*\)\s*"
+        r"(?P<values>\d[\d,]*(?:\s+\d[\d,]*)*)")
+    def tables(text):
+        result = []
+        for match in pattern.finditer(text):
+            columns = re.findall(r"(\d+)\s*인\s*가구", match["header"])
+            values = match["values"].split()
+            if (len(columns) >= 2 and len(columns) == len(values) and
+                len(set(columns)) == len(columns)):
+                result.append((columns, values, re.sub(r"\s+", "", match["unit"])))
+        return result
+    a, b = tables(before), tables(after)
+    if len(a) != 1 or len(b) != 1 or a[0][0] != b[0][0] or a[0][2] != b[0][2]:
+        return []
+    columns, old, unit = a[0]
+    new = b[0][1]
+    return [{"column": column + "인 가구", "before": x, "after": y, "unit": unit}
+            for column, x, y in zip(columns, old, new) if x != y]
+
+
 def explain(before: str, after: str) -> dict:
     """Evidence-bound comparison: do not mistake token substitutions for meaning."""
     before, after = str(before or ""), str(after or "")
     fragmentary = _source_fragmentary(before, after)
+    table_rows = _currency_table_changes(before, after) if not fragmentary else []
     citation = _literal_reference_update(before, after) if not fragmentary else None
     edits = _changed_fragments(before, after)
     best = edits[0]
@@ -306,6 +335,17 @@ def explain(before: str, after: str) -> dict:
     elif editorial:
         kind, label, score = "editorial", "표기 정비", 0
         description = "띄어쓰기 또는 문장부호가 정비됐습니다."
+    elif table_rows:
+        kind, label, score = "numeric", "금액·수치 기준", 105
+        first = table_rows[0]
+        old_quote, new_quote = first["before"], first["after"]
+        description = (f"가구원 수별 금액표의 {len(table_rows)}개 기준이 변경됐습니다. "
+                       f"{first['column']}: {old_quote} → {new_quote}{first['unit']}.")
+        focus = [{"before": {"prefix": row["column"] + " ", "changed": row["before"],
+                              "suffix": row["unit"]},
+                  "after": {"prefix": row["column"] + " ", "changed": row["after"],
+                             "suffix": row["unit"]}, "type": "교체"}
+                 for row in table_rows[:6]]
     elif citation:
         kind, label, score = "citation", "인용 조문 변경", 18
         old_quote, new_quote = citation
