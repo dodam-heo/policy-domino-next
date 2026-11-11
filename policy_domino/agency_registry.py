@@ -163,3 +163,26 @@ def collect_local_institutions(state:dict, transport=None)->dict:
                "error":type(exc).__name__+":"+str(exc)[:120]}
     state["official_local_audit"]=audit
     return audit
+
+
+def institution_from_ordinance(document:dict)->dict|None:
+    """Register a public corporation only if an official local ordinance is
+    explicitly named for the establishment and operation of that corporation.
+    A directory entry is NOT proof of an impact from another policy.
+    """
+    if document.get("source")!="ordin":
+        return None
+    title=" ".join(str(document.get("title","")).split())
+    suffix=" 설립 및 운영에 관한 조례"
+    if not title.endswith(suffix):
+        return None
+    name=title[:-len(suffix)].strip()
+    issuer=" ".join(str(document.get("ministry","")).split())
+    if issuer and name.startswith(issuer+" "):
+        name=name[len(issuer):].strip()
+    # Match an actual organization noun, not an individual official or a topic.
+    if not (re.fullmatch(r"[가-힣A-Za-z0-9·()\\s]{4,110}(?:공사|공단)",name)
+            and document.get("url")):
+        return None
+    return {"agency":name,"source":"official_institution_founding_ordinance",
+            "source_url":document["url"],"issuer":issuer}

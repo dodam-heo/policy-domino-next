@@ -419,6 +419,13 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         register_agency(institution.get("agency",""),"official_registry")
     for institution in state.get("official_local_institutions",{}).values():
         register_agency(institution.get("agency",""),"official_registry")
+    # Official founding ordinances remain a second, independently collected
+    # institution source when national/local directory endpoints are offline.
+    from .agency_registry import institution_from_ordinance
+    for document in docs.values():
+        registered=institution_from_ordinance(document)
+        if registered:
+            register_agency(registered["agency"],"official_registry")
     for program in state.get("official_programs", {}).values():
         register_agency(program.get("agency", ""), "alioplus_programs")
     for service in state.get("public_services", {}).values():

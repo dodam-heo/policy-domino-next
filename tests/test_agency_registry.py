@@ -4,6 +4,15 @@ import unittest
 from policy_domino.agency_registry import collect_institutions,parse_registry
 
 class OfficialDirectoryTests(unittest.TestCase):
+ def test_independent_local_corporation_foundation_is_directory_only(self):
+  from policy_domino.agency_registry import institution_from_ordinance
+  item={"source":"ordin","title":"서울특별시 서울주택도시개발공사 설립 및 운영에 관한 조례",
+        "ministry":"서울특별시","url":"https://www.law.go.kr/자치법규/가상"}
+  result=institution_from_ordinance(item)
+  self.assertEqual(result["agency"],"서울주택도시개발공사")
+  self.assertNotIn("institutional_review",result)
+  self.assertIsNone(institution_from_ordinance({**item,"source":"admrul"}))
+
  def test_reject_unmatched_header(self):
   with self.assertRaises(ValueError):
    parse_registry({"apbaList":[{"apbaId":"C1","apbaNa":"가상기관"}]},2)
