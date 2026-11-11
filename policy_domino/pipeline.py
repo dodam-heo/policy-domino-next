@@ -418,6 +418,7 @@ def render(state: dict, output: Path = DATA_FILE) -> dict:
         "quality": quality(state),
         "analysis_run": state.get("analysis_run", {}),
         "collection_run": state.get("collection_run", {}),
+        "reconciliation_run": state.get("reconciliation_run", {}),
         "documents": indexed,
         # Minimal metadata for official rules found via downstream citation
         # searches. A source-only referencing regulation is not a new change.

@@ -69,6 +69,25 @@ class ReconciliationTests(unittest.TestCase):
         self.assertTrue(any(not v["complete"] for v in
                             state["reconciliation_windows"].values()))
 
+    def test_previous_failure_is_retried_without_rewinding_primary_cursor(self):
+        from policy_domino.core import ADMIN_RULE_KINDS
+        state = new_state()
+        today = dt.date(2026, 11, 10)
+        first_kind = next(iter(ADMIN_RULE_KINDS))
+        old_key = "admrulOldAndNew|" + first_kind + "|2026-11-01|2026-11-10"
+        state["reconciliation_windows"][old_key] = {
+            "complete": False, "checked_at": "2026-11-01T00:00:00+00:00"}
+        state["reconcile_cursor"] = 3
+        api = FakeAPI()
+        report = reconcile_changed_rules(
+            api, state, today, earliest=dt.date(2026, 11, 1),
+            max_windows=2, max_seconds=30)
+        self.assertEqual(report["retried_previous_failure_windows"], 1)
+        self.assertEqual(report["windows_checked"], 2)
+        self.assertEqual(report["next_cursor"], 4)
+        self.assertTrue(state["reconciliation_windows"][old_key]["complete"])
+        self.assertEqual(api.calls[0][2], first_kind)
+
     def test_budget_exhaustion_preserves_partial_window_for_resume(self):
         class Slow(FakeAPI):
             def changed_rule_window(self, first, last, kind, max_pages=20):

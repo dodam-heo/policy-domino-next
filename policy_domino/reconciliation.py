@@ -70,6 +70,20 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
         if rec.get("source")=="admrul":
             canonical_by_name_date.setdefault(
                 (rec.get("title"),rec.get("published_at")),[]).append(rec)
+    # Retry one previously failed/incomplete official window per run without
+    # resetting the primary cursor or starving yet-unvisited historical windows.
+    positions = {"admrulOldAndNew|" + kind + "|" + first + "|" + last: i
+                 for i, (first, last, kind) in enumerate(windows)}
+    failed = sorted(
+        ((row.get("checked_at", ""), key)
+         for key, row in audits.items()
+         if key in positions and not row.get("complete")),
+        key=lambda item: (item[0], item[1]))
+    retry_index = positions[failed[0][1]] if failed else None
+    retrying = retry_index is not None and retry_index != offset
+    if retrying:
+        index = retry_index
+    retries_checked = 0
     while (examined < min(max_windows,len(windows)) and
            time.monotonic() - start < max_seconds):
         first, last, kind = windows[index]
@@ -141,9 +155,17 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
         categories.setdefault(ADMIN_RULE_KINDS[kind],0)
         categories[ADMIN_RULE_KINDS[kind]] += len(records)
         examined += 1
+        if retrying:
+            retries_checked += 1
         if deferred:
-            break  # Resume this window; resolved canonical IDs are retained.
-        index = (index+1)%len(windows)
+            if retrying:
+                index = offset
+            break  # Partial results are saved; failed window stays retryable.
+        if retrying:
+            index = offset
+            retrying = False
+        else:
+            index = (index+1)%len(windows)
     state["reconcile_cursor"] = index
     # Exact official IDs only. The existing fair work queue will process
     # discovered documents; no previously extracted version is discarded.
@@ -161,6 +183,7 @@ def reconcile_changed_rules(api, state: dict, today: dt.date, *,
         "range_start":earliest.isoformat(),
         "range_end":today.isoformat(),
         "next_cursor":index,
+        "retried_previous_failure_windows":retries_checked,
         "status":"partial" if any(not v.get("complete") for v in audits.values())
                  else "progressing",
     }
