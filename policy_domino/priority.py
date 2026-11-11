@@ -152,7 +152,7 @@ def assess_impact(event):
     five=bool(changes) and len(agencies)>=5
 
     members=event.get("members") or []
-    title=str(event.get("title") or (members[0].get("title") if members else "") or "")
+    title=str(event.get("title") or (members[0].get("title") if members else "") or (changes[0].get("document_title") if changes else "") or "")
     national_benefit=(
         len(members)==1 and members[0].get("source") in ("law","admrul")
         and not DRAFT.search(title)
