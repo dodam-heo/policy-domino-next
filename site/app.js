@@ -309,7 +309,7 @@
       if (event.changes.length>shown.length)
         append(highlights,create("p","section-help",
           "그 밖의 "+num(event.changes.length-shown.length)+
-          "개 변경 조문은 아래 '공식 변경 전·후와 출처'에서 확인할 수 있습니다."));
+          "개 변경 조문은 아래 '전체 조문·공식 근거 보기'에서 확인할 수 있습니다."));
       append(section,highlights);
     }
     const stats=create("div","impact-numbers");
@@ -320,10 +320,29 @@
         num(event.public_service_lead_count)+"건"));
     if (event.dependent_rules?.length)
       append(stats,create("span","","연관 규정 "+num(event.dependent_rules.length)+"건"));
-    append(section,stats);
+    append(section,stats,renderEvidence(event));
     return section;
   }
-  function reviewCard(review) {
+  function shortProof(quote,anchors=[]) {
+    const source=String(quote||"").replace(/\s+/g," ").trim();
+    const anchor=anchors.map(x=>String(x||"").trim()).find(x=>
+      x.length>=3 && x.length<=65 && source.includes(x))||"";
+    const pos=anchor?source.indexOf(anchor):0,limit=175;
+    const start=Math.max(0,Math.min(pos-42,Math.max(0,source.length-limit)));
+    const excerpt=source.slice(start,start+limit);
+    const line=create("p","proof-preview");
+    if(start)append(line,create("span","","…"));
+    const at=anchor?excerpt.indexOf(anchor):-1;
+    if(at>=0){
+      if(at)append(line,create("span","",excerpt.slice(0,at)));
+      append(line,create("mark","proof-highlight",anchor));
+      if(at+anchor.length<excerpt.length)
+        append(line,create("span","",excerpt.slice(at+anchor.length)));
+    }else append(line,create("span","",excerpt));
+    if(start+limit<source.length)append(line,create("span","","…"));
+    return line;
+  }
+  function reviewCard(review,event) {
     const card=create("div","review-card");
     const type={
       direct_regulated_institution:"직접 규율기관",
@@ -346,9 +365,21 @@
       append(card,suggestion);
     }
     const proof=create("details","proof");
+    const changed=(event.changes||[]).find(ch=>
+      ch.document_id===review.document_id && ch.article===review.article);
+    const focus=changed?.meaning?.focus||[];
+    const anchors=[...focus.flatMap(f=>[f.before?.changed,f.after?.changed]),
+      changed?.meaning?.before,changed?.meaning?.after,
+      review.related_rule_article,review.article];
     append(proof,create("summary","","변경 근거 확인"),
-      create("p","",compact(review.basis_quote,420)),
-      link(review.source_url,"변경 조문"),
+      shortProof(review.basis_quote,anchors));
+    if(String(review.basis_quote||"").replace(/\s+/g," ").length>175){
+      const full=create("details","proof-full");
+      append(full,create("summary","","근거 인용문 전체 보기"),
+        create("p","",review.basis_quote));
+      append(proof,full);
+    }
+    append(proof,link(review.source_url,"변경 조문"),
       link(review.related_rule_url,"관련 공식 규정"),
       link(review.program_url,"공식 사업자료"));
     append(card,proof);
@@ -424,7 +455,7 @@
           create("span","",num(entry.reviews.length+entry.services.length)+"건"));
         append(group,top);
         for(const review of entry.reviews){
-          append(group,reviewCard(review));
+          append(group,reviewCard(review,event));
         }
         for(const service of entry.services) {
           append(group,serviceLeadCard(service));
@@ -474,10 +505,10 @@
     return section;
   }
   function renderEvidence(event) {
-    const section=heading("공식 변경 전·후와 출처");
-    const wrapper=create("details","evidence-panel");
-    append(wrapper,create("summary","",
-      "조문 대조 "+num(event.changes?.length||0)+"건 · 원문 펼쳐 보기"));
+    const section=create("details","evidence-panel evidence-archive");
+    append(section,create("summary","",
+      "전체 조문·공식 근거 보기 · "+num(event.changes?.length||0)+"건"));
+    const wrapper=create("div","evidence-archive-body");
     for (const [i,ch] of (event.changes||[]).entries()) {
       if (i===5) {
         const more=create("details","more-clauses");
@@ -589,7 +620,7 @@
       event.effective_date ?
         create("p","effective","시행일 "+event.effective_date):null);
     append(root,head,renderCore(event),
-      renderInstitutions(event),renderEvidence(event),renderAI(event));
+      renderInstitutions(event),renderAI(event));
   }
   function renderAgencyDirectory(query) {
     const root=$("agency-directory-results");

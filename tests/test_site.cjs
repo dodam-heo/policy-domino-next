@@ -219,7 +219,7 @@ async function verifiedNavigation(){
   const text=textOf(detail);
   assert.ok(text.includes("가상공공기관"),"Direct affected institution is visible");
   assert.ok(text.includes("가상 지원운영사업의 적용 금액을 제3조와 대조"));
-  assert.ok(text.includes("공식 변경 전·후와 출처"));
+  assert.ok(text.includes("전체 조문·공식 근거 보기"));
   assert.ok(text.includes("동시 개정된 법령 17건"));
   assert.ok(text.includes("AI 보조검토"));
   assert.ok(text.includes("AI 보조 요약 · 원문 인용 검증 완료"),
@@ -235,12 +235,12 @@ async function verifiedNavigation(){
   const core=flatten(detail).findIndex(x=>x.className==="detail-section core");
   const impact=flatten(detail).findIndex(x=>x.className==="detail-section" &&
       x.children.some(y=>y.textContent==="기관별 변경·사업 검토사항"));
-  const legal=flatten(detail).findIndex(x=>x.className==="detail-section" &&
-      x.children.some(y=>y.textContent==="공식 변경 전·후와 출처"));
-  assert.ok(core>=0 && impact>core && legal>impact,
-            "User's event -> affected agency -> evidence order must be preserved");
-  const original=flatten(detail).find(x=>x.className==="evidence-panel");
-  assert.ok(original&&!original.open,"Long original legal text should start collapsed");
+  const archive=flatten(detail).filter(x=>x.className==="evidence-panel evidence-archive");
+  assert.ok(core>=0 && impact>core && archive.length===1,
+    "One official evidence archive must remain in the change summary");
+  assert.ok(flatten(detail)[core].children.includes(archive[0]));
+  assert.ok(!archive[0].open,"Official evidence should start collapsed");
+  assert.ok(!text.includes("공식 변경 전·후와 출처"));
   console.log("PASS: policy events, institution/program reviews, search and evidence order");
 }
 async function mobileNavigation(){
@@ -539,6 +539,27 @@ async function realDiffDoesNotRepeatSameClauseStart(){
   console.log("PASS: identical long clause beginnings never conceal the actual edit");
 }
 
+async function shortProofEmphasis(){
+  const ev=sample("source-proof",{impact:true,benefit:true});
+  ev.changes[0].meaning.focus=[{
+    before:{prefix:"",changed:"10만원",suffix:""},
+    after:{prefix:"",changed:"12만원",suffix:""}
+  }];
+  ev.institutional_reviews[0].basis_quote=
+    "제3조 법령 검토. "+("기준 설정 및 업무 범위. ").repeat(20)+
+    "변경된 10만원 기준 적용.";
+  const ui=browser(false,"",{schema:"policy-domino-next-v1",
+    events:[ev],ai_progress:{indexed_documents:1},generated_at:""});
+  await flush();
+  const card=flatten(node(ui,"detail")).find(x=>x.className==="review-card");
+  const p=flatten(card).find(x=>x.className==="proof-preview");
+  const marks=flatten(p).filter(x=>x.tag==="mark");
+  assert.equal(marks.length,1);
+  assert.equal(marks[0].textContent,"10만원");
+  assert.ok(textOf(p).length<200);
+  assert.ok(flatten(card).some(x=>x.className==="proof-full"));
+  console.log("PASS: short quote anchored to actual changed source text");
+}
 async function officialNoticeCanBeFoundByKind(){
   const e=sample("notice",{date:"2026-11-10"});
   e.members=[{
@@ -575,6 +596,6 @@ Promise.all([
   verifiedNavigation(),mobileNavigation(),noFabricatedImpact(),
   institutionFilterNavigation(),largeScopeFiltering(),screenshotComparisonSafety(),
   realServiceLeadDiscoveryPresentation(),officialNoticeCanBeFoundByKind(),
-  realDiffDoesNotRepeatSameClauseStart(),
+  realDiffDoesNotRepeatSameClauseStart(),shortProofEmphasis(),
   indexedNoticesAreSearchableWithoutFakingImpact()
 ]).catch(error=>{console.error(error);process.exitCode=1});

@@ -342,3 +342,18 @@ a{color:var(--blue);text-underline-offset:3px}
   .summary strong{font-size:21px}
   .coverage-status{padding:0 12px}
 }
+
+/* Keep source verification accessible, but not a duplicate full-width section. */
+.core .evidence-archive{margin:12px 0 0;padding:11px 13px;background:#fff}
+.evidence-archive>summary{font-size:12px;color:#1e647e}
+.evidence-archive[open]>summary{margin-bottom:8px}
+.evidence-archive-body{max-height:700px;overflow:auto}
+.evidence-archive>.evidence-panel{background:#fff}
+.proof-preview{margin:8px 0;line-height:1.7;overflow-wrap:anywhere}
+.proof-highlight{background:#ffec95;color:#213c49;padding:1px 3px;
+  border-radius:3px;font-weight:800;box-decoration-break:clone;
+  -webkit-box-decoration-break:clone}
+.proof-full{margin:7px 0;padding:7px 10px;border:1px solid #e0eaf0;
+  background:#f8fbfd;border-radius:6px}
+.proof-full>summary{cursor:pointer;font-size:11px;font-weight:750;color:#326985}
+.proof-full p{max-height:220px;overflow:auto;white-space:pre-wrap}
