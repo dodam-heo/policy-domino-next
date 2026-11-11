@@ -170,6 +170,20 @@ class ShardedStateTests(unittest.TestCase):
             self.assertEqual(metadata["findings"]["new"]["changes"][0]["after"],
                              {"$clause_text_ref":sha(after)})
 
+    def test_early_v2_metadata_layout_is_recovered_before_canonical_save(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/"data"/"state.json"
+            state=new_state()
+            state["documents"]={"one":{"title":"기존 자료","text":"보존"}}
+            save_shards(path,state,SCHEMA)
+            folder=shard_dir(path)
+            (folder/"meta_v2.json.gz").rename(folder/"meta.json.gz")
+            self.assertEqual(load_state(path),state)
+            save_shards(path,state,SCHEMA)
+            self.assertTrue((folder/"meta_v2.json.gz").exists())
+            self.assertFalse((folder/"meta.json.gz").exists())
+            self.assertEqual(load_state(path),state)
+
     def test_legacy_v1_shards_upgrade_without_dropping_contents(self):
         from policy_domino.state_store import _compressed_json, _bucket
         with tempfile.TemporaryDirectory() as root:

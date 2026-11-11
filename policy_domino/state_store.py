@@ -105,7 +105,12 @@ def load_shards(state_path: Path, schema: str) -> dict:
     folder = shard_dir(state_path)
     manifest = _read_manifest(folder, schema)
     v2 = manifest["version"] == STORAGE_VERSION
-    state = _unpack(folder / ("meta_v2.json.gz" if v2 else "meta.json.gz"))
+    # Earlier v2 runners may have written the original metadata file while
+    # a new source-sync run was already in flight. Accept it exactly once,
+    # then migrate to canonical v2 metadata on the next successful save.
+    v2_meta = folder / "meta_v2.json.gz"
+    meta = v2_meta if v2 and v2_meta.is_file() else folder / "meta.json.gz"
+    state = _unpack(meta)
     if not isinstance(state, dict) or state.get("schema") != schema:
         raise ValueError("Invalid state shard metadata")
     records_base = folder / ("records_v2" if v2 else "records")
