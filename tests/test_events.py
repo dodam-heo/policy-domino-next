@@ -196,10 +196,23 @@ class PolicyEventModelTests(unittest.TestCase):
             "required_action_verified": False,
         }]
         result = build_events({d["id"]: d}, {d["id"]: finding})
+        self.assertEqual(result[0]["institutional_reviews"], [])
+        self.assertEqual(result[0]["institution_count"], 0)
+        finding["direct_actor_reviews"][0]["actor"] = "가상급여공단"
+        result = build_events({d["id"]: d}, {d["id"]: finding})
         a = result[0]["institutional_reviews"][0]
-        self.assertEqual(a["institution"], "가상급여청장")
+        self.assertEqual(a["institution"], "가상급여공단")
         self.assertEqual(a["basis_tier"], "explicit_changed_clause")
         self.assertEqual(a["implementation_status"], "not_verified")
+
+    def test_officeholders_never_count_as_institutions(self):
+        from policy_domino.events import is_office_title
+        for actor in ("행정안전부장관", "국토교통부장관", "경찰청장",
+                      "서울특별시장", "교육감", "국민권익위원회위원장"):
+            self.assertTrue(is_office_title(actor), actor)
+        for institution in ("행정안전부", "경찰청", "국민권익위원회",
+                            "한국장학재단", "인사위원회"):
+            self.assertFalse(is_office_title(institution), institution)
 
     def test_exact_downstream_public_rule_citation_creates_issuer_review(self):
         source = doc("가상 지원기준법", "11", "19821")

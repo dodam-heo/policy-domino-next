@@ -85,7 +85,7 @@ jobs:
         env:
           LAW_OC: ${{ secrets.LAW_OC || vars.LAW_OC }}
         timeout-minutes: 6
-        run: python -m policy_domino reconcile --reconcile-windows 30 --time-budget 290
+        run: python -m policy_domino reconcile --reconcile-windows 8 --time-budget 210
       - name: Analyze documents newly discovered by official reconciliation
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[reconcile-sync]')
         env:

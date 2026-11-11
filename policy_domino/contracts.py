@@ -384,6 +384,9 @@ def validate_public(payload: dict) -> dict:
             doc_id = action.get("document_id")
             article = action.get("article")
             institution = action.get("institution")
+            from .events import is_office_title
+            verify(not is_office_title(institution), loc,
+                   "job title or officeholder must not be an institution")
             source = docs.get(doc_id, {})
             change = by_clause.get((doc_id, article))
             verify(doc_id == source_ids[0], loc,

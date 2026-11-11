@@ -25,6 +25,18 @@ from .meaning import explain, event_headline, highlight_changes
 ORGANIZATION_RULE = re.compile(
     r"^(.+?)(?:(?:와|과) 그 소속기관)? 직제(?: 시행규칙)?$"
 )
+# A named officeholder in a law is not an organization. Such actors stay
+# available as legal references but must never inflate institutional impacts.
+OFFICE_ENDINGS = ("장관", "청장", "원장", "위원장", "시장", "군수",
+                  "구청장", "기관장", "교육감", "도지사", "이사장",
+                  "의장", "총장", "국장", "과장", "실장", "사장")
+
+
+def is_office_title(value: str) -> bool:
+    name = clean(str(value or "")).replace(" ", "")
+    return bool(name) and name.endswith(OFFICE_ENDINGS)
+
+
 VALID_COMPARISONS = {"compared", "partial_compared"}
 VERIFIED_LIFECYCLE = {"enactment", "repeal"}
 
@@ -325,6 +337,9 @@ def build_events(documents: dict, findings: dict, *,
                     if isinstance(item, dict) and item.get("review_id")
                 }
                 for item in candidates:
+                    if is_office_title(item.get("institution", "")):
+                        # A legal role alone does not prove a distinct institution.
+                        continue
                     # Server-side AI validation has already checked that the
                     # exact review ID, actor, article and quote match evidence.
                     addition = verified_ai.get(item["id"])
