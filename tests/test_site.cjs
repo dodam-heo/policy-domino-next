@@ -165,7 +165,7 @@ async function flush(){await new Promise(resolve=>setImmediate(resolve))}
 async function verifiedNavigation(){
   const ui=browser(false);
   await flush();
-  assert.equal(node(ui,"stat-events").textContent,"4");
+  assert.equal(node(ui,"stat-events").textContent,"10,166");
   assert.equal(node(ui,"stat-agencies").textContent,"1");
   assert.equal(node(ui,"stat-actions").textContent,"1");
   assert.equal(node(ui,"list-count").textContent,"전체 4건 · 표시 4건");
