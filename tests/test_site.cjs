@@ -20,6 +20,8 @@ for(const id of ["items","detail","mode-all","mode-new",
 assert.ok(!html.includes("신구 확인"),"Comparison state is not a user browsing category");
 assert.ok(!app.includes("agencyFilter"),"Institutional reviews must not be hidden by a filter");
 assert.ok(style.includes(".agency-group"),"Impact grouping must be styled");
+assert.ok(!app.includes('create("div","impact-assessment")'),
+  "Policy detail must not render a numeric impact score breakdown");
 assert.ok(style.includes(".agency-directory-modal[hidden]{display:none}"),
   "Modal must obey hidden attribute when not opened");
 
