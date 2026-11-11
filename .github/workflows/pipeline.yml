@@ -42,6 +42,8 @@ jobs:
         run: node tests/test_site.cjs
       - name: Check official event and institutional evidence contracts
         run: python -m policy_domino.contracts site/data.json
+      - name: Audit full-source coverage gaps and agency classification
+        run: python -m policy_domino.verification site/data.json site/verification.json
 
   # Official source collection and Gemini reviews must not be blocked by a
   # GitHub Pages deployment that is syncing or experiencing an outage.
@@ -133,6 +135,7 @@ jobs:
           # Evidence validation still gates every persisted snapshot.
           python -m policy_domino render
           python -m policy_domino.contracts site/data.json
+          python -m policy_domino.verification site/data.json site/verification.json
           git config user.name policy-domino-next-bot
           git config user.email policy-domino-next-bot@users.noreply.github.com
           # Canonical state is sharded and gzip-compressed. Stage both the
@@ -140,7 +143,7 @@ jobs:
           # 100 MB single-file limit. Never commit a new giant state.json.
           test -f data/state/manifest.json
           test ! -e data/state.json
-          git add -A -- data/state site/data.json
+          git add -A -- data/state site/data.json site/verification.json
           if git ls-files --error-unmatch data/state.json >/dev/null 2>&1; then
             git add -u -- data/state.json
           fi
@@ -158,7 +161,7 @@ jobs:
   # - push: deploy verified UI immediately from existing official records
   # - schedule/manual: collect and persist first, then deploy the new snapshot
   publish:
-    if: ${{ always() && github.event_name != 'pull_request' && needs.verify.result == 'success' && (needs.collect_and_refresh.result == 'success' || needs.collect_and_refresh.result == 'skipped') }}
+    if: ${{ always() && github.event_name != 'pull_request' && needs.verify.result == 'success' && (needs.collect_and_refresh.result == 'success' || needs.collect_and_refresh.result == 'skipped' || needs.collect_and_refresh.result == 'failure') }}
     needs: [verify, collect_and_refresh]
     permissions:
       contents: read
@@ -180,6 +183,8 @@ jobs:
         run: python -m policy_domino render
       - name: Enforce verified source contract before publishing
         run: python -m policy_domino.contracts site/data.json
+      - name: Publish explicit coverage and impact completeness assessment
+        run: python -m policy_domino.verification site/data.json site/verification.json
       - name: Configure actual GitHub Pages
         uses: actions/configure-pages@v6
       - name: Upload one verified site snapshot
