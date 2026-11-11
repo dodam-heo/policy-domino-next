@@ -119,6 +119,25 @@ def parse_local_registry(html:str) -> dict:
                          "source_url":CLEANEYE_URL}
     if len(found)<30:
         raise ValueError("Official CleanEye rows too few to trust")
+    # The same official establishment page publishes explicit historical
+    # institution renames (e.g. a list may still show a former title).
+    # Apply only a literal old > new pair issued on the original source.
+    from html import unescape
+    visible=unescape(re.sub(r"<[^>]+>"," ",html))
+    rename=re.search(r"명칭변경\s*[:：]\s*([^\n●○]{1,340})",visible)
+    if rename:
+        for row in rename.group(1).split(","):
+            if ">" not in row:
+                continue
+            old_name,new_name=(part.strip() for part in row.split(">",1))
+            if (not old_name or not new_name or
+                    not re.search(r"공사|공단",new_name)):
+                continue
+            for record in found.values():
+                if record["agency"]==old_name:
+                    record["agency"]=new_name
+                    record["former_names"]=[old_name]
+                    record["rename_source_url"]=CLEANEYE_URL
     return found
 
 def collect_local_institutions(state:dict, transport=None)->dict:

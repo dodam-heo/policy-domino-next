@@ -10,3 +10,12 @@ class CleanEyeRegistryTests(unittest.TestCase):
   values=parse_local_registry(html)
   self.assertEqual(len(values),35)
   self.assertNotIn("공사", [x["agency"] for x in values.values()])
+ def test_renamed_institution_keeps_verified_alias(self):
+  html="""<table><tr><th>지역</th><th>기관명</th></tr>
+  <tr><td>광역</td><td>""" + (
+     ", ".join(f"가상{i}도시공사" for i in range(35)))+"""</td></tr></table>
+  <p>● 명칭변경 : 가상1도시공사 > 새가상1도시공사</p>"""
+  rows=parse_local_registry(html)
+  target=next(v for v in rows.values() if v["agency"]=="새가상1도시공사")
+  self.assertEqual(target["former_names"],["가상1도시공사"])
+  self.assertIn("cleaneye.go.kr",target["rename_source_url"])
