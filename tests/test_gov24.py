@@ -35,6 +35,18 @@ def policy_event():
 
 
 class Gov24Tests(unittest.TestCase):
+    def test_all_matching_agencies_remain_available_beyond_preview_limit(self):
+        services = {
+            f"S{i:03}": normalize_record(record(
+                f"S{i:03}", agency=f"가상 공공기관 {i:03}"))
+            for i in range(25)
+        }
+        event = policy_event()
+        result = discover_public_service_leads({"public_services": services}, [event])
+        self.assertEqual(event["public_service_lead_count"], 25)
+        self.assertEqual(len(event["public_service_leads"]), 25)
+        self.assertEqual(len(result["proofs"]), 25)
+
     def test_official_schema_normalization_preserves_real_service_and_issuer(self):
         entry = normalize_record(record("S0001"))
         self.assertEqual(entry["source"], "gov24")
