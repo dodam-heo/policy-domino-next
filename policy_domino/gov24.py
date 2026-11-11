@@ -257,6 +257,9 @@ def _title_only_criterion_match(service: dict, change: dict) -> bool:
     pairs = changed_numeric_pairs(change)
     if not pairs:
         return False
+    table_parts=[s.strip() for s in change.get("article","").split(" · ")]
+    structured=(len(table_parts)>=3 and table_parts[0].startswith("표 ")
+                and bool(re.search(r"\d",table_parts[1])))
     for field in CRITERION_FIELDS:
         original = service.get("fields", {}).get(field, "")
         if not original:
@@ -267,6 +270,17 @@ def _title_only_criterion_match(service: dict, change: dict) -> bool:
                 re.escape(char) for char in old if not char.isspace()
             ) + r"(?![\d,.])"
             for source in re.finditer(literal, original):
+                # An exact table cell has its criterion/row context in the
+                # verified HWPX cell identity, not in the numeric cell text.
+                if structured:
+                    neighborhood=original[max(0,source.start()-160):source.end()+100]
+                    row=table_parts[1]
+                    column=table_parts[2]
+                    meaningful=[token for token in re.findall(r"[가-힣]{2,}",column)
+                                if token not in ("기준","금액","선정","가구")]
+                    if row in neighborhood and (column in original or any(
+                            token in original for token in meaningful)):
+                        return True
                 source_left = original[max(0, source.start()-55):source.start()]
                 source_words = set(re.findall(r"[가-힣]{2,}", source_left))
                 for legal in re.finditer(re.escape(old), before):
@@ -386,6 +400,14 @@ def changed_numeric_pairs(change: dict) -> list[tuple[str, str]]:
     pattern=re.compile(r"(?<![\d,.])\d[\d,.]*\s*(?:억\s*원|만원|원|%|명|개월|일)")
     before=change.get("before","")
     after=change.get("after","")
+    # HWPX tables have a verified row/column coordinate and may contain only
+    # a numeric value without the '원' suffix in each individual cell.
+    location=change.get("article","")
+    if re.match(r"^표\s*\d+\s*·\s*[^·]+\s*·\s*[^·]+$",location):
+        if re.fullmatch(r"[\d,.]+",before.strip()) and re.fullmatch(r"[\d,.]+",after.strip()):
+            if before.strip()!=after.strip():
+                return [(before.strip(),after.strip())]
+            return []
     old=list(pattern.finditer(before))
     new=list(pattern.finditer(after))
     if not old or not new:

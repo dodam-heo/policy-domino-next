@@ -11,7 +11,9 @@ TIERS={"direct_regulated_institution","explicit_changed_clause","verified_offici
 def assess_impact(event):
     changes=[c for c in event.get("changes",[]) if c.get("before")!=c.get("after")
              and not (c.get("meaning") or {}).get("source_check_required")]
-    combined=" ".join((str(c.get("before",""))[-5000:]+" "+str(c.get("after",""))[-5000:]) for c in changes)
+    combined=" ".join((str(c.get("before",""))[-5000:]+" "+
+         str(c.get("after",""))[-5000:]+" "+str(c.get("article",""))+
+         " "+str(c.get("document_title",""))) for c in changes)
     if not changes: substantive,reason_s=0,"신구 원문 비교에 의한 실질적 변경 평가 대기"
     elif SUBSTANTIVE.search(combined): substantive,reason_s=40,"금액·자격·선정 등 실질 기준 변경"
     elif PROCEDURE.search(combined): substantive,reason_s=30,"신청·심사 등 절차 변경"
