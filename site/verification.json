@@ -59,12 +59,12 @@
     "recent_complete": false,
     "historical_complete": false,
     "failed_windows": 1,
-    "deferred_streams": 1,
+    "deferred_streams": 14,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 1,
     "independent_windows_total": 156
   },
-  "unclassified_administrative_rules": 839,
+  "unclassified_administrative_rules": 805,
   "verified_change_events": 1063,
   "source_bound_institutional_review_rows": 487,
   "review_evidence_tiers": {
