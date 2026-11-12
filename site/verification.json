@@ -14,9 +14,9 @@
     "no_text_change": 2,
     "partial_compared": 600,
     "partial_unresolved": 282,
-    "queued": 23381,
+    "queued": 23379,
     "repeal": 84,
-    "source_error": 19
+    "source_error": 21
   },
   "source_breakdown": {
     "admrul": {
@@ -51,21 +51,21 @@
       "no_text_change": 2,
       "partial_compared": 230,
       "partial_unresolved": 160,
-      "queued": 16722,
+      "queued": 16720,
       "repeal": 54,
-      "source_error": 10
+      "source_error": 12
     }
   },
   "collection_audit": {
     "recent_complete": false,
     "historical_complete": false,
     "failed_windows": 1,
-    "deferred_streams": 1,
+    "deferred_streams": 14,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 1,
     "independent_windows_total": 156
   },
-  "unclassified_administrative_rules": 1530,
+  "unclassified_administrative_rules": 1519,
   "verified_change_events": 876,
   "source_bound_institutional_review_rows": 348,
   "review_evidence_tiers": {
