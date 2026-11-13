@@ -12,11 +12,11 @@
     "enactment": 208,
     "history_unavailable": 1,
     "no_text_change": 2,
-    "partial_compared": 671,
-    "partial_unresolved": 252,
-    "queued": 28817,
+    "partial_compared": 668,
+    "partial_unresolved": 251,
+    "queued": 28816,
     "repeal": 137,
-    "source_error": 1178
+    "source_error": 1183
   },
   "source_breakdown": {
     "admrul": {
@@ -26,11 +26,11 @@
       "enactment": 78,
       "history_unavailable": 1,
       "indexed": 11477,
-      "partial_compared": 169,
-      "partial_unresolved": 170,
+      "partial_compared": 168,
+      "partial_unresolved": 169,
       "queued": 10507,
       "repeal": 38,
-      "source_error": 400
+      "source_error": 402
     },
     "law": {
       "enactment": 15,
@@ -47,11 +47,11 @@
       "enactment": 115,
       "indexed": 17817,
       "no_text_change": 2,
-      "partial_compared": 189,
+      "partial_compared": 187,
       "partial_unresolved": 67,
-      "queued": 16808,
+      "queued": 16807,
       "repeal": 99,
-      "source_error": 519
+      "source_error": 522
     }
   },
   "collection_audit": {
@@ -64,7 +64,7 @@
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 1126,
+  "verified_change_events": 1123,
   "source_bound_institutional_review_rows": 639,
   "review_evidence_tiers": {
     "direct_regulated_institution": 152,
