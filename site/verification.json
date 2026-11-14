@@ -7,69 +7,69 @@
   "incompletely_processed_indexed_documents": 30941,
   "status_counts": {
     "baseline_unavailable": 5,
-    "body_unavailable": 12,
+    "body_unavailable": 10,
     "compared": 110,
     "enactment": 208,
     "history_unavailable": 1,
     "no_text_change": 2,
-    "partial_compared": 513,
-    "partial_unresolved": 197,
-    "queued": 28463,
+    "partial_compared": 477,
+    "partial_unresolved": 195,
+    "queued": 28380,
     "repeal": 137,
-    "source_error": 1750
+    "source_error": 1873
   },
   "source_breakdown": {
     "admrul": {
       "baseline_unavailable": 4,
-      "body_unavailable": 10,
+      "body_unavailable": 9,
       "compared": 96,
       "enactment": 78,
       "history_unavailable": 1,
       "indexed": 11477,
-      "partial_compared": 146,
+      "partial_compared": 143,
       "partial_unresolved": 127,
-      "queued": 10388,
+      "queued": 10360,
       "repeal": 38,
-      "source_error": 589
+      "source_error": 621
     },
     "law": {
       "enactment": 15,
       "indexed": 2104,
-      "partial_compared": 289,
+      "partial_compared": 283,
       "partial_unresolved": 14,
-      "queued": 1383,
-      "source_error": 403
+      "queued": 1355,
+      "source_error": 437
     },
     "ordin": {
       "baseline_unavailable": 1,
-      "body_unavailable": 2,
+      "body_unavailable": 1,
       "compared": 14,
       "enactment": 115,
       "indexed": 17817,
       "no_text_change": 2,
-      "partial_compared": 78,
-      "partial_unresolved": 56,
-      "queued": 16692,
+      "partial_compared": 51,
+      "partial_unresolved": 54,
+      "queued": 16665,
       "repeal": 99,
-      "source_error": 758
+      "source_error": 815
     }
   },
   "collection_audit": {
     "recent_complete": false,
     "historical_complete": false,
-    "failed_windows": 12,
-    "deferred_streams": 9,
+    "failed_windows": 30,
+    "deferred_streams": 0,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 8,
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 968,
-  "source_bound_institutional_review_rows": 606,
+  "verified_change_events": 932,
+  "source_bound_institutional_review_rows": 601,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
-    "explicit_changed_clause": 130,
-    "verified_official_rule_citation": 340
+    "explicit_changed_clause": 128,
+    "verified_official_rule_citation": 337
   },
   "official_public_services_indexed": 10942,
   "public_service_review_candidates": 18,
