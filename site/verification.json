@@ -7,16 +7,16 @@
   "incompletely_processed_indexed_documents": 30941,
   "status_counts": {
     "baseline_unavailable": 5,
-    "body_unavailable": 10,
+    "body_unavailable": 9,
     "compared": 110,
     "enactment": 208,
     "history_unavailable": 1,
     "no_text_change": 2,
-    "partial_compared": 477,
-    "partial_unresolved": 195,
-    "queued": 28380,
+    "partial_compared": 436,
+    "partial_unresolved": 194,
+    "queued": 28293,
     "repeal": 137,
-    "source_error": 1873
+    "source_error": 2003
   },
   "source_breakdown": {
     "admrul": {
@@ -26,32 +26,31 @@
       "enactment": 78,
       "history_unavailable": 1,
       "indexed": 11477,
-      "partial_compared": 143,
-      "partial_unresolved": 127,
-      "queued": 10360,
+      "partial_compared": 136,
+      "partial_unresolved": 126,
+      "queued": 10331,
       "repeal": 38,
-      "source_error": 621
+      "source_error": 658
     },
     "law": {
       "enactment": 15,
       "indexed": 2104,
-      "partial_compared": 283,
+      "partial_compared": 276,
       "partial_unresolved": 14,
-      "queued": 1355,
-      "source_error": 437
+      "queued": 1326,
+      "source_error": 473
     },
     "ordin": {
       "baseline_unavailable": 1,
-      "body_unavailable": 1,
       "compared": 14,
       "enactment": 115,
       "indexed": 17817,
       "no_text_change": 2,
-      "partial_compared": 51,
+      "partial_compared": 24,
       "partial_unresolved": 54,
-      "queued": 16665,
+      "queued": 16636,
       "repeal": 99,
-      "source_error": 815
+      "source_error": 872
     }
   },
   "collection_audit": {
@@ -64,12 +63,12 @@
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 932,
-  "source_bound_institutional_review_rows": 601,
+  "verified_change_events": 891,
+  "source_bound_institutional_review_rows": 581,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
-    "explicit_changed_clause": 128,
-    "verified_official_rule_citation": 337
+    "explicit_changed_clause": 125,
+    "verified_official_rule_citation": 320
   },
   "official_public_services_indexed": 10942,
   "public_service_review_candidates": 18,
