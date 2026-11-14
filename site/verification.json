@@ -12,11 +12,11 @@
     "enactment": 208,
     "history_unavailable": 1,
     "no_text_change": 2,
-    "partial_compared": 637,
-    "partial_unresolved": 240,
-    "queued": 28715,
+    "partial_compared": 608,
+    "partial_unresolved": 236,
+    "queued": 28667,
     "repeal": 137,
-    "source_error": 1328
+    "source_error": 1409
   },
   "source_breakdown": {
     "admrul": {
@@ -26,19 +26,19 @@
       "enactment": 78,
       "history_unavailable": 1,
       "indexed": 11477,
-      "partial_compared": 158,
-      "partial_unresolved": 159,
-      "queued": 10473,
+      "partial_compared": 157,
+      "partial_unresolved": 155,
+      "queued": 10457,
       "repeal": 38,
-      "source_error": 458
+      "source_error": 479
     },
     "law": {
       "enactment": 15,
       "indexed": 2104,
-      "partial_compared": 306,
+      "partial_compared": 303,
       "partial_unresolved": 15,
-      "queued": 1468,
-      "source_error": 300
+      "queued": 1452,
+      "source_error": 319
     },
     "ordin": {
       "baseline_unavailable": 2,
@@ -47,28 +47,28 @@
       "enactment": 115,
       "indexed": 17817,
       "no_text_change": 2,
-      "partial_compared": 173,
+      "partial_compared": 148,
       "partial_unresolved": 66,
-      "queued": 16774,
+      "queued": 16758,
       "repeal": 99,
-      "source_error": 570
+      "source_error": 611
     }
   },
   "collection_audit": {
     "recent_complete": false,
     "historical_complete": false,
-    "failed_windows": 10,
-    "deferred_streams": 10,
+    "failed_windows": 24,
+    "deferred_streams": 3,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 8,
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 1092,
-  "source_bound_institutional_review_rows": 637,
+  "verified_change_events": 1063,
+  "source_bound_institutional_review_rows": 636,
   "review_evidence_tiers": {
     "direct_regulated_institution": 152,
-    "explicit_changed_clause": 135,
+    "explicit_changed_clause": 134,
     "verified_official_rule_citation": 350
   },
   "official_public_services_indexed": 10942,
