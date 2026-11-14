@@ -12,11 +12,11 @@
     "enactment": 208,
     "history_unavailable": 1,
     "no_text_change": 2,
-    "partial_compared": 536,
-    "partial_unresolved": 201,
-    "queued": 28493,
+    "partial_compared": 513,
+    "partial_unresolved": 197,
+    "queued": 28463,
     "repeal": 137,
-    "source_error": 1693
+    "source_error": 1750
   },
   "source_breakdown": {
     "admrul": {
@@ -27,18 +27,18 @@
       "history_unavailable": 1,
       "indexed": 11477,
       "partial_compared": 146,
-      "partial_unresolved": 128,
-      "queued": 10398,
+      "partial_unresolved": 127,
+      "queued": 10388,
       "repeal": 38,
-      "source_error": 578
+      "source_error": 589
     },
     "law": {
       "enactment": 15,
       "indexed": 2104,
-      "partial_compared": 291,
+      "partial_compared": 289,
       "partial_unresolved": 14,
-      "queued": 1393,
-      "source_error": 391
+      "queued": 1383,
+      "source_error": 403
     },
     "ordin": {
       "baseline_unavailable": 1,
@@ -47,11 +47,11 @@
       "enactment": 115,
       "indexed": 17817,
       "no_text_change": 2,
-      "partial_compared": 99,
-      "partial_unresolved": 59,
-      "queued": 16702,
+      "partial_compared": 78,
+      "partial_unresolved": 56,
+      "queued": 16692,
       "repeal": 99,
-      "source_error": 724
+      "source_error": 758
     }
   },
   "collection_audit": {
@@ -64,15 +64,15 @@
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 991,
-  "source_bound_institutional_review_rows": 607,
+  "verified_change_events": 968,
+  "source_bound_institutional_review_rows": 606,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
-    "explicit_changed_clause": 131,
+    "explicit_changed_clause": 130,
     "verified_official_rule_citation": 340
   },
   "official_public_services_indexed": 10942,
-  "public_service_review_candidates": 19,
+  "public_service_review_candidates": 18,
   "officeholders_misclassified_as_agencies": [],
   "officeholders_in_public_directory": [],
   "explanation": "The official index and existing proof links were checked. External nationwide source exhaustiveness and all possible business-impact connections remain unverified."
