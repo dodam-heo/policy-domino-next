@@ -3,20 +3,20 @@
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
   "indexed_documents": 38191,
-  "fully_processed_indexed_documents": 730,
-  "incompletely_processed_indexed_documents": 37461,
+  "fully_processed_indexed_documents": 732,
+  "incompletely_processed_indexed_documents": 37459,
   "status_counts": {
     "baseline_unavailable": 31,
     "body_unavailable": 29,
     "compared": 205,
-    "enactment": 372,
+    "enactment": 373,
     "history_unavailable": 7,
     "no_text_change": 2,
-    "partial_compared": 1186,
-    "partial_unresolved": 548,
-    "queued": 33956,
-    "repeal": 151,
-    "source_error": 1704
+    "partial_compared": 1187,
+    "partial_unresolved": 552,
+    "queued": 33948,
+    "repeal": 152,
+    "source_error": 1705
   },
   "source_breakdown": {
     "admrul": {
@@ -26,9 +26,9 @@
       "enactment": 189,
       "history_unavailable": 6,
       "indexed": 17129,
-      "partial_compared": 418,
-      "partial_unresolved": 405,
-      "queued": 15177,
+      "partial_compared": 419,
+      "partial_unresolved": 409,
+      "queued": 15172,
       "repeal": 51,
       "source_error": 637
     },
@@ -44,28 +44,28 @@
       "baseline_unavailable": 3,
       "body_unavailable": 2,
       "compared": 14,
-      "enactment": 162,
+      "enactment": 163,
       "history_unavailable": 1,
       "indexed": 18317,
       "no_text_change": 2,
       "partial_compared": 437,
       "partial_unresolved": 128,
-      "queued": 16891,
-      "repeal": 100,
-      "source_error": 577
+      "queued": 16888,
+      "repeal": 101,
+      "source_error": 578
     }
   },
   "collection_audit": {
     "recent_complete": false,
     "historical_complete": false,
     "failed_windows": 1,
-    "deferred_streams": 1,
+    "deferred_streams": 14,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 2,
     "independent_windows_total": 156
   },
-  "unclassified_administrative_rules": 454,
-  "verified_change_events": 1914,
+  "unclassified_administrative_rules": 430,
+  "verified_change_events": 1917,
   "source_bound_institutional_review_rows": 856,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
