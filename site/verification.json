@@ -2,9 +2,9 @@
   "status": "incomplete",
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
-  "indexed_documents": 35120,
+  "indexed_documents": 35497,
   "fully_processed_indexed_documents": 619,
-  "incompletely_processed_indexed_documents": 34501,
+  "incompletely_processed_indexed_documents": 34878,
   "status_counts": {
     "baseline_unavailable": 21,
     "body_unavailable": 20,
@@ -14,7 +14,7 @@
     "no_text_change": 2,
     "partial_compared": 910,
     "partial_unresolved": 377,
-    "queued": 31250,
+    "queued": 31627,
     "repeal": 143,
     "source_error": 1916
   },
@@ -25,19 +25,19 @@
       "compared": 147,
       "enactment": 144,
       "history_unavailable": 3,
-      "indexed": 14222,
+      "indexed": 14568,
       "partial_compared": 300,
       "partial_unresolved": 298,
-      "queued": 12603,
+      "queued": 12949,
       "repeal": 44,
       "source_error": 645
     },
     "law": {
       "enactment": 17,
-      "indexed": 2581,
+      "indexed": 2612,
       "partial_compared": 320,
       "partial_unresolved": 15,
-      "queued": 1739,
+      "queued": 1770,
       "source_error": 490
     },
     "ordin": {
@@ -58,7 +58,7 @@
     "recent_complete": false,
     "historical_complete": false,
     "failed_windows": 1,
-    "deferred_streams": 14,
+    "deferred_streams": 1,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 3,
     "independent_windows_total": 156
