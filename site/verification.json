@@ -2,21 +2,21 @@
   "status": "incomplete",
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
-  "indexed_documents": 35696,
+  "indexed_documents": 35715,
   "fully_processed_indexed_documents": 646,
-  "incompletely_processed_indexed_documents": 35050,
+  "incompletely_processed_indexed_documents": 35069,
   "status_counts": {
     "baseline_unavailable": 26,
     "body_unavailable": 20,
     "compared": 167,
     "enactment": 333,
-    "history_unavailable": 8,
+    "history_unavailable": 7,
     "no_text_change": 2,
-    "partial_compared": 938,
+    "partial_compared": 935,
     "partial_unresolved": 397,
-    "queued": 31746,
+    "queued": 31765,
     "repeal": 144,
-    "source_error": 1915
+    "source_error": 1919
   },
   "source_breakdown": {
     "admrul": {
@@ -25,10 +25,10 @@
       "compared": 153,
       "enactment": 160,
       "history_unavailable": 4,
-      "indexed": 14767,
+      "indexed": 14786,
       "partial_compared": 323,
       "partial_unresolved": 317,
-      "queued": 13077,
+      "queued": 13096,
       "repeal": 45,
       "source_error": 645
     },
@@ -44,14 +44,14 @@
       "baseline_unavailable": 3,
       "compared": 14,
       "enactment": 154,
-      "history_unavailable": 4,
+      "history_unavailable": 3,
       "indexed": 18317,
       "no_text_change": 2,
-      "partial_compared": 292,
+      "partial_compared": 289,
       "partial_unresolved": 65,
       "queued": 16904,
       "repeal": 99,
-      "source_error": 780
+      "source_error": 784
     }
   },
   "collection_audit": {
@@ -60,11 +60,11 @@
     "failed_windows": 1,
     "deferred_streams": 14,
     "independent_comparison_status": "partial",
-    "independent_windows_checked": 3,
+    "independent_windows_checked": 2,
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 1582,
+  "verified_change_events": 1579,
   "source_bound_institutional_review_rows": 779,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
