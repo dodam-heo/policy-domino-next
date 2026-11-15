@@ -2,9 +2,9 @@
   "status": "incomplete",
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
-  "indexed_documents": 37024,
+  "indexed_documents": 37452,
   "fully_processed_indexed_documents": 692,
-  "incompletely_processed_indexed_documents": 36332,
+  "incompletely_processed_indexed_documents": 36760,
   "status_counts": {
     "baseline_unavailable": 29,
     "body_unavailable": 23,
@@ -12,11 +12,11 @@
     "enactment": 352,
     "history_unavailable": 6,
     "no_text_change": 2,
-    "partial_compared": 1051,
+    "partial_compared": 1058,
     "partial_unresolved": 515,
-    "queued": 32908,
+    "queued": 33336,
     "repeal": 149,
-    "source_error": 1800
+    "source_error": 1793
   },
   "source_breakdown": {
     "admrul": {
@@ -25,19 +25,19 @@
       "compared": 175,
       "enactment": 179,
       "history_unavailable": 5,
-      "indexed": 15999,
+      "indexed": 16399,
       "partial_compared": 378,
       "partial_unresolved": 377,
-      "queued": 14143,
+      "queued": 14543,
       "repeal": 50,
       "source_error": 643
     },
     "law": {
       "enactment": 19,
-      "indexed": 2708,
+      "indexed": 2736,
       "partial_compared": 323,
       "partial_unresolved": 15,
-      "queued": 1861,
+      "queued": 1889,
       "source_error": 490
     },
     "ordin": {
@@ -47,29 +47,29 @@
       "history_unavailable": 1,
       "indexed": 18317,
       "no_text_change": 2,
-      "partial_compared": 350,
+      "partial_compared": 357,
       "partial_unresolved": 123,
       "queued": 16904,
       "repeal": 99,
-      "source_error": 667
+      "source_error": 660
     }
   },
   "collection_audit": {
     "recent_complete": false,
     "historical_complete": false,
     "failed_windows": 1,
-    "deferred_streams": 14,
+    "deferred_streams": 1,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 8,
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 545,
-  "verified_change_events": 1741,
-  "source_bound_institutional_review_rows": 798,
+  "verified_change_events": 1748,
+  "source_bound_institutional_review_rows": 800,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
-    "explicit_changed_clause": 214,
-    "verified_official_rule_citation": 448
+    "explicit_changed_clause": 215,
+    "verified_official_rule_citation": 449
   },
   "official_public_services_indexed": 10942,
   "public_service_review_candidates": 22,
