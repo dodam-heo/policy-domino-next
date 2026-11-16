@@ -3,34 +3,34 @@
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
   "indexed_documents": 39645,
-  "fully_processed_indexed_documents": 777,
-  "incompletely_processed_indexed_documents": 38868,
+  "fully_processed_indexed_documents": 782,
+  "incompletely_processed_indexed_documents": 38863,
   "status_counts": {
-    "baseline_unavailable": 34,
-    "body_unavailable": 29,
-    "compared": 224,
-    "enactment": 397,
+    "baseline_unavailable": 35,
+    "body_unavailable": 30,
+    "compared": 227,
+    "enactment": 399,
     "history_unavailable": 7,
     "no_text_change": 2,
-    "partial_compared": 1249,
-    "partial_unresolved": 628,
-    "queued": 35264,
+    "partial_compared": 1262,
+    "partial_unresolved": 637,
+    "queued": 35234,
     "repeal": 154,
-    "source_error": 1657
+    "source_error": 1658
   },
   "source_breakdown": {
     "admrul": {
-      "baseline_unavailable": 31,
-      "body_unavailable": 27,
-      "compared": 210,
-      "enactment": 209,
+      "baseline_unavailable": 32,
+      "body_unavailable": 28,
+      "compared": 213,
+      "enactment": 211,
       "history_unavailable": 6,
       "indexed": 18025,
-      "partial_compared": 458,
-      "partial_unresolved": 482,
-      "queued": 15938,
+      "partial_compared": 471,
+      "partial_unresolved": 491,
+      "queued": 15908,
       "repeal": 53,
-      "source_error": 611
+      "source_error": 612
     },
     "law": {
       "enactment": 22,
@@ -65,12 +65,12 @@
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 382,
-  "verified_change_events": 2024,
-  "source_bound_institutional_review_rows": 881,
+  "verified_change_events": 2042,
+  "source_bound_institutional_review_rows": 890,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
-    "explicit_changed_clause": 256,
-    "verified_official_rule_citation": 489
+    "explicit_changed_clause": 259,
+    "verified_official_rule_citation": 495
   },
   "official_public_services_indexed": 10942,
   "public_service_review_candidates": 22,
