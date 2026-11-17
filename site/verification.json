@@ -12,11 +12,11 @@
     "enactment": 571,
     "history_unavailable": 10,
     "no_text_change": 2,
-    "partial_compared": 1800,
+    "partial_compared": 1799,
     "partial_unresolved": 899,
     "queued": 41763,
     "repeal": 173,
-    "source_error": 1554
+    "source_error": 1555
   },
   "source_breakdown": {
     "admrul": {
@@ -48,24 +48,24 @@
       "enactment": 231,
       "indexed": 21965,
       "no_text_change": 2,
-      "partial_compared": 656,
+      "partial_compared": 655,
       "partial_unresolved": 148,
       "queued": 20330,
       "repeal": 101,
-      "source_error": 468
+      "source_error": 469
     }
   },
   "collection_audit": {
     "recent_complete": false,
     "historical_complete": false,
-    "failed_windows": 0,
-    "deferred_streams": 1,
+    "failed_windows": 1,
+    "deferred_streams": 14,
     "independent_comparison_status": "partial",
     "independent_windows_checked": 8,
     "independent_windows_total": 156
   },
   "unclassified_administrative_rules": 369,
-  "verified_change_events": 2843,
+  "verified_change_events": 2842,
   "source_bound_institutional_review_rows": 1186,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
