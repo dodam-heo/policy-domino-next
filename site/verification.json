@@ -3,58 +3,58 @@
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
   "indexed_documents": 57889,
-  "fully_processed_indexed_documents": 1228,
-  "incompletely_processed_indexed_documents": 56661,
+  "fully_processed_indexed_documents": 1233,
+  "incompletely_processed_indexed_documents": 56656,
   "status_counts": {
     "baseline_unavailable": 60,
     "body_unavailable": 58,
-    "compared": 343,
-    "enactment": 677,
+    "compared": 344,
+    "enactment": 680,
     "history_unavailable": 18,
     "no_text_change": 3,
-    "partial_compared": 2331,
-    "partial_unresolved": 993,
-    "queued": 51700,
-    "repeal": 205,
-    "source_error": 1501
+    "partial_compared": 2355,
+    "partial_unresolved": 999,
+    "queued": 51668,
+    "repeal": 206,
+    "source_error": 1498
   },
   "source_breakdown": {
     "admrul": {
       "baseline_unavailable": 54,
       "body_unavailable": 49,
-      "compared": 307,
-      "enactment": 344,
+      "compared": 308,
+      "enactment": 346,
       "history_unavailable": 9,
       "indexed": 25650,
       "no_text_change": 1,
-      "partial_compared": 804,
-      "partial_unresolved": 803,
-      "queued": 22600,
-      "repeal": 101,
-      "source_error": 578
+      "partial_compared": 806,
+      "partial_unresolved": 808,
+      "queued": 22590,
+      "repeal": 102,
+      "source_error": 577
     },
     "law": {
       "enactment": 44,
       "history_unavailable": 2,
       "indexed": 3496,
-      "partial_compared": 646,
+      "partial_compared": 656,
       "partial_unresolved": 22,
-      "queued": 2285,
+      "queued": 2275,
       "source_error": 497
     },
     "ordin": {
       "baseline_unavailable": 6,
       "body_unavailable": 9,
       "compared": 36,
-      "enactment": 289,
+      "enactment": 290,
       "history_unavailable": 7,
       "indexed": 28743,
       "no_text_change": 2,
-      "partial_compared": 881,
-      "partial_unresolved": 168,
-      "queued": 26815,
+      "partial_compared": 893,
+      "partial_unresolved": 169,
+      "queued": 26803,
       "repeal": 104,
-      "source_error": 426
+      "source_error": 424
     }
   },
   "collection_audit": {
@@ -66,13 +66,13 @@
     "independent_windows_checked": 8,
     "independent_windows_total": 156
   },
-  "unclassified_administrative_rules": 333,
-  "verified_change_events": 3556,
-  "source_bound_institutional_review_rows": 1581,
+  "unclassified_administrative_rules": 331,
+  "verified_change_events": 3585,
+  "source_bound_institutional_review_rows": 1593,
   "review_evidence_tiers": {
     "direct_regulated_institution": 136,
-    "explicit_changed_clause": 516,
-    "verified_official_rule_citation": 929
+    "explicit_changed_clause": 521,
+    "verified_official_rule_citation": 936
   },
   "official_public_services_indexed": 10998,
   "public_service_review_candidates": 22,
