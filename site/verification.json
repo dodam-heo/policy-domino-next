@@ -3,58 +3,58 @@
   "official_universe_exhaustively_reconciled": false,
   "institutional_impact_completeness_verified": false,
   "indexed_documents": 63078,
-  "fully_processed_indexed_documents": 1386,
-  "incompletely_processed_indexed_documents": 61692,
+  "fully_processed_indexed_documents": 1407,
+  "incompletely_processed_indexed_documents": 61671,
   "status_counts": {
     "baseline_unavailable": 66,
-    "body_unavailable": 65,
-    "compared": 366,
-    "enactment": 779,
+    "body_unavailable": 68,
+    "compared": 371,
+    "enactment": 788,
     "history_unavailable": 26,
     "no_text_change": 3,
-    "partial_compared": 2852,
-    "partial_unresolved": 1105,
-    "queued": 56138,
-    "repeal": 238,
-    "source_error": 1440
+    "partial_compared": 2912,
+    "partial_unresolved": 1113,
+    "queued": 56054,
+    "repeal": 245,
+    "source_error": 1432
   },
   "source_breakdown": {
     "admrul": {
       "baseline_unavailable": 59,
       "body_unavailable": 54,
-      "compared": 328,
-      "enactment": 365,
+      "compared": 333,
+      "enactment": 367,
       "history_unavailable": 9,
       "indexed": 27722,
       "no_text_change": 1,
-      "partial_compared": 890,
-      "partial_unresolved": 892,
-      "queued": 24441,
-      "repeal": 128,
-      "source_error": 555
+      "partial_compared": 896,
+      "partial_unresolved": 898,
+      "queued": 24421,
+      "repeal": 133,
+      "source_error": 551
     },
     "law": {
       "enactment": 56,
       "history_unavailable": 3,
       "indexed": 3644,
-      "partial_compared": 845,
+      "partial_compared": 865,
       "partial_unresolved": 26,
-      "queued": 2215,
+      "queued": 2195,
       "source_error": 499
     },
     "ordin": {
       "baseline_unavailable": 7,
-      "body_unavailable": 11,
+      "body_unavailable": 14,
       "compared": 38,
-      "enactment": 358,
+      "enactment": 365,
       "history_unavailable": 14,
       "indexed": 31712,
       "no_text_change": 2,
-      "partial_compared": 1117,
-      "partial_unresolved": 187,
-      "queued": 29482,
-      "repeal": 110,
-      "source_error": 386
+      "partial_compared": 1151,
+      "partial_unresolved": 189,
+      "queued": 29438,
+      "repeal": 112,
+      "source_error": 382
     }
   },
   "collection_audit": {
@@ -66,16 +66,16 @@
     "independent_windows_checked": 8,
     "independent_windows_total": 156
   },
-  "unclassified_administrative_rules": 307,
-  "verified_change_events": 4235,
-  "source_bound_institutional_review_rows": 1842,
+  "unclassified_administrative_rules": 304,
+  "verified_change_events": 4316,
+  "source_bound_institutional_review_rows": 1854,
   "review_evidence_tiers": {
     "direct_regulated_institution": 180,
-    "explicit_changed_clause": 632,
-    "verified_official_rule_citation": 1030
+    "explicit_changed_clause": 647,
+    "verified_official_rule_citation": 1027
   },
   "official_public_services_indexed": 10998,
-  "public_service_review_candidates": 23,
+  "public_service_review_candidates": 24,
   "officeholders_misclassified_as_agencies": [],
   "officeholders_in_public_directory": [],
   "explanation": "The official index and existing proof links were checked. External nationwide source exhaustiveness and all possible business-impact connections remain unverified."
